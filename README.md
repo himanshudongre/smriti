@@ -2,6 +2,8 @@
 
 Conversations become structured state, not disposable logs.
 
+Like Git, but for reasoning state instead of code.
+
 Smriti is a versioned AI workspace. It turns conversations into structured, immutable
 snapshots called Checkpoints that you can carry across models, fork into new reasoning
 paths, and compare later.
@@ -16,9 +18,10 @@ different model. No re-explanation, no lost context.
 
 ## Demo preview
 
-Click to watch a 3–4 minute walkthrough of branching, checkpoints, and comparison:
+![Smriti demo](docs/assets/checkpoint-diff.png)
 
-[![Smriti demo](docs/assets/checkpoint-diff.png)](https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158)
+▶ Watch demo (3–4 min):
+https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158
 
 ---
 
@@ -32,6 +35,7 @@ return to the exact state you were in an hour ago. You cannot fork the conversat
 explore a different direction without contaminating the original thread. You cannot
 switch models without re-explaining everything from scratch.
 
+As AI workflows become multi-model and non-linear, reasoning state becomes the bottleneck.
 Smriti fixes this by treating reasoning state as a first-class artifact, versioned and
 isolated from the event stream that produced it.
 
