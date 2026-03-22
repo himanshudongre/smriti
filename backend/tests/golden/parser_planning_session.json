@@ -1,0 +1,21 @@
+{
+  "message_count": 4,
+  "roles": [
+    "human",
+    "assistant",
+    "human",
+    "assistant"
+  ],
+  "positions": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "content_lengths": [
+    143,
+    101,
+    204,
+    612
+  ]
+}

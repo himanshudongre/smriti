@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+*.so
+
+# Environment
+.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Alembic
+# Keep versions dir but not .pyc inside it
+backend/config/providers.yaml
+
+# Logs — never stage
+runtime_logs/
+test_artifacts/
+backend/backend_logs.txt
+backend/backend.log
+test_diagnostics.log
+*.log
+
+
+

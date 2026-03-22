@@ -1,0 +1,12 @@
+Human: Let's plan the next quarter product roadmap. We need to decide on priorities for Q2. The team is 5 engineers and we have too many things to do.
+Assistant: Let me help structure this. First, let's identify the key areas. What are the main candidates for Q2?
+Human: We have: 1) Mobile app launch, 2) API v2 migration, 3) Performance improvements, 4) Dashboard redesign, 5) Analytics pipeline. We decided to cut analytics pipeline from Q2 — it's important but not urgent.
+Assistant: Good call. For 5 engineers over 3 months, I'd suggest focusing on 2-3 major initiatives. We decided to prioritize Mobile app launch and API v2 migration as the top two. The Dashboard redesign can be a stretch goal.
+
+Key decisions so far:
+- Mobile app launch is P0 for Q2
+- API v2 migration is P1
+- Analytics pipeline deferred to Q3
+- Dashboard redesign is a stretch goal
+
+TODO: create detailed project plans for each initiative. TODO: assign engineering leads to each project. Should we bring in a contractor for the mobile app, or keep it all in-house? That's an open question we need to resolve by end of week.

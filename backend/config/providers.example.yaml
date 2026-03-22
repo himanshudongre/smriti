@@ -1,0 +1,35 @@
+# Smriti provider configuration
+#
+# Copy this file to providers.yaml and fill in your API keys.
+# providers.yaml is gitignored and will never be committed.
+#
+# Priority: environment variables > providers.yaml > defaults
+# All api_key values can also be set via environment variable:
+#   OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY
+
+providers:
+  openai:
+    enabled: false
+    api_key: ""               # or set OPENAI_API_KEY env var
+    default_model: "gpt-4o"
+
+  anthropic:
+    enabled: false
+    api_key: ""               # or set ANTHROPIC_API_KEY env var
+    default_model: "claude-sonnet-4-6"
+
+  openrouter:
+    enabled: false
+    api_key: ""               # or set OPENROUTER_API_KEY env var
+    base_url: "https://openrouter.ai/api/v1"
+    default_model: ""         # set per-session in the UI
+
+# Which provider to use by default for new sessions
+chat:
+  default_provider: "openai"  # openai | anthropic | openrouter
+
+# Separate model used for background tasks: Draft with AI, session auto-title.
+# Can be a cheaper/faster model than the chat provider.
+background_intelligence:
+  provider: "openai"
+  model: "gpt-4o-mini"

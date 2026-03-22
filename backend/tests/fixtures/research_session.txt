@@ -1,0 +1,1 @@
+Human: I'm researching different approaches to implement real-time notifications in a web app. What are the main options? I'm considering WebSockets vs Server-Sent Events vs long polling.

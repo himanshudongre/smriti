@@ -1,0 +1,36 @@
+Human: Can you write me a Python decorator that retries a function on failure?
+Assistant: Here's a retry decorator with configurable attempts and exponential backoff:
+
+```python
+import time
+import functools
+
+def retry(max_attempts=3, delay=1, backoff=2):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            current_delay = delay
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempts += 1
+                    if attempts == max_attempts:
+                        raise
+                    time.sleep(current_delay)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
+```
+
+Usage:
+```python
+@retry(max_attempts=3, delay=0.5)
+def fetch_data(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+```
+
+We decided to use exponential backoff by default. TODO: add logging to the retry attempts. TODO: add support for specifying which exception types to retry on. Should we also add a jitter factor to prevent thundering herd issues?

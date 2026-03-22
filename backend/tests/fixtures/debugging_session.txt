@@ -1,0 +1,1 @@
+Human: I'm getting a weird error in production. The API is returning 500 errors intermittently. The logs show a connection pool exhaustion issue with the database. We decided to increase the pool size from 5 to 20. We also need to add connection timeout handling. Can you help me debug this?

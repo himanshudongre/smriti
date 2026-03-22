@@ -1,0 +1,6 @@
+{
+  "target_tool": "cursor",
+  "format": "markdown",
+  "content_length": 744,
+  "content": "# Continuation Context\n\n## Summary\nSession about database setup with SQLAlchemy and Alembic. Covered User and Task models, migration strategy, and input validation with Pydantic.\n\n## Task Checklist\n- [ ] Add indexes on email and status columns\n- [ ] Create initial migration\n- [ ] Add error handling middleware\n\n## Decisions\n- Use SQLAlchemy 2.0 mapped_column style\n- Use Alembic with autogenerate for migrations\n- No soft delete for MVP\n\n## Relevant Files\n- `models.py`\n\n## Technologies\n- SQLAlchemy\n- Alembic\n- Pydantic\n\n## Code Context\n### User model\n```python\nclass User(Base):\n    __tablename__ = 'users'\n    id: Mapped[int] = mapped_column(primary_key=True)\n```\n\n## Open Questions\n- Should we add pagination to the task listing endpoint?\n"
+}
