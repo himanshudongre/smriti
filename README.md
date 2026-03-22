@@ -14,6 +14,14 @@ different model. No re-explanation, no lost context.
 
 ---
 
+## Demo preview
+
+Click to watch a 3–4 minute walkthrough of branching, checkpoints, and comparison:
+
+[![Smriti demo](docs/assets/checkpoint-diff.png)](https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158)
+
+---
+
 ## The problem
 
 You spend an hour working through a hard problem. You reach a clear decision. Then you
@@ -39,6 +47,25 @@ isolated from the event stream that produced it.
   threads remain live in the same Space.
 - **Compare branches.** Diff any two Checkpoints across branches to see exactly where
   decisions diverged.
+
+---
+
+## Beyond chat: reasoning state for agents
+
+Smriti is not limited to chat workflows.
+
+Agents also struggle with state. Multi-step reasoning chains become hard to debug,
+reproduce, or branch. Once an agent run diverges, there is no clean way to return to
+a prior state or explore alternatives in parallel.
+
+Smriti provides a structured state layer that agents can use:
+
+- Persist intermediate reasoning as checkpoints
+- Resume from any prior state deterministically
+- Fork execution paths to explore alternatives
+- Compare outcomes across runs
+
+This makes agent behavior inspectable, reproducible, and debuggable.
 
 ---
 
