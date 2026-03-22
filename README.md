@@ -2,64 +2,95 @@
 
 Conversations become structured state, not disposable logs.
 
-Smriti (स्मृति, *memory* in Sanskrit) is a versioned AI workspace. It separates the
-ephemeral event stream of a conversation from the durable structured state that
-conversation produces — and makes that state explicitly versioned, inspectable, and
-portable across models.
+Smriti is a versioned AI workspace. It turns conversations into structured, immutable
+snapshots called Checkpoints that you can carry across models, fork into new reasoning
+paths, and compare later.
 
-**In Smriti, the system owns the state. Models are interchangeable processors.**
+**Smriti owns the reasoning state. Models are interchangeable.**
 
----
-
-## The Problem
-
-Every current LLM interface — ChatGPT, Claude.ai, Perplexity — treats conversation
-state as disposable. When you close a tab, switch a model, or start a new session,
-your context evaporates. You can export a transcript, but a transcript is
-undifferentiated text: no structure, no version history, no way to return to a prior
-state cleanly.
-
-The practical consequences:
-
-- Switching models means re-explaining everything from scratch
-- There is no way to ask "what did I know at this point?"
-- Context is implicit and fragile — the model infers it, often incorrectly
-- There is no version history of reasoning, only a log of messages
-- Long conversations accumulate noise faster than signal
-
-These are not UI problems. They are structural: existing tools do not distinguish
-between *what was said* and *what was concluded*.
+For example: you spend an hour with GPT-4o working through an architecture decision,
+checkpoint the conclusion, then continue the same thread in a new session using a
+different model. No re-explanation, no lost context.
 
 ---
 
-## What Smriti Does Differently
+## The problem
 
-Smriti introduces a hard separation between two layers:
+You spend an hour working through a hard problem. You reach a clear decision. Then you
+need to step away, switch models, or revisit an earlier direction.
 
-**The event stream** — Turns of conversation, ordered, append-only, ephemeral.
+There is no clean way to do this. The only record is a flat transcript. You cannot
+return to the exact state you were in an hour ago. You cannot fork the conversation to
+explore a different direction without contaminating the original thread. You cannot
+switch models without re-explaining everything from scratch.
 
-**The state snapshot (Checkpoint)** — an immutable, structured summary of what was
-decided and understood at a specific point: title, objective, summary, decisions, tasks,
-open questions, entities.
+Smriti fixes this by treating reasoning state as a first-class artifact, versioned and
+isolated from the event stream that produced it.
 
-A Checkpoint is not a transcript. It is the extracted state of a thinking process at a
-moment in time. Once created, it does not change.
+---
 
-This separation enables:
+## What you can do with it
 
-- **Returning to a prior state** — mount any Checkpoint; only Turns created after
-  mounting are included in context. Later work does not leak backward.
-- **Cross-model continuity** — a Checkpoint created in a GPT-4o session can seed a
-  Claude or Gemini session. The state travels; the model does not matter.
-- **Inspectability** — "what did I decide at this point?" has a concrete, queryable
-  answer.
-- **Branching** — fork any Checkpoint into a new session and explore a diverging line
-  of reasoning without affecting the original thread.
-- **Comparison** — diff two Checkpoints across any branches to see exactly where
-  reasoning diverged.
+- **Return to any prior state.** Mount any Checkpoint; the model receives exactly that
+  state as context, nothing more. Later work does not leak backward.
+- **Switch models mid-session.** Checkpoints carry state across providers. Switch from
+  OpenAI to Anthropic without re-explaining the problem.
+- **Fork a line of reasoning.** Branch from any Checkpoint into a new session. Both
+  threads remain live in the same Space.
+- **Compare branches.** Diff any two Checkpoints across branches to see exactly where
+  decisions diverged.
 
-Smriti does not eliminate ambiguity or hallucination. It makes reasoning inspectable,
-versioned, and recoverable.
+---
+
+## Quick start
+
+### Prerequisites
+
+- Python 3.11+
+- Node 18+
+- PostgreSQL 14+
+- At least one LLM provider API key (OpenAI, Anthropic, or OpenRouter), or use Mock
+  Mode to run without any keys
+
+```bash
+git clone https://github.com/himanshudongre/smriti
+cd smriti
+
+# Copy environment template
+cp .env.example .env
+
+# Install all dependencies and run database migrations
+make setup
+
+# Start backend (terminal 1)
+make dev
+
+# Start frontend (terminal 2)
+make dev-frontend
+```
+
+Frontend: `http://localhost:5173` | Backend API: `http://localhost:8000`
+
+**No API key?** Enable **Mock Mode** in the compose bar to run with scripted responses
+and no provider calls.
+
+### Docker
+
+```bash
+make up       # Start all services (postgres + backend + frontend)
+make logs     # Follow logs
+make down     # Stop all services
+```
+
+---
+
+## Try the demo
+
+`demos/branching-reasoning-demo/` contains a complete, repeatable walkthrough
+demonstrating Smriti's branching and comparison workflow. Includes step-by-step
+instructions, exact messages to paste, expected diff output, and a presenter talk track.
+
+[demos/branching-reasoning-demo/README.md](demos/branching-reasoning-demo/README.md)
 
 ---
 
@@ -204,47 +235,6 @@ provider. No re-explanation required.
 
 ---
 
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- Node 18+
-- PostgreSQL 14+
-- At least one LLM provider API key (OpenAI, Anthropic, or OpenRouter), or use Mock
-  Mode to run without keys
-
-### Quick start
-
-```bash
-git clone https://github.com/your-org/smriti
-cd smriti
-
-# Copy environment template
-cp .env.example .env
-
-# Install all dependencies and run database migrations
-make setup
-
-# Start backend (terminal 1)
-make dev
-
-# Start frontend (terminal 2)
-make dev-frontend
-```
-
-Frontend: `http://localhost:5173` — Backend API: `http://localhost:8000`
-
-### Docker
-
-```bash
-make up       # Start all services (postgres + backend + frontend)
-make logs     # Follow logs
-make down     # Stop all services
-```
-
----
-
 ## Provider Configuration
 
 Smriti uses two independent provider slots:
@@ -303,21 +293,6 @@ mechanics without a live provider key.
 
 ---
 
-## Try the Demo
-
-The `demos/branching-reasoning-demo/` directory contains a complete, repeatable demo
-scenario demonstrating Smriti's branching-reasoning workflow. It includes:
-
-- Step-by-step runbook
-- Exact messages to paste for each turn
-- Expected diff output
-- Presenter talk track
-
-See [demos/branching-reasoning-demo/README.md](demos/branching-reasoning-demo/README.md)
-for the full walkthrough.
-
----
-
 ## Technical Stack
 
 | Layer | Technology |
@@ -337,7 +312,7 @@ endpoints retained for compatibility but not part of the current primary workflo
 
 - Streaming responses
 - Multi-user Spaces with authentication
-- Provider expansion (Gemini, local models via Ollama)
+- Provider expansion (additional providers and local models)
 - Source Turn range recorded on Checkpoints (which conversation produced this snapshot)
 - MCP integrations
 - Checkpoint merging
