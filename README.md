@@ -1,360 +1,369 @@
-# Smriti — Version control for reasoning.
+# Smriti
 
-Conversations become structured state, not disposable logs.
+Version control for reasoning.
 
-Like Git, but for reasoning state instead of code.
-
-Smriti is a versioned AI workspace. It turns conversations into structured, immutable
-snapshots called Checkpoints that you can carry across models, fork into new reasoning
-paths, and compare later.
-
-**Smriti owns the reasoning state. Models are interchangeable.**
-
-For example: you spend an hour with GPT-4o working through an architecture decision,
-checkpoint the conclusion, then continue the same thread in a new session using a
-different model. No re-explanation, no lost context.
+Image Git for LLM/Agentic Reasoning
 
 ---
 
-## Demo preview
+## Why I ended up building this
+
+I was just switching between ChatGPT, Claude, Cursor etc while working on problems, and something kept breaking.
+
+Not the models.
+
+My own context.
+
+I would spend 30–40 minutes figuring something out, reach a clean decision and then:
+
+- switch models  
+- come back later  
+- try a different approach  
+
+and suddenly I had to reconstruct everything again.
+
+Not just the text. The actual *state of thinking*.
+
+That’s what pushed me to build this.
+
+---
+
+## The core idea (at least how I think about it)
+
+Instead of treating conversations as logs (Like we do today using .md files) 
+treat the **state of reasoning** as something explicit
+
+So I introduced this concept of a **checkpoint**
+
+It is basically a snapshot of where you are:
+
+- what you have figured out  
+- decisions you have made  
+- what is still open  
+- what needs to be done  
+
+Nothing magical. Just structured.
+
+---
+
+## Demo
 
 ![Smriti demo](docs/assets/checkpoint-diff.png)
 
-▶ Watch demo (3–4 min):
+Watch demo (3–4 min):  
 https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158
 
 ---
 
-## The problem
+## The problem (the way I see it)
 
-You spend an hour working through a hard problem. You reach a clear decision. Then you
-need to step away, switch models, or revisit an earlier direction.
+You spend an hour working through something.
 
-There is no clean way to do this. The only record is a flat transcript. You cannot
-return to the exact state you were in an hour ago. You cannot fork the conversation to
-explore a different direction without contaminating the original thread. You cannot
-switch models without re-explaining everything from scratch.
+You finally reach clarity.
 
-As AI workflows become multi-model and non-linear, reasoning state becomes the bottleneck.
-Smriti fixes this by treating reasoning state as a first-class artifact, versioned and
-isolated from the event stream that produced it.
+Then you need to:
+
+- step away  
+- switch models  
+- revisit an earlier direction  
+
+And everything falls apart.
+
+There’s no clean way to:
+
+- return to that exact state  
+- branch thinking without messing up the original  
+- switch models without re-explaining everything  
+
+And the more we use multiple models, the worse this gets.
+
+Honestly, this is where I feel things start breaking.
+
+**Reasoning state becomes the bottleneck.**
 
 ---
 
-## What you can do with it
+## What this lets you do
 
-- **Return to any prior state.** Mount any Checkpoint; the model receives exactly that
-  state as context, nothing more. Later work does not leak backward.
-- **Switch models mid-session.** Checkpoints carry state across providers. Switch from
-  OpenAI to Anthropic without re-explaining the problem.
-- **Fork a line of reasoning.** Branch from any Checkpoint into a new session. Both
-  threads remain live in the same Space.
-- **Compare branches.** Diff any two Checkpoints across branches to see exactly where
-  decisions diverged.
+A few things started working once I built this:
+
+You can go back to any prior state  
+not by scrolling, but by actually mounting that checkpoint again
+
+You can switch models mid-session  
+without rewriting the entire context every time
+
+You can fork your thinking  
+like “let me try a completely different approach from here”  
+without corrupting the original path
+
+You can compare two checkpoints  
+and actually see where the reasoning diverged
+
+That last one surprised me a bit. It is more useful than I expected.
 
 ---
 
-## Beyond chat: reasoning state for agents
+## One thing I did differently (maybe controversial)
 
-Smriti is not limited to chat workflows.
+Most systems rely on prompts to manage context.
 
-Agents also struggle with state. Multi-step reasoning chains become hard to debug,
-reproduce, or branch. Once an agent run diverges, there is no clean way to return to
-a prior state or explore alternatives in parallel.
+I didn’t.
 
-Smriti provides a structured state layer that agents can use:
+When you mount a checkpoint, I enforce boundaries in the data layer itself.
 
-- Persist intermediate reasoning as checkpoints
-- Resume from any prior state deterministically
-- Fork execution paths to explore alternatives
-- Compare outcomes across runs
+Which basically means:
 
-This makes agent behavior inspectable, reproducible, and debuggable.
+only the relevant turns are visible  
+nothing from the future leaks in  
+nothing from other sessions sneaks in  
+
+It’s stricter than typical chat systems.
+
+Not sure if this is the right long-term decision.  
+But it felt important to try.
+
+---
+
+## This is not just for chat
+
+I initially built this thinking about chat.
+
+But the more I worked on it, the more it felt like this might matter more for agents.
+
+Because agents have the same problem, just worse:
+
+- multi-step reasoning chains  
+- hard to debug  
+- hard to reproduce  
+- no clean way to “go back”  
+
+Once something diverges, you are kind of stuck.
+
+With checkpoints, you can:
+
+- persist intermediate reasoning  
+- resume from a known state  
+- fork execution paths  
+- compare outcomes across runs  
+
+Basically, you can inspect what actually happened.
+
+Which is something I feel is missing right now.
 
 ---
 
 ## Quick start
 
-### Prerequisites
+You’ll need:
 
-- Python 3.11+
-- Node 18+
-- PostgreSQL 14+
-- At least one LLM provider API key (OpenAI, Anthropic, or OpenRouter), or use Mock
-  Mode to run without any keys
+- Python 3.11+  
+- Node 18+  
+- PostgreSQL 14+  
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
 cd smriti
 
-# Copy environment template
 cp .env.example .env
 
-# Install all dependencies and run database migrations
 make setup
 
-# Start backend (terminal 1)
+# backend
 make dev
 
-# Start frontend (terminal 2)
+# frontend (separate terminal)
 make dev-frontend
 ```
 
-Frontend: `http://localhost:5173` | Backend API: `http://localhost:8000`
+Frontend: http://localhost:5173  
+Backend: http://localhost:8000  
 
-**No API key?** Enable **Mock Mode** in the compose bar to run with scripted responses
-and no provider calls.
+There is also a mock mode if you don’t want to deal with API keys.
 
-### Docker
+---
+
+## Docker (if you prefer that)
 
 ```bash
-make up       # Start all services (postgres + backend + frontend)
-make logs     # Follow logs
-make down     # Stop all services
+make up
+make logs
+make down
 ```
 
 ---
 
-## Try the demo
+## Try the demo properly
 
-`demos/branching-reasoning-demo/` contains a complete, repeatable walkthrough
-demonstrating Smriti's branching and comparison workflow. Includes step-by-step
-instructions, exact messages to paste, expected diff output, and a presenter talk track.
+There is a full walkthrough here:
 
-[demos/branching-reasoning-demo/README.md](demos/branching-reasoning-demo/README.md)
+demos/branching-reasoning-demo/
+
+It includes:
+
+- exact steps  
+- what to type  
+- expected outcomes  
+
+I wrote it mainly so people don’t have to guess how to use this.
 
 ---
 
-## Core Concepts
+## Core concepts (keeping this simple)
 
 ### Space
 
-A Space is the long-lived container for a line of work. It holds the full history of
-Checkpoints created within that work and all Sessions associated with it.
+Think of it like a container for a line of work.
 
-Analogy: a Git repository, but for a thinking process rather than a codebase.
+It holds checkpoints and sessions.
 
-Spaces are named and persistent. You might have one for a product architecture
-decision, another for a research topic, another for a client engagement.
+Kind of like a repo, but for thinking.
+
+---
 
 ### Session
 
-A Session is a live chat runtime. It may be attached to a Space (and thus have access
-to that Space's Checkpoint history) or standalone (no persistent state).
+This is just your live chat.
 
-A Session has an active provider and model. Switching provider or model within a
-Session does not lose conversational history — Smriti stores Turns independently of
-any provider session.
+It may or may not be attached to a Space.
+
+You can switch models here without losing history.
+
+---
 
 ### Checkpoint
 
-A Checkpoint is a structured, immutable state snapshot. It contains:
+This is the main thing.
 
-| Field | Description |
-|---|---|
-| **Title** | 3–5 word label for the state |
-| **Objective** | The goal being worked toward at this point |
-| **Summary** | Narrative of what was figured out |
-| **Decisions** | Explicit choices made — only what was stated, not inferred |
-| **Tasks** | Concrete action items identified |
-| **Open Questions** | Unresolved questions at this point |
-| **Entities** | Key concepts, tools, systems, or proper nouns |
+A structured snapshot:
 
-Checkpoints are created manually at meaningful points — before switching models,
-before stepping away, when a significant decision is reached. The **Draft with AI**
-feature uses a background intelligence model to extract a draft from the current
-session's active Turns; the user reviews and saves.
+- title  
+- objective  
+- summary  
+- decisions  
+- tasks  
+- open questions  
+- entities  
 
-A Checkpoint is never created automatically. This is intentional: automatic
-checkpointing produces noise, not signal.
+You create it manually.
+
+I tried auto-checkpointing early on.
+
+Didn’t work. It just created noise.
+
+---
 
 ### Turn
 
-A Turn is a single unit in the event stream: one user message or one assistant reply,
-with its provider, model, and sequence number recorded. Turns are append-only and
-never edited.
+One message. Either user or assistant.
 
-Turns are the raw material. Checkpoints are the distillate.
+Append-only.
 
----
-
-## The Context Modes
-
-| Mode | What the model sees |
-|---|---|
-| **FRESH** | No Checkpoint context. Blank slate. Only the current Turn. |
-| **HEAD** | The latest Checkpoint in the attached Space, plus recent Turns in this Session. |
-| **MOUNTED** | A specific Checkpoint, plus only Turns created after mounting. Nothing else. |
-| **FORKED** | The fork-source Checkpoint as base context, plus Turns created in this fork session. |
-
-The MOUNTED mode is the key differentiator.
-
-When you mount a specific Checkpoint, Smriti records the sequence number of the last
-Turn at the moment of mounting. All subsequent requests pass only Turns with sequence
-numbers above that boundary. Turns from other sessions, from other providers, or from
-work that happened after that Checkpoint was created — none of it enters the context.
-The isolation is enforced at the data layer, not by prompt instruction.
+Nothing fancy.
 
 ---
 
-## How It Works
+## Context modes (this part matters)
 
-### Starting a session
+- **FRESH** → nothing, blank state  
+- **HEAD** → latest checkpoint + recent turns  
+- **MOUNTED** → specific checkpoint + only new turns  
+- **FORKED** → checkpoint base + separate branch  
 
-Open the workspace. A new Session is created automatically. By default it has no
-Space attached (FRESH mode).
+Mounted mode is the key one.
 
-### Attaching a Space
-
-Click the Space button in the thread header. Select an existing Space or create one.
-Choose a memory scope:
-
-- **Latest checkpoint only** — the most recent Checkpoint provides base context
-- **Latest 3 checkpoints** — the three most recent Checkpoints provide layered context
-
-### Creating a Checkpoint
-
-When you reach a meaningful point — a decision, a model switch, the end of a work
-block — click the Checkpoint button in the thread header.
-
-The Checkpoint form opens with empty fields. Click **Draft with AI** to have the
-background intelligence model extract a draft from the current session's active Turns.
-The draft reflects only the active context mode (FRESH, HEAD, or MOUNTED). Review,
-edit, and save.
-
-### Mounting a Checkpoint
-
-Open the Checkpoint history panel by clicking the context badge in the thread header.
-Find the Checkpoint you want to return to. Click **Mount**.
-
-The header updates to show `MOUNTED · <hash>`. Any Turn you send from this point is
-resolved against that Checkpoint's state only.
-
-To return to HEAD mode, click **Unmount** in the history panel.
-
-### Forking a Session
-
-Open the Branch Tree for a Space. Click **Fork** on any Checkpoint. Give the branch
-a name. A new Session is created, seeded from that Checkpoint's state, with a clean
-Turn history.
-
-The fork session starts in FORKED mode. Its reasoning develops independently from the
-main branch. Both branches remain live in the same Space.
-
-### Comparing Checkpoints
-
-In the Branch Tree, select any two Checkpoints across any branches and click
-**Compare**. The diff view shows decisions, tasks, and summaries side by side with
-per-branch and shared items clearly marked.
-
-### Switching providers
-
-Change the provider and model in the session toolbar. The Session continues
-uninterrupted. Smriti passes the same Checkpoint context and Turn history to the new
-provider. No re-explanation required.
+That’s where isolation actually works.
 
 ---
 
-## Current Limitations
+## How it works (rough flow)
 
-- Single-user; no authentication
-- No merging of divergent Checkpoint lines
-- No streaming responses — each Turn is a synchronous request/response cycle
-- Transcript ingestion via paste (V1 API) is a legacy feature; not the primary workflow
-- No mobile UI
-- No MCP or browser extension integrations
+Start a session -> attach a Space -> create checkpoints -> mount / fork / compare
+
+That’s it.
+
+No complicated flow.
 
 ---
 
-## Provider Configuration
+## Current limitations
 
-Smriti uses two independent provider slots:
+There are quite a few:
 
-**Chat provider** — the model you converse with. Selected per-session in the UI
-toolbar. Supports: OpenAI, Anthropic, OpenRouter.
+- single user only  
+- no merging of branches  
+- no streaming responses  
+- UI is functional, not polished  
+- no mobile  
+- no integrations  
 
-**Background intelligence** — a separate model used for Draft with AI and session
-auto-titling. Configured server-side. Not visible in the chat UI.
+Also…
 
-### YAML configuration (recommended)
+I’m not fully convinced yet that this abstraction is correct.
 
-Copy `backend/config/providers.example.yaml` to `backend/config/providers.yaml` and
-fill in your keys:
+---
 
-```yaml
-providers:
-  openai:
-    api_key: "sk-..."
-    default_model: "gpt-4o"
+## Provider setup
 
-  anthropic:
-    api_key: "sk-ant-..."
-    default_model: "claude-sonnet-4-6"
+You can use:
 
-  openrouter:
-    api_key: "sk-or-..."
-    base_url: "https://openrouter.ai/api/v1"
+- OpenAI  
+- Anthropic  
+- OpenRouter  
 
-chat:
-  default_provider: "openrouter"
+Either via YAML:
 
-background_intelligence:
-  provider: "openai"
-  model: "gpt-4o-mini"
+backend/config/providers.yaml
+
+or env variables:
+
+```
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+OPENROUTER_API_KEY=...
 ```
 
-### Environment variables
-
-```bash
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-OPENROUTER_API_KEY=sk-or-...
-SMRITI_DEFAULT_PROVIDER=openrouter
-DATABASE_URL=postgresql://smriti:smriti@localhost:5432/smriti
-```
-
-Environment variables take precedence over YAML values. API keys are never returned
-by any API endpoint.
-
-### Mock Mode
-
-The UI includes a **Mock Mode** toggle (compose bar) that uses a deterministic mock
-adapter — no API calls, scripted responses. Useful for testing checkpoint and session
-mechanics without a live provider key.
+There’s also a mock mode.
 
 ---
 
-## Technical Stack
+## Tech stack
 
-| Layer | Technology |
-|---|---|
-| Backend | FastAPI, SQLAlchemy, Alembic, Python 3.11+ |
-| Database | PostgreSQL |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
-| Provider adapters | OpenAI SDK, Anthropic SDK, OpenRouter (OpenAI-compatible) |
+- FastAPI  
+- SQLAlchemy  
+- PostgreSQL  
+- React + TypeScript + Vite  
 
-The backend API is versioned by product generation. V4 handles chat sessions and
-message sending. V5 handles checkpoint and lineage operations. V1 and V2 are legacy
-endpoints retained for compatibility but not part of the current primary workflow.
+Nothing unusual.
 
 ---
 
-## Roadmap
+## Where this might go (if it makes sense)
 
-- Streaming responses
-- Multi-user Spaces with authentication
-- Provider expansion (additional providers and local models)
-- Source Turn range recorded on Checkpoints (which conversation produced this snapshot)
-- MCP integrations
-- Checkpoint merging
+Still figuring this out.
+
+Some directions that feel interesting:
+
+- structured reasoning memory  
+- agent workflows  
+- shared state across tools  
+- maybe knowledge graph layer on top  
+
+But none of this is built yet.
 
 ---
 
-## Further Reading
+## Why I’m sharing this
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — system model, checkpoint isolation mechanism,
-  provider abstraction, API versioning
-- [docs/API.md](docs/API.md) — endpoint reference for V4 (chat) and V5 (checkpoint
-  and lineage)
-- [DECISIONS.md](DECISIONS.md) — key architectural and product decisions
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to set up the dev environment and contribute
+I’m mainly trying to validate the idea.
+
+Not the implementation.
+
+The implementation is early. I know that.
+
+What I care about is:
+
+Does this way of thinking about reasoning actually help  
+or is chat history already “good enough” and I’m overcomplicating it?
+
+Happy to get blunt feedback.
