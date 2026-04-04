@@ -91,6 +91,13 @@ export interface Repo {
   updated_at: string;
 }
 
+export interface Artifact {
+  id: string;
+  type: string;
+  label: string;
+  content: string;
+}
+
 export interface Commit {
   id: string;
   repo_id: string;
@@ -107,6 +114,7 @@ export interface Commit {
   tasks: string[];
   open_questions: string[];
   entities: string[];
+  artifacts: Artifact[];
   context_blob: Record<string, unknown>;
   raw_source_text: string | null;
   metadata: Record<string, unknown>;
@@ -219,6 +227,7 @@ export interface CheckpointDetail {
   assumptions: string[];
   tasks: string[];
   open_questions: string[];
+  artifacts: Artifact[];
 }
 
 export interface CheckpointDiff {

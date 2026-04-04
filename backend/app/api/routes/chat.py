@@ -154,6 +154,17 @@ def build_prompt_from_checkpoints(checkpoints: list[CommitModel], recent_message
             for t in ckpt.tasks:
                 lines.append(f"- {t}")
             lines.append("")
+        if ckpt.artifacts:
+            lines.append(f"{label} Attached Artifacts:")
+            for art in ckpt.artifacts:
+                art_label = art.get('label', 'Untitled') if isinstance(art, dict) else 'Untitled'
+                art_content = art.get('content', '') if isinstance(art, dict) else str(art)
+                # Cap each artifact at 2000 chars to manage prompt size
+                if len(art_content) > 2000:
+                    art_content = art_content[:2000] + "\n[… truncated]"
+                lines.append(f"\n[{art_label}]:")
+                lines.append(art_content)
+            lines.append("")
 
     if recent_messages:
         lines.append("Recent Conversation:")
@@ -260,6 +271,7 @@ class ManualCommitRequest(BaseModel):
     tasks: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
+    artifacts: list[dict] = Field(default_factory=list)
 
 
 class CommitResponse(BaseModel):
@@ -276,6 +288,7 @@ class CommitResponse(BaseModel):
     tasks: list
     open_questions: list
     entities: list
+    artifacts: list
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -633,6 +646,7 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
         tasks=payload.tasks,
         open_questions=payload.open_questions,
         entities=payload.entities,
+        artifacts=payload.artifacts,
         metadata_={"session_id": str(session_id)},
     )
     db.add(commit)

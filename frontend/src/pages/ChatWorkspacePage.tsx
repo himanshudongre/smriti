@@ -22,7 +22,7 @@ import {
   getSessionCheckpoints,
   reviewCheckpoint,
 } from '../api/client';
-import type { ChatSession, Commit, CompareResponse, CheckpointReviewResponse, HeadState, TurnEvent, Repo, ProviderStatus } from '../types';
+import type { Artifact, ChatSession, Commit, CompareResponse, CheckpointReviewResponse, HeadState, TurnEvent, Repo, ProviderStatus } from '../types';
 import {
   Check,
   Copy,
@@ -38,6 +38,10 @@ import {
   Plus,
   FolderInput,
   RotateCcw,
+  Paperclip,
+  X,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 // ── Provider / model config ───────────────────────────────────────────────────
@@ -146,7 +150,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
   return nodes;
 }
 
-function MessageBubble({ turn, dimmed }: { turn: TurnEvent; dimmed?: boolean }) {
+function MessageBubble({ turn, dimmed, onAddArtifact }: { turn: TurnEvent; dimmed?: boolean; onAddArtifact?: (content: string) => void }) {
   const [copied, setCopied] = useState(false);
   const isUser = turn.role === 'user';
 
@@ -171,14 +175,25 @@ function MessageBubble({ turn, dimmed }: { turn: TurnEvent; dimmed?: boolean }) 
         }
 
         {!isUser && (
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-800"
-          >
-            {copied
-              ? <Check className="w-3 h-3 text-green-400" />
-              : <Copy className="w-3 h-3 text-gray-500" />}
-          </button>
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+            {onAddArtifact && (
+              <button
+                onClick={() => onAddArtifact(turn.content)}
+                title="Add as artifact"
+                className="p-1 rounded hover:bg-gray-800"
+              >
+                <Paperclip className="w-3 h-3 text-gray-500" />
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              className="p-1 rounded hover:bg-gray-800"
+            >
+              {copied
+                ? <Check className="w-3 h-3 text-green-400" />
+                : <Copy className="w-3 h-3 text-gray-500" />}
+            </button>
+          </div>
         )}
 
         {!isUser && turn.model && (
@@ -224,6 +239,29 @@ function RestoreDivider({ label }: { label: string }) {
   );
 }
 
+function ArtifactPreview({ artifact }: { artifact: Artifact }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="border border-gray-800/50 rounded px-2 py-1.5 bg-zinc-900/30">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-1.5 w-full text-left"
+      >
+        {expanded
+          ? <ChevronDown className="w-3 h-3 text-gray-600 flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-gray-600 flex-shrink-0" />}
+        <Paperclip className="w-2.5 h-2.5 text-gray-600 flex-shrink-0" />
+        <span className="text-[11px] text-gray-300 truncate">{artifact.label || 'Untitled'}</span>
+      </button>
+      {expanded && (
+        <pre className="mt-1.5 text-[10px] text-gray-500 font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto border-t border-gray-800/50 pt-1.5">
+          {artifact.content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 interface CommitModalProps {
   repoId: string;
   sessionId: string;
@@ -232,9 +270,17 @@ interface CommitModalProps {
   providerStatus: Record<string, ProviderStatus> | null;
   mountedCheckpointId?: string | null;
   mountedAtSeq?: number | null;
+  initialArtifacts?: Artifact[];
 }
 
-function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, mountedCheckpointId, mountedAtSeq }: CommitModalProps) {
+function _makeLabel(content: string): string {
+  // Generate a readable label: first sentence or first 50 chars
+  const firstLine = content.split('\n')[0].trim();
+  if (firstLine.length <= 50) return firstLine;
+  return firstLine.slice(0, 47) + '…';
+}
+
+function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, mountedCheckpointId, mountedAtSeq, initialArtifacts }: CommitModalProps) {
   const [msg, setMsg]         = useState('');
   const [summary, setSummary] = useState('');
   const [obj, setObj]         = useState('');
@@ -243,6 +289,7 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
   const [assumptions, setAssumptions] = useState('');
   const [openQuestions, setOpenQuestions] = useState('');
   const [entities, setEntities] = useState('');
+  const [artifacts, setArtifacts] = useState<Artifact[]>(initialArtifacts ?? []);
   const [loading, setLoading] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [err, setErr]         = useState<string | null>(null);
@@ -296,6 +343,7 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
         assumptions: parseLines(assumptions),
         open_questions: parseLines(openQuestions),
         entities: parseLines(entities),
+        artifacts: artifacts.filter(a => a.content.trim()),
       });
       onCommitted(commit);
     } catch (e: any) {
@@ -433,6 +481,47 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
               />
             </div>
           </div>
+
+          {/* Artifacts */}
+          {artifacts.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wider text-gray-500">Artifacts</p>
+              {artifacts.map((art, idx) => (
+                <div key={art.id} className="border border-gray-800 rounded-lg p-3 space-y-2 bg-zinc-900/30">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                    <input
+                      className="flex-1 bg-transparent border-b border-gray-800 text-sm text-white outline-none focus:border-gray-500 transition-colors py-0.5"
+                      placeholder="Artifact label"
+                      value={art.label}
+                      onChange={e => setArtifacts(prev => prev.map((a, i) => i === idx ? { ...a, label: e.target.value } : a))}
+                    />
+                    <button
+                      onClick={() => setArtifacts(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-gray-600 hover:text-red-400 transition-colors p-0.5"
+                      title="Remove artifact"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <textarea
+                    className="w-full bg-zinc-900/50 border border-gray-800 rounded px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-gray-500 transition-colors resize-none font-mono"
+                    rows={3}
+                    placeholder="Artifact content…"
+                    value={art.content}
+                    onChange={e => setArtifacts(prev => prev.map((a, i) => i === idx ? { ...a, content: e.target.value } : a))}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setArtifacts(prev => [...prev, { id: crypto.randomUUID().slice(0, 8), type: 'text', label: '', content: '' }])}
+            className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> Add artifact
+          </button>
         </div>
 
         <div className="px-5 py-4 border-t border-gray-800">
@@ -524,6 +613,18 @@ function CheckpointDetailPanel({ commit, onClose, providerStatus }: { commit: Co
       {rows(commit.tasks ?? [], 'Tasks')}
       {rows(commit.open_questions ?? [], 'Open Questions')}
       {rows(commit.entities ?? [], 'Entities')}
+
+      {/* Artifacts — secondary, collapsible */}
+      {(commit.artifacts ?? []).length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-gray-600 mb-1">Artifacts ({commit.artifacts.length})</p>
+          <div className="space-y-1">
+            {commit.artifacts.map((art: Artifact, i: number) => (
+              <ArtifactPreview key={art.id || i} artifact={art} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Review checkpoint */}
       <div className="border-t border-gray-800 pt-3">
@@ -949,6 +1050,28 @@ function MemorySpacePanel({
                 {onlyB.map((d, i) => <div key={i} className="text-[11px] text-green-300 px-1.5 py-0.5 bg-green-900/10 rounded mb-0.5 truncate">{d}</div>)}
               </div>
             ))}
+            {/* Artifact labels — lightweight, no content diff */}
+            {((compareResult.checkpoint_a.artifacts ?? []).length > 0 || (compareResult.checkpoint_b.artifacts ?? []).length > 0) && (
+              <div>
+                <p className="text-[9px] uppercase tracking-wider text-gray-600 mb-1">Artifacts</p>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="space-y-0.5">
+                    {(compareResult.checkpoint_a.artifacts ?? []).map((a: Artifact, i: number) => (
+                      <div key={i} className="text-gray-400 flex items-center gap-1 truncate">
+                        <Paperclip className="w-2.5 h-2.5 flex-shrink-0" />{a.label || 'Untitled'}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-0.5">
+                    {(compareResult.checkpoint_b.artifacts ?? []).map((a: Artifact, i: number) => (
+                      <div key={i} className="text-gray-400 flex items-center gap-1 truncate">
+                        <Paperclip className="w-2.5 h-2.5 flex-shrink-0" />{a.label || 'Untitled'}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1146,6 +1269,20 @@ export function ChatWorkspacePage() {
   const [mountedAtSeq, setMountedAtSeq] = useState<number | null>(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [forkTarget, setForkTarget] = useState<Commit | null>(null);
+  // Artifacts captured from messages, passed to CommitModal when opening
+  const [pendingArtifacts, setPendingArtifacts] = useState<Artifact[]>([]);
+
+  const handleAddArtifact = (content: string) => {
+    if (!repo) { setShowAttachModal(true); return; }
+    const artifact: Artifact = {
+      id: crypto.randomUUID().slice(0, 8),
+      type: 'text',
+      label: _makeLabel(content),
+      content,
+    };
+    setPendingArtifacts(prev => [...prev, artifact]);
+    setShowCommitModal(true);
+  };
   // The checkpoint this session was forked from (permanent identity for forked sessions)
   const [forkSourceCommit, setForkSourceCommit] = useState<Commit | null>(null);
   // Increment after a checkpoint is created so MemorySpacePanel re-fetches its list
@@ -1386,11 +1523,12 @@ export function ChatWorkspacePage() {
         <CommitModal
           repoId={repo?.id!}
           sessionId={session.id}
-          onClose={() => setShowCommitModal(false)}
-          onCommitted={handleCommitted}
+          onClose={() => { setShowCommitModal(false); setPendingArtifacts([]); }}
+          onCommitted={(commit) => { handleCommitted(commit); setPendingArtifacts([]); }}
           providerStatus={providerStatus}
           mountedCheckpointId={mountedCheckpointId}
           mountedAtSeq={mountedAtSeq}
+          initialArtifacts={pendingArtifacts}
         />
       )}
 
@@ -1689,7 +1827,7 @@ export function ChatWorkspacePage() {
             {(() => {
               const isRestored = mountedCheckpointId !== null && mountedAtSeq !== null;
               if (!isRestored) {
-                return turns.map(t => <MessageBubble key={t.id} turn={t} />);
+                return turns.map(t => <MessageBubble key={t.id} turn={t} onAddArtifact={handleAddArtifact} />);
               }
 
               const cutoff = mountedAtSeq ?? -1;
@@ -1699,7 +1837,7 @@ export function ChatWorkspacePage() {
 
               return (
                 <>
-                  {preTurns.map(t => <MessageBubble key={t.id} turn={t} dimmed />)}
+                  {preTurns.map(t => <MessageBubble key={t.id} turn={t} dimmed onAddArtifact={handleAddArtifact} />)}
                   <RestoreDivider label={dividerLabel} />
                   {postTurns.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center space-y-2">
@@ -1711,7 +1849,7 @@ export function ChatWorkspacePage() {
                     <>
                       {postTurns.map((t, i) => (
                         <React.Fragment key={t.id}>
-                          <MessageBubble turn={t} />
+                          <MessageBubble turn={t} onAddArtifact={handleAddArtifact} />
                           {i === 1 && postTurns.length <= 3 && t.role === 'assistant' && (
                             <div className="flex justify-start mb-4 ml-1">
                               <span className="text-[10px] text-amber-600/50 italic">

@@ -254,6 +254,7 @@ export async function createChatCommit(payload: {
   tasks?: string[];
   open_questions?: string[];
   entities?: string[];
+  artifacts?: { id: string; type: string; label: string; content: string }[];
 }): Promise<import('../types').Commit> {
   return requestV4<import('../types').Commit>('/chat/commit', {
     method: 'POST',

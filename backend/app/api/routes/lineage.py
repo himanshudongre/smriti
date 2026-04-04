@@ -111,6 +111,7 @@ class CheckpointDetail(BaseModel):
     assumptions: list
     tasks: list
     open_questions: list
+    artifacts: list
 
 
 class CheckpointDiff(BaseModel):
@@ -153,6 +154,7 @@ class ReachableCheckpoint(BaseModel):
     tasks: list
     open_questions: list
     entities: list
+    artifacts: list
     context_blob: dict
     raw_source_text: Optional[str]
     metadata_: dict = Field(serialization_alias="metadata")
@@ -325,6 +327,7 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
             assumptions=[_extract_text(a) for a in (c.assumptions or [])],
             tasks=[_extract_text(t) for t in (c.tasks or [])],
             open_questions=[_extract_text(q) for q in (c.open_questions or [])],
+            artifacts=c.artifacts or [],
         )
 
     return CompareResponse(

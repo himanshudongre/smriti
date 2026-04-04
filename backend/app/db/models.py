@@ -173,6 +173,7 @@ class CommitModel(Base):
     tasks: Mapped[dict] = mapped_column(JSONB, default=list)
     open_questions: Mapped[dict] = mapped_column(JSONB, default=list)
     entities: Mapped[dict] = mapped_column(JSONB, default=list)
+    artifacts: Mapped[dict] = mapped_column(JSONB, default=list)
     context_blob: Mapped[dict] = mapped_column(JSONB, default=dict)
     
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
