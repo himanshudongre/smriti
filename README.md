@@ -2,82 +2,74 @@
 
 Version control for reasoning.
 
-Image Git for LLM/Agentic Reasoning
-
 ---
 
 ## Why I ended up building this
 
-I was just switching between ChatGPT, Claude, Cursor etc while working on problems, and something kept breaking.
+I was switching between ChatGPT, Claude, Cursor etc while working on problems, and something kept breaking.
 
-Not the models.
+Not the models. My own context.
 
-My own context.
+I would spend 30-40 minutes figuring something out, reach a clean decision and then:
 
-I would spend 30–40 minutes figuring something out, reach a clean decision and then:
-
-- switch models  
-- come back later  
-- try a different approach  
+- switch models
+- come back later
+- try a different approach
 
 and suddenly I had to reconstruct everything again.
 
-Not just the text. The actual *state of thinking*.
+Worse, sometimes the conversation itself would drift. I would keep adding messages, and eventually the model was building on confused or contradictory context. Once that happens, it is hard to recover. You either keep patching the thread or restart from scratch.
 
-That’s what pushed me to build this.
+That is what pushed me to build this.
 
 ---
 
-## The core idea (at least how I think about it)
+## The core idea
 
-Instead of treating conversations as logs (Like we do today using .md files) 
-treat the **state of reasoning** as something explicit
+Instead of treating conversations as logs, treat the **state of reasoning** as something explicit and structured.
 
-So I introduced this concept of a **checkpoint**
+A **checkpoint** captures where you are:
 
-It is basically a snapshot of where you are:
+- what you figured out
+- decisions you made
+- assumptions you are relying on
+- what is still open
+- what needs to be done
+- artifacts you want to preserve (code, plans, key outputs)
 
-- what you have figured out  
-- decisions you have made  
-- what is still open  
-- what needs to be done  
+When reasoning drifts or goes wrong, you can **restore to a clean checkpoint** and continue from there. The earlier conversation is excluded from context entirely. Not hidden, not summarized. Actually excluded at the data layer.
 
-Nothing magical. Just structured.
+You can also **branch your thinking** from any checkpoint, explore a different direction, and later **compare** where the two paths diverged.
 
 ---
 
 ## Demo
 
-![Smriti demo](docs/assets/checkpoint-diff.png)
+![Smriti checkpoint diff](docs/assets/checkpoint-diff.png)
 
-Watch demo (3–4 min):  
+*Comparing two checkpoints: one exploring retrieval-heavy architecture, the other a state-first approach. Smriti shows exactly where the decisions diverged.*
+
+Watch demo (3-4 min):
 https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158
 
 ---
 
-## The problem (the way I see it)
+## The problem
 
-You spend an hour working through something.
+You spend an hour working through something. You finally reach clarity. Then you need to:
 
-You finally reach clarity.
+- step away and come back later
+- switch to a different model
+- revisit an earlier direction
 
-Then you need to:
+And everything falls apart. There is no clean way to:
 
-- step away  
-- switch models  
-- revisit an earlier direction  
+- return to that exact state of thinking
+- branch thinking without messing up the original
+- switch models without re-explaining everything
+- recover from a conversation that went wrong
 
-And everything falls apart.
-
-There’s no clean way to:
-
-- return to that exact state  
-- branch thinking without messing up the original  
-- switch models without re-explaining everything  
-
-And the more we use multiple models, the worse this gets.
-
-Honestly, this is where I feel things start breaking.
+The more you work with multiple models and complex problems, the worse this gets.
 
 **Reasoning state becomes the bottleneck.**
 
@@ -85,81 +77,86 @@ Honestly, this is where I feel things start breaking.
 
 ## What this lets you do
 
-A few things started working once I built this:
+### Restore to a clean state
 
-You can go back to any prior state  
-not by scrolling, but by actually mounting that checkpoint again
+When a conversation drifts or gets polluted with bad context, restore to an earlier checkpoint. Pre-restore turns are visually dimmed and excluded from context. The model only sees the checkpoint state and your new messages.
 
-You can switch models mid-session  
-without rewriting the entire context every time
+### Branch your thinking
 
-You can fork your thinking  
-like “let me try a completely different approach from here”  
-without corrupting the original path
+Fork from any checkpoint to explore a different direction. The original path stays untouched. Both branches live in the same space and can be compared.
 
-You can compare two checkpoints  
-and actually see where the reasoning diverged
+### Compare where reasoning diverged
 
-That last one surprised me a bit. It is more useful than I expected.
+Side-by-side structured diff of any two checkpoints. See exactly which decisions differ, which assumptions changed, what questions were resolved differently.
+
+### Review checkpoint consistency
+
+Run a review on any checkpoint to surface reasoning issues: possible contradictions between decisions, hidden assumptions that should be explicit, open questions that were already resolved, and entities that are disconnected from the reasoning.
+
+### Track assumptions separately from decisions
+
+Assumptions are things your reasoning takes for granted. Decisions are explicit choices. Smriti keeps them separate because when reasoning goes wrong, you need to know whether a bad decision was made or whether it was built on an unexamined assumption.
+
+### Attach real artifacts
+
+Capture assistant responses, code snippets, plans, or other outputs directly into a checkpoint. When the checkpoint is active, these artifacts are included in the model's context. The reasoning is grounded in actual content, not just summaries of what was discussed.
+
+### Switch models without losing state
+
+Smriti owns the reasoning state. The model is just a rendering engine. Switch from GPT-4o to Claude to Llama mid-session without re-explaining anything.
 
 ---
 
-## One thing I did differently (maybe controversial)
+## When to use Smriti
 
-Most systems rely on prompts to manage context.
+**Use it when:**
 
-I didn’t.
+- you are working through something complex over multiple sessions
+- you need to explore multiple approaches and compare them
+- your conversation has drifted and you want to recover cleanly
+- you are switching between models and need context continuity
+- you want to preserve specific outputs alongside your reasoning state
 
-When you mount a checkpoint, I enforce boundaries in the data layer itself.
+**Probably not needed when:**
 
-Which basically means:
+- quick one-shot questions
+- simple tasks that don't involve evolving reasoning
+- anything where context starts fresh each time
 
-only the relevant turns are visible  
-nothing from the future leaks in  
-nothing from other sessions sneaks in  
+---
 
-It’s stricter than typical chat systems.
+## One thing I did differently
 
-Not sure if this is the right long-term decision.  
-But it felt important to try.
+Most systems rely on prompts to manage context. I didn't.
+
+When you restore a checkpoint, I enforce boundaries in the data layer itself. Only the relevant turns are visible. Nothing from the future leaks in. Nothing from other sessions sneaks in.
+
+It is stricter than typical chat systems. But it felt important to try.
 
 ---
 
 ## This is not just for chat
 
-I initially built this thinking about chat.
-
-But the more I worked on it, the more it felt like this might matter more for agents.
+I initially built this thinking about chat. But the more I worked on it, the more it felt like this might matter more for agents.
 
 Because agents have the same problem, just worse:
 
-- multi-step reasoning chains  
-- hard to debug  
-- hard to reproduce  
-- no clean way to “go back”  
+- multi-step reasoning chains
+- hard to debug
+- hard to reproduce
+- no clean way to "go back"
 
-Once something diverges, you are kind of stuck.
-
-With checkpoints, you can:
-
-- persist intermediate reasoning  
-- resume from a known state  
-- fork execution paths  
-- compare outcomes across runs  
-
-Basically, you can inspect what actually happened.
-
-Which is something I feel is missing right now.
+With checkpoints, you can persist intermediate reasoning, resume from a known state, fork execution paths, and compare outcomes across runs.
 
 ---
 
 ## Quick start
 
-You’ll need:
+You will need:
 
-- Python 3.11+  
-- Node 18+  
-- PostgreSQL 14+  
+- Python 3.11+
+- Node 18+
+- PostgreSQL 14+
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
@@ -176,10 +173,10 @@ make dev
 make dev-frontend
 ```
 
-Frontend: http://localhost:5173  
-Backend: http://localhost:8000  
+Frontend: http://localhost:5173
+Backend: http://localhost:8000
 
-There is also a mock mode if you don’t want to deal with API keys.
+There is also a mock mode if you don't want to deal with API keys.
 
 ---
 
@@ -199,107 +196,68 @@ There is a full walkthrough here:
 
 demos/branching-reasoning-demo/
 
-It includes:
-
-- exact steps  
-- what to type  
-- expected outcomes  
-
-I wrote it mainly so people don’t have to guess how to use this.
+It includes exact steps, what to type, and expected outcomes. Written so people don't have to guess how to use this.
 
 ---
 
-## Core concepts (keeping this simple)
+## Core concepts
 
 ### Space
 
-Think of it like a container for a line of work.
-
-It holds checkpoints and sessions.
-
-Kind of like a repo, but for thinking.
-
----
+A container for a line of work. Holds checkpoints and sessions. Think of it like a repo, but for thinking.
 
 ### Session
 
-This is just your live chat.
-
-It may or may not be attached to a Space.
-
-You can switch models here without losing history.
-
----
+Your live conversation. It may or may not be attached to a Space. You can switch models here without losing history.
 
 ### Checkpoint
 
-This is the main thing.
+The main abstraction. A structured snapshot of reasoning state:
 
-A structured snapshot:
+- title and objective
+- summary of what was figured out
+- decisions (explicit choices made)
+- assumptions (things taken for granted)
+- tasks (concrete action items)
+- open questions (unresolved issues)
+- entities (key concepts and terms)
+- artifacts (attached content: plans, code, outputs)
 
-- title  
-- objective  
-- summary  
-- decisions  
-- tasks  
-- open questions  
-- entities  
-
-You create it manually.
-
-I tried auto-checkpointing early on.
-
-Didn’t work. It just created noise.
-
----
+You create checkpoints manually. I tried auto-checkpointing early on. It just created noise. The system can help draft and review checkpoints, but the signal for when to checkpoint comes from you.
 
 ### Turn
 
-One message. Either user or assistant.
-
-Append-only.
-
-Nothing fancy.
+One message. Either user or assistant. Append-only.
 
 ---
 
-## Context modes (this part matters)
+## Context modes
 
-- **FRESH** → nothing, blank state  
-- **HEAD** → latest checkpoint + recent turns  
-- **MOUNTED** → specific checkpoint + only new turns  
-- **FORKED** → checkpoint base + separate branch  
+- **FRESH** -> nothing, blank state
+- **HEAD** -> latest checkpoint + recent turns
+- **RESTORED** -> specific checkpoint restored, only new turns visible
+- **FORKED** -> checkpoint base + separate branch
 
-Mounted mode is the key one.
-
-That’s where isolation actually works.
+Restored mode is the key one. That is where isolation actually works. Earlier conversation is excluded, and the model continues from a clean checkpoint state.
 
 ---
 
-## How it works (rough flow)
+## How it works
 
-Start a session -> attach a Space -> create checkpoints -> mount / fork / compare
+Start a session -> attach a Space -> have a conversation -> create a checkpoint -> restore / fork / compare / review
 
-That’s it.
-
-No complicated flow.
+Nothing complicated. The value shows up when your thinking evolves, drifts, or branches.
 
 ---
 
 ## Current limitations
 
-There are quite a few:
+- single user only
+- no merging of branches
+- no streaming responses
+- no mobile
 
-- single user only  
-- no merging of branches  
-- no streaming responses  
-- UI is functional, not polished  
-- no mobile  
-- no integrations  
-
-Also…
-
-I’m not fully convinced yet that this abstraction is correct.
+I'm still refining whether this abstraction is exactly right. The core question: does treating reasoning state as explicit, versioned, and structured actually help? Or is raw conversation history already good enough?
 
 ---
 
@@ -307,9 +265,9 @@ I’m not fully convinced yet that this abstraction is correct.
 
 You can use:
 
-- OpenAI  
-- Anthropic  
-- OpenRouter  
+- OpenAI
+- Anthropic
+- OpenRouter
 
 Either via YAML:
 
@@ -323,47 +281,29 @@ ANTHROPIC_API_KEY=...
 OPENROUTER_API_KEY=...
 ```
 
-There’s also a mock mode.
+There is also a mock mode for trying the product without API keys.
 
 ---
 
 ## Tech stack
 
-- FastAPI  
-- SQLAlchemy  
-- PostgreSQL  
-- React + TypeScript + Vite  
-
-Nothing unusual.
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- React + TypeScript + Vite
 
 ---
 
-## Where this might go (if it makes sense)
+## Where this is going
 
-Still figuring this out.
-
-Some directions that feel interesting:
-
-- structured reasoning memory  
-- agent workflows  
-- shared state across tools  
-- maybe knowledge graph layer on top  
-
-But none of this is built yet.
+The same idea that makes reasoning recoverable in chat also applies when the reasoning happens more autonomously. If something is making decisions over multiple steps, you want to be able to inspect what it decided, go back to where it was still on track, and try a different path. That does not require a different system. It requires the same one.
 
 ---
 
-## Why I’m sharing this
+## Why I am sharing this
 
-I’m mainly trying to validate the idea.
+I am mainly trying to validate the idea, not the implementation. The implementation is early.
 
-Not the implementation.
-
-The implementation is early. I know that.
-
-What I care about is:
-
-Does this way of thinking about reasoning actually help  
-or is chat history already “good enough” and I’m overcomplicating it?
+What I care about is whether this way of thinking about reasoning actually helps, or whether chat history is already good enough and I am overcomplicating it.
 
 Happy to get blunt feedback.

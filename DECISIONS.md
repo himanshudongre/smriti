@@ -148,6 +148,39 @@ to decide when to auto-create a Checkpoint. This was considered and rejected:
 The current recommendation signal (a subtle "consider checkpointing" indicator after
 a significant turn count or keyword detection) is present as a nudge, not an action.
 
+### Why assumptions are tracked separately from decisions
+
+Decisions are explicit choices. Assumptions are things the reasoning takes for granted
+without debating them. This distinction matters because when reasoning goes wrong, the
+cause is often an unexamined assumption rather than a bad decision.
+
+Separating them makes checkpoint review more useful: the system can flag when a decision
+relies on something that is not listed as either a decision or an assumption. It also
+makes rollback more targeted. Instead of going back to "before things went wrong" you
+can identify which specific assumption was faulty.
+
+### Why checkpoint review is on-demand, not automatic
+
+The system can review a checkpoint for reasoning consistency: contradictions between
+decisions, hidden assumptions, resolved open questions, disconnected entities. This
+review is triggered manually by the user, not run automatically on every checkpoint.
+
+Automatic review would create noise and make checkpoints feel graded rather than
+useful. The user should be in control of when they want the system to inspect their
+reasoning state. The review is a tool, not an audit.
+
+### Why artifacts are stored on checkpoints, not separately
+
+Artifacts (attached text content like code snippets, plans, outputs) are stored as
+JSONB on the checkpoint row rather than in a separate table. This keeps checkpoints
+self-contained: one checkpoint is one complete package of reasoning state plus the
+content being reasoned about.
+
+Artifacts are included in prompt context when a checkpoint is active, which means
+the model's responses are grounded in actual content rather than just summaries of
+what was discussed. Artifact content is capped at 2000 characters per artifact in
+the prompt to manage context size.
+
 ---
 
 ## Open questions and deferred decisions

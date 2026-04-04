@@ -422,12 +422,58 @@ reflects only what is present in the selected Turns.
     "Melbourne",
     "Great Barrier Reef",
     "Qantas"
+  ],
+  "assumptions": [
+    "Budget is flexible",
+    "Traveling from London"
   ]
 }
 ```
 
 All array fields may be empty if nothing relevant was found in the conversation.
 `objective` may be an empty string if the goal is not stated clearly enough to extract.
+`assumptions` captures things the conversation takes for granted that were not explicitly
+debated or decided.
+
+---
+
+### Review a checkpoint
+
+```
+POST /api/v5/checkpoint/{checkpoint_id}/review
+```
+
+Uses the background intelligence model to review a checkpoint for reasoning
+consistency. Returns a list of issues and suggestions.
+
+**Issue types (V1):**
+
+| Type | Description |
+|---|---|
+| `contradiction` | Two decisions or an assumption and a decision that appear to conflict |
+| `hidden_assumption` | Something the reasoning relies on that is not listed as an assumption or decision |
+| `resolved_question` | An open question that appears already answered by a decision or the summary |
+| `unused_entity` | An entity not referenced in the summary, decisions, tasks, or objective |
+
+**Response:**
+
+```json
+{
+  "checkpoint_id": "uuid",
+  "issues": [
+    {
+      "type": "hidden_assumption",
+      "description": "The itinerary assumes travel logistics between cities can be easily managed within the 10-day timeframe"
+    }
+  ],
+  "suggestions": [
+    "Consider adding travel logistics as an explicit assumption"
+  ]
+}
+```
+
+Issues are capped at 5 per review. The review is conservative and prefers precision
+over recall.
 
 ---
 
@@ -449,9 +495,18 @@ POST /api/v4/chat/commit
   "summary": "Decided to focus on east coast...",
   "objective": "Plan a 3-week itinerary...",
   "decisions": ["Focus on east coast cities only"],
+  "assumptions": ["Budget is flexible"],
   "tasks": ["Research visa requirements"],
   "open_questions": ["Whether to include Tasmania"],
-  "entities": ["Sydney", "Melbourne"]
+  "entities": ["Sydney", "Melbourne"],
+  "artifacts": [
+    {
+      "id": "a1b2c3d4",
+      "type": "text",
+      "label": "Draft itinerary",
+      "content": "Day 1: Arrive in Sydney..."
+    }
+  ]
 }
 ```
 
@@ -490,9 +545,11 @@ Returns all Checkpoints for a Space, ordered by creation time.
     "objective": "Plan a 3-week itinerary...",
     "summary": "Decided to focus on east coast...",
     "decisions": ["Focus on east coast cities only"],
+    "assumptions": ["Budget is flexible"],
     "tasks": ["Research visa requirements"],
     "open_questions": ["Whether to include Tasmania"],
     "entities": ["Sydney", "Melbourne"],
+    "artifacts": [],
     "created_at": "2026-03-21T15:00:00Z"
   }
 ]

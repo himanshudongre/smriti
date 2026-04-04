@@ -87,8 +87,16 @@ Turns are never deleted or updated.
 ### Checkpoint (CommitModel)
 
 The state snapshot. Fields: `id`, `repo_id`, `commit_hash`, `parent_commit_id`,
-`branch_name`, `message`, `objective`, `summary`, `decisions[]`, `tasks[]`,
-`open_questions[]`, `entities[]`, `author_agent`, `metadata_`, `created_at`.
+`branch_name`, `message`, `objective`, `summary`, `decisions[]`, `assumptions[]`,
+`tasks[]`, `open_questions[]`, `entities[]`, `artifacts[]`, `author_agent`,
+`metadata_`, `created_at`.
+
+`assumptions` — things the reasoning takes for granted, tracked separately from
+explicit decisions. Used by checkpoint review to surface hidden dependencies.
+
+`artifacts` — attached text content (code snippets, plans, outputs). Stored as JSONB
+array of `{id, type, label, content}` objects. Included in prompt context when the
+checkpoint is active, capped at 2000 characters per artifact.
 
 `commit_hash` — a SHA-256 derived from repo ID, message, and creation timestamp.
 Stable identifier for display (first 7 characters shown in the UI).
@@ -126,18 +134,23 @@ Turn history filter: `TurnEvent.created_at >= latest_checkpoint.created_at`.
 This passes Turns created since the most recent Checkpoint was saved — the
 "work since last checkpoint" window.
 
-### MOUNTED
+### RESTORED (internally: MOUNTED)
 
-`mounted_checkpoint_id` is set to a specific Checkpoint ID.
+`mounted_checkpoint_id` is set to a specific Checkpoint ID. The UI labels this
+"RESTORED STATE" to communicate that the user has returned to a clean checkpoint.
 
-`_resolve_checkpoints()` uses `_walk_ancestors()` to build the chain: the mounted
+`_resolve_checkpoints()` uses `_walk_ancestors()` to build the chain: the restored
 Checkpoint plus up to N-1 ancestors via `parent_commit_id`, oldest-first.
 
 Turn history filter: `TurnEvent.sequence_number > history_base_seq`.
 
 `history_base_seq` is provided by the frontend and represents the `sequence_number`
-of the last Turn that existed at the moment the user clicked Mount. Only Turns
+of the last Turn that existed at the moment the user clicked Restore. Only Turns
 created after that moment are included. This is the isolation mechanism.
+
+Pre-restore Turns are visually dimmed in the UI and a boundary divider marks the
+transition. The model's context contains only the checkpoint state plus post-restore
+messages.
 
 ---
 
