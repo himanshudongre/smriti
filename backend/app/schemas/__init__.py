@@ -110,6 +110,18 @@ class CheckpointDraftResponse(BaseModel):
     objective: str = ""
     summary: str = ""
     decisions: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
     tasks: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
+
+
+class ReviewIssue(BaseModel):
+    type: str   # contradiction, hidden_assumption, resolved_question, unused_entity
+    description: str
+
+
+class CheckpointReviewResponse(BaseModel):
+    checkpoint_id: uuid.UUID
+    issues: list[ReviewIssue] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)

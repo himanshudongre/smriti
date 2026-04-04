@@ -103,6 +103,7 @@ export interface Commit {
   summary: string;
   objective: string;
   decisions: string[];
+  assumptions: string[];
   tasks: string[];
   open_questions: string[];
   entities: string[];
@@ -215,6 +216,7 @@ export interface CheckpointDetail {
   summary: string;
   objective: string;
   decisions: string[];
+  assumptions: string[];
   tasks: string[];
   open_questions: string[];
 }
@@ -227,6 +229,9 @@ export interface CheckpointDiff {
   decisions_only_a: string[];
   decisions_only_b: string[];
   decisions_shared: string[];
+  assumptions_only_a: string[];
+  assumptions_only_b: string[];
+  assumptions_shared: string[];
   tasks_only_a: string[];
   tasks_only_b: string[];
   tasks_shared: string[];
@@ -236,4 +241,17 @@ export interface CompareResponse {
   checkpoint_a: CheckpointDetail;
   checkpoint_b: CheckpointDetail;
   diff: CheckpointDiff;
+}
+
+// ── Checkpoint Review Types ──────────────────────────────────────────────────
+
+export interface ReviewIssue {
+  type: 'contradiction' | 'hidden_assumption' | 'resolved_question' | 'unused_entity';
+  description: string;
+}
+
+export interface CheckpointReviewResponse {
+  checkpoint_id: string;
+  issues: ReviewIssue[];
+  suggestions: string[];
 }

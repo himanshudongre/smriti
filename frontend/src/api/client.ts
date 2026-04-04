@@ -250,6 +250,7 @@ export async function createChatCommit(payload: {
   summary?: string;
   objective?: string;
   decisions?: string[];
+  assumptions?: string[];
   tasks?: string[];
   open_questions?: string[];
   entities?: string[];
@@ -322,6 +323,7 @@ export async function draftCheckpoint(payload: {
   objective: string;
   summary: string;
   decisions: string[];
+  assumptions: string[];
   tasks: string[];
   open_questions: string[];
   entities: string[];
@@ -331,6 +333,7 @@ export async function draftCheckpoint(payload: {
     objective: string;
     summary: string;
     decisions: string[];
+    assumptions: string[];
     tasks: string[];
     open_questions: string[];
     entities: string[];
@@ -352,5 +355,11 @@ export async function draftCheckpoint(payload: {
  */
 export async function getSessionCheckpoints(sessionId: string): Promise<import('../types').Commit[]> {
   return requestV5<import('../types').Commit[]>(`/lineage/sessions/${sessionId}/checkpoints`);
+}
+
+export async function reviewCheckpoint(checkpointId: string): Promise<import('../types').CheckpointReviewResponse> {
+  return requestV5<import('../types').CheckpointReviewResponse>(`/checkpoint/${checkpointId}/review`, {
+    method: 'POST',
+  });
 }
 

@@ -169,6 +169,7 @@ class CommitModel(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     objective: Mapped[str] = mapped_column(Text, default="")
     decisions: Mapped[dict] = mapped_column(JSONB, default=list)
+    assumptions: Mapped[dict] = mapped_column(JSONB, default=list)
     tasks: Mapped[dict] = mapped_column(JSONB, default=list)
     open_questions: Mapped[dict] = mapped_column(JSONB, default=list)
     entities: Mapped[dict] = mapped_column(JSONB, default=list)

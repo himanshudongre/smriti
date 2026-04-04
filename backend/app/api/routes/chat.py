@@ -144,6 +144,11 @@ def build_prompt_from_checkpoints(checkpoints: list[CommitModel], recent_message
             for d in ckpt.decisions:
                 lines.append(f"- {d}")
             lines.append("")
+        if ckpt.assumptions:
+            lines.append(f"{label} Key Assumptions:")
+            for a in ckpt.assumptions:
+                lines.append(f"- {a}")
+            lines.append("")
         if ckpt.tasks:
             lines.append(f"{label} Open Tasks:")
             for t in ckpt.tasks:
@@ -251,6 +256,7 @@ class ManualCommitRequest(BaseModel):
     summary: str = ""
     objective: str = ""
     decisions: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
     tasks: list[str] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
@@ -266,6 +272,7 @@ class CommitResponse(BaseModel):
     summary: str
     objective: str
     decisions: list
+    assumptions: list
     tasks: list
     open_questions: list
     entities: list
@@ -622,6 +629,7 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
         summary=payload.summary,
         objective=payload.objective,
         decisions=payload.decisions,
+        assumptions=payload.assumptions,
         tasks=payload.tasks,
         open_questions=payload.open_questions,
         entities=payload.entities,

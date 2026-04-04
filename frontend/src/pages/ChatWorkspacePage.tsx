@@ -20,8 +20,9 @@ import {
   forkSession,
   compareCheckpoints,
   getSessionCheckpoints,
+  reviewCheckpoint,
 } from '../api/client';
-import type { ChatSession, Commit, CompareResponse, HeadState, TurnEvent, Repo, ProviderStatus } from '../types';
+import type { ChatSession, Commit, CompareResponse, CheckpointReviewResponse, HeadState, TurnEvent, Repo, ProviderStatus } from '../types';
 import {
   Check,
   Copy,
@@ -239,6 +240,7 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
   const [obj, setObj]         = useState('');
   const [tasks, setTasks]     = useState('');
   const [decisions, setDecs]  = useState('');
+  const [assumptions, setAssumptions] = useState('');
   const [openQuestions, setOpenQuestions] = useState('');
   const [entities, setEntities] = useState('');
   const [loading, setLoading] = useState(false);
@@ -268,6 +270,7 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
       setSummary(draft.summary || '');
       setTasks((draft.tasks ?? []).join('\n'));
       setDecs((draft.decisions ?? []).join('\n'));
+      setAssumptions((draft.assumptions ?? []).join('\n'));
       setOpenQuestions((draft.open_questions ?? []).join('\n'));
       setEntities((draft.entities ?? []).join('\n'));
     } catch (e: any) {
@@ -290,6 +293,7 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
         objective: obj.trim(),
         tasks: parseLines(tasks),
         decisions: parseLines(decisions),
+        assumptions: parseLines(assumptions),
         open_questions: parseLines(openQuestions),
         entities: parseLines(entities),
       });
@@ -370,18 +374,6 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs uppercase tracking-wider text-gray-500 block mb-1.5">
-                Tasks (one per line)
-              </label>
-              <textarea
-                className="w-full bg-zinc-900/50 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-gray-500 transition-colors resize-none font-mono"
-                rows={3}
-                placeholder={"Set up database\nWrite tests"}
-                value={tasks}
-                onChange={e => setTasks(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-wider text-gray-500 block mb-1.5">
                 Decisions (one per line)
               </label>
               <textarea
@@ -390,6 +382,30 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
                 placeholder={"Use Postgres\nNo auth for now"}
                 value={decisions}
                 onChange={e => setDecs(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider text-gray-500 block mb-1.5">
+                Assumptions (one per line)
+              </label>
+              <textarea
+                className="w-full bg-zinc-900/50 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-gray-500 transition-colors resize-none font-mono"
+                rows={3}
+                placeholder={"Cloud-hosted deployment\nSingle-tenant for now"}
+                value={assumptions}
+                onChange={e => setAssumptions(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider text-gray-500 block mb-1.5">
+                Tasks (one per line)
+              </label>
+              <textarea
+                className="w-full bg-zinc-900/50 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-gray-500 transition-colors resize-none font-mono"
+                rows={3}
+                placeholder={"Set up database\nWrite tests"}
+                value={tasks}
+                onChange={e => setTasks(e.target.value)}
               />
             </div>
             <div>
@@ -404,14 +420,14 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
                 onChange={e => setOpenQuestions(e.target.value)}
               />
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="text-xs uppercase tracking-wider text-gray-500 block mb-1.5">
                 Entities (one per line)
               </label>
               <textarea
                 className="w-full bg-zinc-900/50 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-gray-500 transition-colors resize-none font-mono"
-                rows={3}
-                placeholder={"Redis\nReact\nPostgreSQL"}
+                rows={2}
+                placeholder={"Redis, React, PostgreSQL"}
                 value={entities}
                 onChange={e => setEntities(e.target.value)}
               />
@@ -436,7 +452,35 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
 
 // ── CheckpointDetailPanel ─────────────────────────────────────────────────────
 
-function CheckpointDetailPanel({ commit, onClose }: { commit: Commit; onClose: () => void }) {
+function CheckpointDetailPanel({ commit, onClose, providerStatus }: { commit: Commit; onClose: () => void; providerStatus: Record<string, ProviderStatus> | null }) {
+  const [reviewResult, setReviewResult] = useState<CheckpointReviewResponse | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewErr, setReviewErr] = useState<string | null>(null);
+
+  const bgConfig = providerStatus?.['background_intelligence'];
+  const bgProviderId = bgConfig?.provider;
+  const isBgValid = bgProviderId ? providerStatus?.[bgProviderId]?.has_key : false;
+
+  const handleReview = async () => {
+    try {
+      setReviewing(true);
+      setReviewErr(null);
+      const result = await reviewCheckpoint(commit.id);
+      setReviewResult(result);
+    } catch (e: any) {
+      setReviewErr(e.message || 'Review failed');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  const issueLabel: Record<string, { text: string; classes: string }> = {
+    contradiction: { text: 'Possible contradiction', classes: 'text-red-400 bg-red-500/10 border-red-500/20' },
+    hidden_assumption: { text: 'Hidden assumption', classes: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+    resolved_question: { text: 'Possibly resolved', classes: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+    unused_entity: { text: 'Possibly unused entity', classes: 'text-gray-400 bg-zinc-800 border-gray-700' },
+  };
+
   const fmt = (d: string) => new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const rows = (items: string[], label: string) =>
     items.length > 0 ? (
@@ -475,10 +519,56 @@ function CheckpointDetailPanel({ commit, onClose }: { commit: Commit; onClose: (
           <p className="text-xs text-gray-400 leading-relaxed">{commit.summary}</p>
         </div>
       )}
-      {rows(commit.tasks ?? [], 'Tasks')}
       {rows(commit.decisions ?? [], 'Decisions')}
+      {rows(commit.assumptions ?? [], 'Assumptions')}
+      {rows(commit.tasks ?? [], 'Tasks')}
       {rows(commit.open_questions ?? [], 'Open Questions')}
       {rows(commit.entities ?? [], 'Entities')}
+
+      {/* Review checkpoint */}
+      <div className="border-t border-gray-800 pt-3">
+        <button
+          onClick={handleReview}
+          disabled={reviewing || !isBgValid}
+          title={isBgValid ? 'Review this checkpoint for reasoning consistency' : 'Background provider not configured'}
+          className="text-[11px] px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+        >
+          {reviewing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+          {reviewing ? 'Reviewing…' : reviewResult ? 'Re-review checkpoint' : 'Review checkpoint'}
+        </button>
+
+        {reviewErr && <p className="text-[10px] text-red-400 mt-2">{reviewErr}</p>}
+
+        {reviewResult && (
+          <div className="mt-3 space-y-2">
+            {reviewResult.issues.length === 0 ? (
+              <p className="text-[11px] text-green-400/70">No issues found — reasoning looks consistent.</p>
+            ) : (
+              <div className="space-y-2">
+                {reviewResult.issues.map((issue, i) => {
+                  const label = issueLabel[issue.type] || { text: issue.type, classes: 'text-gray-400 bg-zinc-800 border-gray-700' };
+                  return (
+                    <div key={i} className="space-y-1">
+                      <span className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${label.classes}`}>
+                        {label.text}
+                      </span>
+                      <p className="text-[11px] text-gray-300 leading-relaxed">{issue.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {reviewResult.suggestions.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[9px] uppercase tracking-wider text-gray-600 mb-1">Suggestions</p>
+                {reviewResult.suggestions.map((s, i) => (
+                  <p key={i} className="text-[10px] text-gray-500 leading-relaxed">→ {s}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -592,6 +682,7 @@ function MemorySpacePanel({
   forkSourceCommit,
   mountedCheckpointId,
   refreshKey,
+  providerStatus,
   onMount,
   onFork,
   onClose,
@@ -603,6 +694,7 @@ function MemorySpacePanel({
   mountedCheckpointId: string | null;
   /** Increment to force the checkpoint list to reload (e.g. after creating a new checkpoint). */
   refreshKey: number;
+  providerStatus: Record<string, ProviderStatus> | null;
   onMount: (info: { id: string; message: string } | null) => void;
   onFork: (checkpoint: Commit) => void;
   onClose: () => void;
@@ -823,6 +915,7 @@ function MemorySpacePanel({
                           <CheckpointDetailPanel
                             commit={expandedCommit}
                             onClose={() => { setExpandedId(null); setExpandedCommit(null); }}
+                            providerStatus={providerStatus}
                           />
                         )
                     )}
@@ -847,6 +940,7 @@ function MemorySpacePanel({
             {[
               { label: 'Decisions', onlyA: compareResult.diff.decisions_only_a, onlyB: compareResult.diff.decisions_only_b, shared: compareResult.diff.decisions_shared },
               { label: 'Tasks', onlyA: compareResult.diff.tasks_only_a, onlyB: compareResult.diff.tasks_only_b, shared: compareResult.diff.tasks_shared },
+              { label: 'Assumptions', onlyA: compareResult.diff.assumptions_only_a ?? [], onlyB: compareResult.diff.assumptions_only_b ?? [], shared: compareResult.diff.assumptions_shared ?? [] },
             ].map(({ label, onlyA, onlyB, shared }) => (onlyA.length + onlyB.length + shared.length) > 0 && (
               <div key={label}>
                 <p className="text-[9px] uppercase tracking-wider text-gray-600 mb-1">{label}</p>
@@ -1738,6 +1832,7 @@ export function ChatWorkspacePage() {
               forkSourceCommit={forkSourceCommit}
               mountedCheckpointId={mountedCheckpointId}
               refreshKey={checkpointRefreshKey}
+              providerStatus={providerStatus}
               onMount={info => {
                 if (info !== null) {
                   setMountedCheckpointId(info.id);

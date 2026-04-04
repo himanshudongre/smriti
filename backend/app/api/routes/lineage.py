@@ -108,6 +108,7 @@ class CheckpointDetail(BaseModel):
     summary: str
     objective: str
     decisions: list
+    assumptions: list
     tasks: list
     open_questions: list
 
@@ -120,6 +121,9 @@ class CheckpointDiff(BaseModel):
     decisions_only_a: list[str]
     decisions_only_b: list[str]
     decisions_shared: list[str]
+    assumptions_only_a: list[str] = Field(default_factory=list)
+    assumptions_only_b: list[str] = Field(default_factory=list)
+    assumptions_shared: list[str] = Field(default_factory=list)
     tasks_only_a: list[str]
     tasks_only_b: list[str]
     tasks_shared: list[str]
@@ -145,6 +149,7 @@ class ReachableCheckpoint(BaseModel):
     summary: str
     objective: str
     decisions: list
+    assumptions: list
     tasks: list
     open_questions: list
     entities: list
@@ -301,6 +306,9 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
     dec_only_a, dec_only_b, dec_shared = _diff_lists(
         commit_a.decisions or [], commit_b.decisions or []
     )
+    assump_only_a, assump_only_b, assump_shared = _diff_lists(
+        commit_a.assumptions or [], commit_b.assumptions or []
+    )
     task_only_a, task_only_b, task_shared = _diff_lists(
         commit_a.tasks or [], commit_b.tasks or []
     )
@@ -314,6 +322,7 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
             summary=c.summary or "",
             objective=c.objective or "",
             decisions=[_extract_text(d) for d in (c.decisions or [])],
+            assumptions=[_extract_text(a) for a in (c.assumptions or [])],
             tasks=[_extract_text(t) for t in (c.tasks or [])],
             open_questions=[_extract_text(q) for q in (c.open_questions or [])],
         )
@@ -329,6 +338,9 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
             decisions_only_a=dec_only_a,
             decisions_only_b=dec_only_b,
             decisions_shared=dec_shared,
+            assumptions_only_a=assump_only_a,
+            assumptions_only_b=assump_only_b,
+            assumptions_shared=assump_shared,
             tasks_only_a=task_only_a,
             tasks_only_b=task_only_b,
             tasks_shared=task_shared,
