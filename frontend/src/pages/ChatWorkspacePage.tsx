@@ -36,6 +36,7 @@ import {
   FolderOpen,
   Plus,
   FolderInput,
+  RotateCcw,
 } from 'lucide-react';
 
 // ── Provider / model config ───────────────────────────────────────────────────
@@ -144,7 +145,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
   return nodes;
 }
 
-function MessageBubble({ turn }: { turn: TurnEvent }) {
+function MessageBubble({ turn, dimmed }: { turn: TurnEvent; dimmed?: boolean }) {
   const [copied, setCopied] = useState(false);
   const isUser = turn.role === 'user';
 
@@ -155,7 +156,7 @@ function MessageBubble({ turn }: { turn: TurnEvent }) {
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 group`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 group ${dimmed ? 'opacity-40' : ''}`}>
       <div
         className={`relative max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isUser
@@ -197,6 +198,26 @@ function TypingIndicator() {
         <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
         <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
         <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+      </div>
+    </div>
+  );
+}
+
+function RestoreDivider({ label }: { label: string }) {
+  return (
+    <div className="my-8 flex flex-col items-center gap-2">
+      <div className="w-full flex items-center gap-3">
+        <div className="flex-1 border-t border-amber-500/40" />
+        <RotateCcw className="w-3.5 h-3.5 text-amber-500/70" />
+        <div className="flex-1 border-t border-amber-500/40" />
+      </div>
+      <div className="flex flex-col items-center gap-1 px-4 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+        <span className="text-[11px] font-medium text-amber-300">
+          Restored to: {label}
+        </span>
+        <span className="text-[10px] text-amber-600/70 text-center max-w-xs">
+          Earlier conversation is excluded — the model sees only this checkpoint and new messages below
+        </span>
       </div>
     </div>
   );
@@ -582,7 +603,7 @@ function MemorySpacePanel({
   mountedCheckpointId: string | null;
   /** Increment to force the checkpoint list to reload (e.g. after creating a new checkpoint). */
   refreshKey: number;
-  onMount: (id: string | null) => void;
+  onMount: (info: { id: string; message: string } | null) => void;
   onFork: (checkpoint: Commit) => void;
   onClose: () => void;
 }) {
@@ -686,17 +707,16 @@ function MemorySpacePanel({
       {/* Current context context strip */}
       <div className="px-4 py-2 border-b border-gray-800 space-y-1">
         {mountedCheckpointId ? (
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-amber-500 flex items-center gap-1">
-              <span className="text-[9px]">⊕</span>
-              MOUNTED · <code className="text-amber-400">{mountedCheckpointId.slice(0, 7)}</code>
-              <span className="text-gray-600 ml-0.5">(temporary override)</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] text-amber-400 flex items-center gap-1 min-w-0">
+              <RotateCcw className="w-3 h-3 text-amber-500 flex-shrink-0" />
+              <span className="truncate">Restored to: {checkpoints.find(c => c.id === mountedCheckpointId)?.message || mountedCheckpointId.slice(0, 7)}</span>
             </span>
             <button
               onClick={() => onMount(null)}
-              className="text-[10px] text-gray-600 hover:text-red-400 transition-colors ml-2 flex-shrink-0"
+              className="text-[10px] text-gray-500 hover:text-amber-300 transition-colors flex-shrink-0 whitespace-nowrap"
             >
-              Unmount
+              Return to live thread
             </button>
           </div>
         ) : isFork ? (
@@ -756,7 +776,7 @@ function MemorySpacePanel({
                           <code className="text-[10px] font-mono text-blue-400">{c.commit_hash.slice(0, 7)}</code>
                           {isMounted && (
                             <span className="text-[9px] uppercase tracking-wider text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded">
-                              Mounted
+                              Restored
                             </span>
                           )}
                         </div>
@@ -769,15 +789,15 @@ function MemorySpacePanel({
 
                       <div className="flex flex-col gap-1.5 flex-shrink-0">
                         <button
-                          onClick={() => onMount(isMounted ? null : c.id)}
-                          title={isMounted ? 'Remove temporary context override' : 'Temporarily rebase context onto this checkpoint'}
+                          onClick={() => onMount(isMounted ? null : { id: c.id, message: c.message })}
+                          title={isMounted ? 'Return to live thread' : 'Restore context to this checkpoint'}
                           className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-colors ${
                             isMounted
                               ? 'border-amber-500/50 text-amber-300 bg-amber-900/20 hover:bg-red-900/20 hover:text-red-300 hover:border-red-500/40'
                               : 'border-gray-700 text-gray-400 hover:bg-amber-900/10 hover:text-amber-300 hover:border-amber-500/40'
                           }`}
                         >
-                          {isMounted ? 'Unmount' : 'Mount'}
+                          {isMounted ? 'Exit restore' : 'Restore'}
                         </button>
                         <button
                           onClick={() => toggleDetail(c.id)}
@@ -1024,9 +1044,11 @@ export function ChatWorkspacePage() {
 
   // Explicit checkpoint mounting (temporary context override)
   const [mountedCheckpointId, setMountedCheckpointId] = useState<string | null>(null);
-  // Sequence number of the last turn that existed when the user clicked "Mount".
+  // Human-readable label for the mounted checkpoint (used in divider and indicators)
+  const [mountedCheckpointLabel, setMountedCheckpointLabel] = useState<string | null>(null);
+  // Sequence number of the last turn that existed when the user clicked "Restore".
   // Only turns with sequence_number > mountedAtSeq are sent as history, preventing
-  // pre-mount conversation state from leaking into the mounted commit's context.
+  // pre-restore conversation state from leaking into the restored checkpoint's context.
   const [mountedAtSeq, setMountedAtSeq] = useState<number | null>(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [forkTarget, setForkTarget] = useState<Commit | null>(null);
@@ -1116,6 +1138,7 @@ export function ChatWorkspacePage() {
   // intentionally for forked sessions as part of that session's load sequence.
   useEffect(() => {
     setMountedCheckpointId(null);
+    setMountedCheckpointLabel(null);
     setMountedAtSeq(null);
     setForkSourceCommit(null);
     setShowHistoryPanel(false);
@@ -1248,7 +1271,8 @@ export function ChatWorkspacePage() {
     setShowAttachModal(false);
     setRepo(newRepo);
     setMemoryScope(scope);
-    setMountedCheckpointId(null); // reset explicit mount when changing space
+    setMountedCheckpointId(null); // reset restore when changing space
+    setMountedCheckpointLabel(null);
     setMountedAtSeq(null);
     const h = await getSpaceHead(newRepo.id);
     setHead(h);
@@ -1409,8 +1433,8 @@ export function ChatWorkspacePage() {
               },
               MOUNTED: {
                 classes: 'text-amber-400 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15 cursor-pointer',
-                label: `MOUNTED · ${mountedCheckpointId?.slice(0, 7)}`,
-                title: 'Temporary context override — only turns after mount are included. Unmount to return to HEAD.',
+                label: 'RESTORED STATE',
+                title: `Restored to: ${mountedCheckpointLabel || mountedCheckpointId?.slice(0, 7)} — only new messages are included`,
               },
               FORKED: {
                 classes: 'text-purple-400 bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/15 cursor-pointer',
@@ -1495,7 +1519,7 @@ export function ChatWorkspacePage() {
                   className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border transition-colors flex-shrink-0 ${modeChip.classes}`}
                 >
                   {contextMode === 'MOUNTED'
-                    ? <span className="text-[9px]">⊕</span>
+                    ? <RotateCcw className="w-3 h-3" />
                     : contextMode === 'FORKED'
                       ? <GitBranch className="w-3 h-3" />
                       : <GitCommit className="w-3 h-3" />}
@@ -1531,30 +1555,83 @@ export function ChatWorkspacePage() {
             )}
 
             {turns.length === 0 && !sending && (
-              <div className="flex flex-col items-center justify-center h-full pb-20 text-center space-y-3">
-                <div className="w-12 h-12 rounded-xl border border-gray-800 bg-zinc-900 flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-gray-600" />
+              mountedCheckpointId ? (
+                <div className="flex flex-col items-center justify-center h-full pb-20 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-xl border border-amber-500/30 bg-amber-500/5 flex items-center justify-center">
+                    <RotateCcw className="w-5 h-5 text-amber-500/70" />
+                  </div>
+                  <div>
+                    <p className="text-amber-300 font-medium">Restored to: {mountedCheckpointLabel || mountedCheckpointId.slice(0, 7)}</p>
+                    <p className="text-amber-600/60 text-sm mt-1 max-w-sm">
+                      This is a clean starting point. The model will not reference earlier conversation — only this checkpoint and your new messages.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-300 font-medium">
-                    {session?.forked_from_checkpoint_id
-                      ? 'Exploring alternate direction'
-                      : head?.commit_hash
-                        ? 'Continuing from latest checkpoint'
-                        : 'Start a new conversation'}
-                  </p>
-                  <p className="text-gray-600 text-sm mt-1">
-                    {session?.forked_from_checkpoint_id
-                      ? `Forked from ${forkSourceCommit?.commit_hash?.slice(0, 7) ?? session.forked_from_checkpoint_id.slice(0, 7)} — start typing to explore this branch`
-                      : head?.summary
-                        ? `Last context: ${head.summary.slice(0, 80)}…`
-                        : 'Type your first message below to begin'}
-                  </p>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full pb-20 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-xl border border-gray-800 bg-zinc-900 flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div>
+                    <p className="text-gray-300 font-medium">
+                      {session?.forked_from_checkpoint_id
+                        ? 'Exploring alternate direction'
+                        : head?.commit_hash
+                          ? 'Continuing from latest checkpoint'
+                          : 'Start a new conversation'}
+                    </p>
+                    <p className="text-gray-600 text-sm mt-1">
+                      {session?.forked_from_checkpoint_id
+                        ? `Forked from ${forkSourceCommit?.commit_hash?.slice(0, 7) ?? session.forked_from_checkpoint_id.slice(0, 7)} — start typing to explore this branch`
+                        : head?.summary
+                          ? `Last context: ${head.summary.slice(0, 80)}…`
+                          : 'Type your first message below to begin'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )
             )}
 
-            {turns.map(t => <MessageBubble key={t.id} turn={t} />)}
+            {(() => {
+              const isRestored = mountedCheckpointId !== null && mountedAtSeq !== null;
+              if (!isRestored) {
+                return turns.map(t => <MessageBubble key={t.id} turn={t} />);
+              }
+
+              const cutoff = mountedAtSeq ?? -1;
+              const preTurns = turns.filter(t => (t.sequence_number ?? 0) <= cutoff);
+              const postTurns = turns.filter(t => (t.sequence_number ?? 0) > cutoff);
+              const dividerLabel = mountedCheckpointLabel || mountedCheckpointId!.slice(0, 7);
+
+              return (
+                <>
+                  {preTurns.map(t => <MessageBubble key={t.id} turn={t} dimmed />)}
+                  <RestoreDivider label={dividerLabel} />
+                  {postTurns.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center space-y-2">
+                      <RotateCcw className="w-5 h-5 text-amber-500/50" />
+                      <p className="text-sm text-amber-300/80 font-medium">Continuing from clean state</p>
+                      <p className="text-xs text-amber-600/60 max-w-xs">The model will not reference earlier conversation. Type your first message to begin from this restored checkpoint.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {postTurns.map((t, i) => (
+                        <React.Fragment key={t.id}>
+                          <MessageBubble turn={t} />
+                          {i === 1 && postTurns.length <= 3 && t.role === 'assistant' && (
+                            <div className="flex justify-start mb-4 ml-1">
+                              <span className="text-[10px] text-amber-600/50 italic">
+                                This response is based only on the restored checkpoint context
+                              </span>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </>
+                  )}
+                </>
+              );
+            })()}
             {sending && <TypingIndicator />}
             <div ref={threadEndRef} />
           </div>
@@ -1614,7 +1691,7 @@ export function ChatWorkspacePage() {
             {repo && (
               <div className="text-[10px] font-mono mb-1 flex items-center gap-1.5">
                 {mountedCheckpointId ? (
-                  <span className="text-amber-600">ctx: MOUNTED · {mountedCheckpointId.slice(0, 7)} (temporary override)</span>
+                  <span className="text-amber-600">ctx: RESTORED · {mountedCheckpointLabel || mountedCheckpointId.slice(0, 7)}</span>
                 ) : session?.forked_from_checkpoint_id ? (
                   <span className="text-purple-600">
                     ctx: FORKED · {forkSourceCommit?.commit_hash?.slice(0, 7) ?? session.forked_from_checkpoint_id.slice(0, 7)}
@@ -1661,16 +1738,19 @@ export function ChatWorkspacePage() {
               forkSourceCommit={forkSourceCommit}
               mountedCheckpointId={mountedCheckpointId}
               refreshKey={checkpointRefreshKey}
-              onMount={id => {
-                setMountedCheckpointId(id);
-                if (id !== null) {
-                  // Record the last sequence number at the moment of mounting.
+              onMount={info => {
+                if (info !== null) {
+                  setMountedCheckpointId(info.id);
+                  setMountedCheckpointLabel(info.message);
+                  // Record the last sequence number at the moment of restoring.
                   // Backend will only include turns with sequence_number > this value.
                   const lastSeq = turns.length > 0
                     ? Math.max(...turns.map(t => t.sequence_number ?? 0))
                     : -1;
                   setMountedAtSeq(lastSeq);
                 } else {
+                  setMountedCheckpointId(null);
+                  setMountedCheckpointLabel(null);
                   setMountedAtSeq(null);
                 }
               }}
