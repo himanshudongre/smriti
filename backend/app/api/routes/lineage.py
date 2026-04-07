@@ -51,6 +51,13 @@ def _get_commit(checkpoint_id: uuid.UUID, db: Session) -> CommitModel:
 
 # ── Request / Response schemas ────────────────────────────────────────────────
 
+class SourceTurnRange(BaseModel):
+    session_id: uuid.UUID
+    first_sequence_number: int
+    last_sequence_number: int
+    turn_count: int
+
+
 class ForkSessionRequest(BaseModel):
     space_id: str
     checkpoint_id: str
@@ -79,6 +86,7 @@ class CheckpointNode(BaseModel):
     created_at: datetime
     summary: str
     objective: str
+    source_turn_range: Optional[SourceTurnRange] = None
 
     model_config = {"from_attributes": True}
 
@@ -259,6 +267,17 @@ def get_lineage(space_id: uuid.UUID, db: Session = Depends(get_db)):
         .order_by(ChatSession.created_at.asc())
     ).all()
 
+    def _extract_turn_range(c: CommitModel) -> Optional[SourceTurnRange]:
+        data = c.metadata_.get("source_turn_range") if c.metadata_ else None
+        if data:
+            return SourceTurnRange(
+                session_id=data["session_id"],
+                first_sequence_number=data["first_sequence_number"],
+                last_sequence_number=data["last_sequence_number"],
+                turn_count=data["turn_count"],
+            )
+        return None
+
     checkpoint_nodes = [
         CheckpointNode(
             id=c.id,
@@ -269,6 +288,7 @@ def get_lineage(space_id: uuid.UUID, db: Session = Depends(get_db)):
             created_at=c.created_at,
             summary=c.summary or "",
             objective=c.objective or "",
+            source_turn_range=_extract_turn_range(c),
         )
         for c in commits
     ]
@@ -425,3 +445,51 @@ def get_session_reachable_checkpoints(session_id: uuid.UUID, db: Session = Depen
     # ancestor walk may interleave with them if branches share commit timestamps)
     result.sort(key=lambda c: c.created_at, reverse=True)
     return result
+
+
+# ── Source turns endpoint ─────────────────────────────────────────────────────
+
+
+class SourceTurnResponse(BaseModel):
+    id: uuid.UUID
+    session_id: uuid.UUID
+    role: str
+    content: str
+    provider: str
+    model: str
+    sequence_number: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/checkpoints/{checkpoint_id}/source-turns", response_model=list[SourceTurnResponse])
+def get_checkpoint_source_turns(checkpoint_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Return the conversation turns that produced a checkpoint.
+
+    Uses the source_turn_range stored in the checkpoint metadata at commit time.
+    Returns the turns in chronological order (by sequence_number).
+    """
+    commit = _get_commit(checkpoint_id, db)
+
+    turn_range = commit.metadata_.get("source_turn_range") if commit.metadata_ else None
+    if not turn_range:
+        return []
+
+    session_id = uuid.UUID(turn_range["session_id"])
+    first_seq = turn_range["first_sequence_number"]
+    last_seq = turn_range["last_sequence_number"]
+
+    turns = db.scalars(
+        select(TurnEvent)
+        .where(
+            TurnEvent.session_id == session_id,
+            TurnEvent.sequence_number >= first_seq,
+            TurnEvent.sequence_number <= last_seq,
+            TurnEvent.role != "system",
+        )
+        .order_by(TurnEvent.sequence_number.asc())
+    ).all()
+
+    return list(turns)

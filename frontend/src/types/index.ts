@@ -190,6 +190,13 @@ export interface ForkSessionResponse {
   history_base_seq: number;
 }
 
+export interface SourceTurnRange {
+  session_id: string;
+  first_sequence_number: number;
+  last_sequence_number: number;
+  turn_count: number;
+}
+
 export interface CheckpointNode {
   id: string;
   commit_hash: string;
@@ -199,6 +206,7 @@ export interface CheckpointNode {
   created_at: string;
   summary: string;
   objective: string;
+  source_turn_range: SourceTurnRange | null;
 }
 
 export interface SessionNode {

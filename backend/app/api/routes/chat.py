@@ -27,7 +27,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -274,6 +274,13 @@ class ManualCommitRequest(BaseModel):
     artifacts: list[dict] = Field(default_factory=list)
 
 
+class SourceTurnRange(BaseModel):
+    session_id: uuid.UUID
+    first_sequence_number: int
+    last_sequence_number: int
+    turn_count: int
+
+
 class CommitResponse(BaseModel):
     id: uuid.UUID
     repo_id: uuid.UUID
@@ -289,9 +296,41 @@ class CommitResponse(BaseModel):
     open_questions: list
     entities: list
     artifacts: list
+    source_turn_range: Optional[SourceTurnRange] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_commit(cls, commit):
+        """Build response, extracting source_turn_range from metadata_."""
+        str_data = commit.metadata_.get("source_turn_range") if commit.metadata_ else None
+        turn_range = None
+        if str_data:
+            turn_range = SourceTurnRange(
+                session_id=str_data["session_id"],
+                first_sequence_number=str_data["first_sequence_number"],
+                last_sequence_number=str_data["last_sequence_number"],
+                turn_count=str_data["turn_count"],
+            )
+        return cls(
+            id=commit.id,
+            repo_id=commit.repo_id,
+            commit_hash=commit.commit_hash,
+            parent_commit_id=commit.parent_commit_id,
+            branch_name=commit.branch_name,
+            message=commit.message,
+            summary=commit.summary,
+            objective=commit.objective,
+            decisions=commit.decisions,
+            assumptions=commit.assumptions,
+            tasks=commit.tasks,
+            open_questions=commit.open_questions,
+            entities=commit.entities,
+            artifacts=commit.artifacts,
+            source_turn_range=turn_range,
+            created_at=commit.created_at,
+        )
 
 
 class HeadResponse(BaseModel):
@@ -631,6 +670,28 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
 
     commit_hash = _generate_commit_hash(str(repo_id), payload.message)
 
+    # Compute source turn range � which turns in this session produced this checkpoint.
+    turn_stats = db.execute(
+        select(
+            func.min(TurnEvent.sequence_number),
+            func.max(TurnEvent.sequence_number),
+            func.count(TurnEvent.id),
+        ).where(
+            TurnEvent.session_id == session_id,
+            TurnEvent.role != "system",
+        )
+    ).one()
+    first_seq, last_seq, turn_count = turn_stats
+
+    metadata = {"session_id": str(session_id)}
+    if turn_count and turn_count > 0:
+        metadata["source_turn_range"] = {
+            "session_id": str(session_id),
+            "first_sequence_number": first_seq,
+            "last_sequence_number": last_seq,
+            "turn_count": turn_count,
+        }
+
     commit = CommitModel(
         repo_id=repo_id,
         commit_hash=commit_hash,
@@ -647,13 +708,13 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
         open_questions=payload.open_questions,
         entities=payload.entities,
         artifacts=payload.artifacts,
-        metadata_={"session_id": str(session_id)},
+        metadata_=metadata,
     )
     db.add(commit)
     repo.updated_at = _utcnow()
     db.commit()
     db.refresh(commit)
-    return commit
+    return CommitResponse.from_commit(commit)
 
 
 # ── Head endpoint ─────────────────────────────────────────────────────────────
