@@ -364,3 +364,14 @@ export async function reviewCheckpoint(checkpointId: string): Promise<import('..
   });
 }
 
+/**
+ * Return the conversation turns that produced a checkpoint.
+ *
+ * Uses the source_turn_range stored in checkpoint metadata at commit time.
+ * Returns turns in chronological order (by sequence_number).
+ * Returns an empty array if the checkpoint has no recorded source turns.
+ */
+export async function getCheckpointSourceTurns(checkpointId: string): Promise<import('../types').TurnEvent[]> {
+  return requestV5<import('../types').TurnEvent[]>(`/lineage/checkpoints/${checkpointId}/source-turns`);
+}
+
