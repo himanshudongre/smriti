@@ -6,14 +6,18 @@ import { CommitDetailPage } from './pages/CommitDetailPage';
 import { ChatWorkspacePage } from './pages/ChatWorkspacePage';
 import { LineagePage } from './pages/LineagePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { WorkspaceOverviewPage } from './pages/WorkspaceOverviewPage';
 import './App.css';
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Resume-focused landing page */}
+        <Route path="/" element={<WorkspaceOverviewPage />} />
+
         {/* Chat workspace — full-screen, own layout */}
-        <Route path="/" element={<ChatWorkspacePage />} />
+        <Route path="/sessions/new" element={<ChatWorkspacePage />} />
         <Route path="/sessions/:sessionId" element={<ChatWorkspacePage />} />
 
         {/* Branch/lineage tree — full-screen, own layout */}

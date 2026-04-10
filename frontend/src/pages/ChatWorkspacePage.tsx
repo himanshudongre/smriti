@@ -1361,7 +1361,10 @@ export function ChatWorkspacePage() {
 
         let activeSession: ChatSession;
         
-        if (routeSessionId) {
+        // /sessions/new is the explicit "create a fresh session" route.
+        // A bare /sessions/:id that isn't "new" is treated as an existing session.
+        // (Bare / now renders the WorkspaceOverviewPage, not this component.)
+        if (routeSessionId && routeSessionId !== 'new') {
           // Load existing session
           activeSession = await getChatSessionGeneric(routeSessionId);
           setSession(activeSession);
@@ -1387,7 +1390,7 @@ export function ChatWorkspacePage() {
             setShowHistoryPanel(true);
           }
         } else {
-          // Create new unattached session
+          // /sessions/new or any other fall-through: create a fresh unattached session
           activeSession = await createChatSessionGeneric({
             title: `Session ${new Date().toLocaleTimeString()}`,
             provider,
