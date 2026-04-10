@@ -541,7 +541,19 @@ function CommitModal({ repoId, sessionId, onClose, onCommitted, providerStatus, 
 
 // ── CheckpointDetailPanel ─────────────────────────────────────────────────────
 
-function CheckpointDetailPanel({ commit, onClose, providerStatus }: { commit: Commit; onClose: () => void; providerStatus: Record<string, ProviderStatus> | null }) {
+function CheckpointDetailPanel({
+  commit,
+  onClose,
+  providerStatus,
+  onRestore,
+  isRestored,
+}: {
+  commit: Commit;
+  onClose: () => void;
+  providerStatus: Record<string, ProviderStatus> | null;
+  onRestore?: (info: { id: string; message: string }) => void;
+  isRestored?: boolean;
+}) {
   const [reviewResult, setReviewResult] = useState<CheckpointReviewResponse | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [reviewErr, setReviewErr] = useState<string | null>(null);
@@ -626,17 +638,35 @@ function CheckpointDetailPanel({ commit, onClose, providerStatus }: { commit: Co
         </div>
       )}
 
-      {/* Review checkpoint */}
-      <div className="border-t border-gray-800 pt-3">
-        <button
-          onClick={handleReview}
-          disabled={reviewing || !isBgValid}
-          title={isBgValid ? 'Review this checkpoint for reasoning consistency' : 'Background provider not configured'}
-          className="text-[11px] px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 flex items-center gap-1.5"
-        >
-          {reviewing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-          {reviewing ? 'Reviewing…' : reviewResult ? 'Re-review checkpoint' : 'Review checkpoint'}
-        </button>
+      {/* Checkpoint actions — review + restore as peer actions */}
+      <div className="border-t border-gray-800 pt-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleReview}
+            disabled={reviewing || !isBgValid}
+            title={isBgValid ? 'Review this checkpoint for reasoning consistency' : 'Background provider not configured'}
+            className="text-[11px] px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+          >
+            {reviewing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+            {reviewing ? 'Reviewing…' : reviewResult ? 'Re-review checkpoint' : 'Review checkpoint'}
+          </button>
+          {onRestore && !isRestored && (
+            <button
+              onClick={() => onRestore({ id: commit.id, message: commit.message })}
+              title="Restore context to this checkpoint"
+              className="text-[11px] px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-900/20 hover:border-amber-500/60 transition-colors flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Restore to this checkpoint
+            </button>
+          )}
+          {isRestored && (
+            <span className="text-[11px] px-3 py-1.5 rounded-md border border-amber-500/30 text-amber-400/70 bg-amber-900/10 flex items-center gap-1.5">
+              <RotateCcw className="w-3 h-3" />
+              Currently restored
+            </span>
+          )}
+        </div>
 
         {reviewErr && <p className="text-[10px] text-red-400 mt-2">{reviewErr}</p>}
 
@@ -665,6 +695,21 @@ function CheckpointDetailPanel({ commit, onClose, providerStatus }: { commit: Co
                 {reviewResult.suggestions.map((s, i) => (
                   <p key={i} className="text-[10px] text-gray-500 leading-relaxed">→ {s}</p>
                 ))}
+              </div>
+            )}
+            {/* Inline restore action — appears when review surfaces issues,
+                offering the checkpoint as a starting point to continue from.
+                Deliberately not calling the checkpoint "clean" since the review
+                just flagged issues in it. */}
+            {reviewResult.issues.length > 0 && onRestore && !isRestored && (
+              <div className="mt-3 pt-2 border-t border-gray-800/50">
+                <button
+                  onClick={() => onRestore({ id: commit.id, message: commit.message })}
+                  className="text-[11px] px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-900/20 hover:border-amber-500/60 transition-colors flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Continue from this checkpoint
+                </button>
               </div>
             )}
           </div>
@@ -1017,6 +1062,8 @@ function MemorySpacePanel({
                             commit={expandedCommit}
                             onClose={() => { setExpandedId(null); setExpandedCommit(null); }}
                             providerStatus={providerStatus}
+                            onRestore={onMount}
+                            isRestored={expandedCommit.id === mountedCheckpointId}
                           />
                         )
                     )}
@@ -1765,6 +1812,19 @@ export function ChatWorkspacePage() {
                   <Zap className="w-3 h-3" />
                   {modeChip.label}
                 </span>
+              )}
+
+              {/* Drift hint — soft nudge based on turn count since last checkpoint.
+                  Not a semantic drift claim; just a count-based reminder that enough
+                  has happened since the last checkpoint to consider reviewing it. */}
+              {contextMode === 'HEAD' && head?.commit_id && turnsSinceCheckpoint >= 8 && (
+                <button
+                  onClick={() => setShowHistoryPanel(true)}
+                  title="Open checkpoint history to review or restore"
+                  className="text-[10px] text-amber-600/80 hover:text-amber-400 transition-colors flex-shrink-0"
+                >
+                  {turnsSinceCheckpoint} turns since checkpoint · review
+                </button>
               )}
 
               {/* Provider/model — far right of the row */}
