@@ -742,13 +742,22 @@ All endpoints return errors in this format:
 
 ---
 
-## Notes on legacy endpoints
+## Notes on V1, V2, V4, V5
 
 `/api/v1` — Transcript paste ingestion. Accepts raw text, extracts memories,
-generates context packs. Not used by the current UI. Retained for compatibility.
+generates context packs. Not used by the current UI or CLI. Retained for
+compatibility but no new development happens here. Do not build new integrations
+against V1.
 
-`/api/v2` — Agent-push model (repos, commits, context packs). Partially reused by
-the current UI for Space CRUD and Checkpoint retrieval, but the agent-push workflow
-it was designed for is no longer the primary interaction model.
+`/api/v2` — Space CRUD and Checkpoint read endpoints. The CLI reads full
+checkpoints via `GET /api/v2/commits/{commit_id}` and lists per-space checkpoints
+via `GET /api/v2/repos/{repo_id}/commits`. The `CommitResponse` schema returns
+the complete checkpoint shape including `assumptions` and `artifacts`. New
+programmatic clients are welcome to use V2 read endpoints; for writes, use V4
+(`POST /api/v4/chat/commit`) which accepts the full schema.
 
-Do not build new integrations against V1 or V2.
+`/api/v4` — Chat sessions, message sending, and the canonical checkpoint write
+path. The chat UI's primary interaction surface and the CLI's write surface.
+
+`/api/v5` — Checkpoint drafting, review, fork, compare, lineage. Used by both
+the chat UI and the CLI.

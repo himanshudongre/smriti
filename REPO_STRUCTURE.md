@@ -50,9 +50,10 @@ smriti/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── ChatWorkspacePage.tsx   Primary UI: chat, sidebar, checkpoint
-│   │   │   │                             modal, history panel, context indicators
-│   │   │   └── LineagePage.tsx         Branch tree, checkpoint compare
+│   │   │   ├── WorkspaceOverviewPage.tsx  Resume-focused landing page
+│   │   │   ├── ChatWorkspacePage.tsx      Primary chat UI: sidebar, checkpoint
+│   │   │   │                                modal, history panel, context indicators
+│   │   │   └── LineagePage.tsx            Branch tree, checkpoint compare
 │   │   ├── api/
 │   │   │   └── client.ts       API client functions (V4, V5, V2)
 │   │   ├── types/
@@ -60,8 +61,16 @@ smriti/
 │   │   └── main.tsx            App entry point, router
 │   └── package.json
 │
+├── cli/                        Programmatic CLI for agents and scripts
+│   ├── README.md               Command reference and agent handoff workflow
+│   ├── pyproject.toml          Installable as `pip install -e ./cli` → `smriti`
+│   └── smriti_cli/
+│       ├── main.py             argparse dispatcher, seven commands
+│       ├── client.py           thin HTTP wrapper over the REST API
+│       └── formatters.py       continuation-oriented markdown renderers
+│
 ├── docs/
-│   └── API.md                  V4 and V5 endpoint reference
+│   └── API.md                  V2, V4, and V5 endpoint reference
 │
 └── demos/
     └── branching-reasoning-demo/   Complete demo scenario with runbook,
@@ -75,9 +84,9 @@ smriti/
 | Prefix | Module | Status | Notes |
 |---|---|---|---|
 | `/api/v1` | `sessions.py` | Legacy | Transcript paste ingestion |
-| `/api/v2` | `repos.py` | Partially current | Space and Checkpoint CRUD used by UI; agent-push workflow is legacy |
-| `/api/v4` | `chat.py` | Current | Primary chat and session API |
-| `/api/v5` | `checkpoint.py`, `lineage.py` | Current | Checkpoint draft, fork, lineage |
+| `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read by id, checkpoint list by space. `CommitResponse` includes `assumptions` and `artifacts` so the CLI can read full checkpoints via the V2 single-resource endpoints. |
+| `/api/v4` | `chat.py` | Current | Chat sessions, send_message, the canonical checkpoint write path (`POST /chat/commit`) which accepts the full schema. |
+| `/api/v5` | `checkpoint.py`, `lineage.py` | Current | Checkpoint draft, review, fork, lineage, compare. |
 
 ---
 
