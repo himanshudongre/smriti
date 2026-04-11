@@ -95,41 +95,72 @@ def smriti_list_spaces() -> str:
     return format_space_list(spaces)
 
 
+def _empty_space_brief(space: dict) -> str:
+    """Short message returned when a space exists but has no checkpoints.
+    Shared between the default and main_only paths of smriti_state so
+    both paths produce the same output on empty spaces."""
+    lines = [f"# {space.get('name', 'Untitled space')}"]
+    if space.get("description"):
+        lines.append("")
+        lines.append(space["description"])
+    lines.append("")
+    lines.append(
+        "No checkpoints yet. Create one with smriti_create_checkpoint."
+    )
+    return "\n".join(lines) + "\n"
+
+
 @mcp.tool()
-def smriti_state(space: str, preview: bool = False) -> str:
+def smriti_state(space: str, preview: bool = False, main_only: bool = False) -> str:
     """Print a continuation-oriented brief of a space's current state.
 
-    Fetches the HEAD checkpoint of the given space (resolved by name or
-    UUID) and renders it as a markdown brief with objective, summary,
-    decisions, assumptions, open questions, tasks, and artifacts. This is
-    the single best tool for "what's this project about right now" — use
-    it at the start of any session where you need to pick up where work
-    left off.
+    By default the brief is multi-branch aware: it includes the main-branch
+    continuation context (objective, summary, decisions, assumptions, open
+    questions, tasks, artifacts) PLUS a concise "Active branches" section
+    listing up to 5 non-main branches with recent activity, PLUS a
+    lightweight "Divergence signal" section when any active branch
+    disagrees with main on decisions. Both extensions are elided cleanly
+    when the project has no fork activity, so single-agent projects see
+    exactly the same output as before.
+
+    This is the single best tool for "what's this project about right
+    now across all agents working on it" — call it at the start of any
+    session where you need to pick up where work left off.
 
     Args:
         space: Space name or UUID.
         preview: If True, truncate artifact content to a short preview
             instead of showing it in full. Default: full artifacts.
+        main_only: If True, fetch only the main-branch HEAD via the
+            legacy /head endpoint and skip the Active branches and
+            Divergence signal sections entirely. Default False.
     """
     client = _client()
     try:
         s = client.resolve_space(space)
-        head = client.get_head(s["id"])
-        if not head.get("commit_id"):
-            # Space exists but has no checkpoints yet.
-            lines = [f"# {s.get('name', 'Untitled space')}"]
-            if s.get("description"):
-                lines.append("")
-                lines.append(s["description"])
-            lines.append("")
-            lines.append(
-                "No checkpoints yet. Create one with smriti_create_checkpoint."
-            )
-            return "\n".join(lines) + "\n"
-        commit = client.get_commit(head["commit_id"])
+        if main_only:
+            head = client.get_head(s["id"])
+            if not head.get("commit_id"):
+                return _empty_space_brief(s)
+            commit = client.get_commit(head["commit_id"])
+            space_state: dict | None = None
+        else:
+            state = client.get_space_state(s["id"])
+            head = state.get("head") or {}
+            commit = state.get("commit") or {}
+            if not head.get("commit_id"):
+                return _empty_space_brief(state.get("space") or s)
+            space_state = {
+                "active_branches": state.get("active_branches") or [],
+                "divergence": state.get("divergence"),
+            }
     except SmritiError as e:
         _raise_from(e)
-    return format_state_brief(s, head, commit, full_artifacts=not preview)
+    return format_state_brief(
+        s, head, commit,
+        full_artifacts=not preview,
+        space_state=space_state,
+    )
 
 
 @mcp.tool()

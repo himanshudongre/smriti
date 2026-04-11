@@ -144,6 +144,27 @@ class SmritiClient:
     def get_head(self, space_id: str) -> dict:
         return self._request("GET", f"/api/v4/chat/spaces/{space_id}/head")
 
+    def get_space_state(self, space_id: str) -> dict:
+        """GET /api/v4/chat/spaces/{id}/state
+
+        Returns the multi-branch composite state: space header, main HEAD
+        metadata (mirrors /head), full main-branch HEAD commit, up to 5
+        active non-main branch summaries, and a lightweight divergence
+        signal when any active branch disagrees with main on decisions.
+
+        One round trip, atomic snapshot. Use this instead of
+        get_head + get_commit for the continuation brief path — the CLI
+        `smriti state` and MCP `smriti_state` both default to this.
+
+        Keys in the returned dict:
+            space: {id, name, description}
+            head: HeadResponse shape
+            commit: full CommitResponse shape (or None if no checkpoints)
+            active_branches: list of ActiveBranchSummary
+            divergence: DivergenceSummary or None
+        """
+        return self._request("GET", f"/api/v4/chat/spaces/{space_id}/state")
+
     def create_chat_commit(self, payload: dict) -> dict:
         """Create a checkpoint via the V4 commit endpoint (full schema).
 

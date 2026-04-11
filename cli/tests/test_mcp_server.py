@@ -95,7 +95,12 @@ def _commit_dict(**overrides):
     return base
 
 
-def test_state_happy_path(mock_client):
+def test_state_happy_path_main_only(mock_client):
+    """Legacy two-call path via main_only=True: get_head + get_commit.
+
+    The default path (one call to get_space_state) is covered by
+    test_state_multi_branch.py — this test preserves explicit
+    coverage of the main_only fallback."""
     mock_client.resolve_space.return_value = _space_dict()
     mock_client.get_head.return_value = {
         "commit_id": "commit-uuid",
@@ -104,25 +109,26 @@ def test_state_happy_path(mock_client):
     }
     mock_client.get_commit.return_value = _commit_dict()
 
-    result = mcp_server.smriti_state(space="my-project")
+    result = mcp_server.smriti_state(space="my-project", main_only=True)
 
     assert "my-project" in result
-    assert "Base design" not in result or "Base design" in result  # title may or may not be present
     assert "Build the thing" in result
     assert "Use stdlib" in result
-    # Verify the three-call sequence
+    # Legacy path uses the old two-call sequence.
     mock_client.resolve_space.assert_called_once_with("my-project")
     mock_client.get_head.assert_called_once()
     mock_client.get_commit.assert_called_once_with("commit-uuid")
+    mock_client.get_space_state.assert_not_called()
 
 
-def test_state_no_checkpoints_short_circuits(mock_client):
-    """When head has no commit_id, return an empty-state message without
-    calling get_commit (avoids a 404)."""
+def test_state_no_checkpoints_short_circuits_main_only(mock_client):
+    """Legacy path empty-space: get_head returns no commit_id, tool
+    short-circuits with the empty-state message without calling
+    get_commit."""
     mock_client.resolve_space.return_value = _space_dict()
     mock_client.get_head.return_value = {"commit_id": None}
 
-    result = mcp_server.smriti_state(space="my-project")
+    result = mcp_server.smriti_state(space="my-project", main_only=True)
 
     assert "my-project" in result
     assert "No checkpoints yet" in result

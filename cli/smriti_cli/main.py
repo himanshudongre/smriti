@@ -182,33 +182,73 @@ def cmd_space_delete(client: SmritiClient, args: argparse.Namespace) -> None:
 
 
 def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Print the continuation brief for a space.
+
+    Default path: one round trip through the multi-branch state endpoint,
+    which returns the main-branch brief plus up to 5 active non-main
+    branches and a lightweight divergence signal. The extensions are
+    elided cleanly when the project has no fork activity, so single-
+    agent projects see output identical to the pre-build format.
+
+    --main-only restores the legacy two-call path (get_head + get_commit)
+    and produces main-branch-only output. Useful for scripts that parsed
+    the old shape or for debugging the endpoint in isolation.
+    """
     space = client.resolve_space(args.space)
-    head = client.get_head(space["id"])
 
-    if not head.get("commit_id"):
-        # Space exists but has no checkpoints yet.
-        if args.json:
-            _print_json({"space": space, "head": head, "commit": None})
+    if args.main_only:
+        # Legacy path — main branch HEAD only. Two round trips.
+        head = client.get_head(space["id"])
+        if not head.get("commit_id"):
+            _print_no_checkpoints(space, args)
             return
-        print(f"# {space['name']}")
-        if space.get("description"):
-            print(space["description"])
-        print()
-        print("No checkpoints yet. Create one with `smriti checkpoint create`.")
-        return
+        commit = client.get_commit(head["commit_id"])
+        space_state: dict | None = None
+    else:
+        # New default path — one round trip, multi-branch aware.
+        state = client.get_space_state(space["id"])
+        head = state.get("head") or {}
+        commit = state.get("commit") or {}
+        if not head.get("commit_id"):
+            _print_no_checkpoints(state.get("space") or space, args)
+            return
+        # Strip the duplicated head/commit so `space_state` only carries
+        # the additive payload the formatter consumes (active_branches +
+        # divergence). Keeps the JSON output sensible too.
+        space_state = {
+            "active_branches": state.get("active_branches") or [],
+            "divergence": state.get("divergence"),
+        }
 
-    commit = client.get_commit(head["commit_id"])
-    # Default to full artifacts (agent-first). --preview restores the old
-    # truncated behaviour; --full-artifacts is still accepted as a no-op
-    # so scripts that explicitly asked for full content still work.
     full_artifacts = not args.preview
     if args.json:
-        _print_json({"space": space, "head": head, "commit": commit})
+        payload = {"space": space, "head": head, "commit": commit}
+        if space_state is not None:
+            payload["active_branches"] = space_state["active_branches"]
+            payload["divergence"] = space_state["divergence"]
+        _print_json(payload)
     else:
         print(
-            format_state_brief(space, head, commit, full_artifacts=full_artifacts),
+            format_state_brief(
+                space, head, commit,
+                full_artifacts=full_artifacts,
+                space_state=space_state,
+            ),
             end="",
         )
+
+
+def _print_no_checkpoints(space: dict, args: argparse.Namespace) -> None:
+    """Render the empty-space message. Shared between the default and
+    --main-only paths so both produce the same output on an empty space."""
+    if args.json:
+        _print_json({"space": space, "head": {}, "commit": None})
+        return
+    print(f"# {space.get('name', 'Untitled space')}")
+    if space.get("description"):
+        print(space["description"])
+    print()
+    print("No checkpoints yet. Create one with `smriti checkpoint create`.")
 
 
 def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -468,6 +508,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="(default) Include full artifact content. Kept for backwards "
              "compatibility; the default is now always full. Use --preview to "
              "truncate instead.",
+    )
+    state_parser.add_argument(
+        "--main-only",
+        dest="main_only",
+        action="store_true",
+        help="Show only main-branch HEAD (legacy pre-V4 behaviour). "
+             "Default: multi-branch state — main brief plus any active "
+             "non-main branches and divergence signal.",
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)

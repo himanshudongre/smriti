@@ -78,17 +78,87 @@ def _artifact_section(artifacts: list[dict], preview_chars: int = 800, full: boo
     return "\n".join(lines) + "\n"
 
 
+def _format_active_branches_section(active_branches: list[dict]) -> str:
+    """One line per non-main branch. Pointer, not a brief.
+
+    Empty input → empty string (caller elides the whole section).
+    """
+    if not active_branches:
+        return ""
+    lines = ["## Active branches"]
+    for b in active_branches:
+        hash_short = (b.get("commit_hash") or "")[:7]
+        branch = b.get("branch_name") or "?"
+        author = b.get("author_agent") or "unknown"
+        created = _relative_time(b.get("created_at") or "")
+        msg = (b.get("message") or "").strip() or "(no message)"
+        lines.append(
+            f"- `{branch}` · `{hash_short}` · `{author}` · {created} — {msg}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _format_divergence_signal_section(divergence: dict | None) -> str:
+    """Lightweight divergence signal. Names specific conflicting decisions
+    per branch (capped by the backend at 3 per side per pair) and points
+    the reader at `smriti compare` for the full diff.
+
+    Elides cleanly when `divergence` is None or has no pairs.
+    """
+    if not divergence:
+        return ""
+    pairs = divergence.get("pairs") or []
+    if not pairs:
+        return ""
+    lines = ["## Divergence signal"]
+    lines.append(
+        "Decisions on `main` and one or more active branches disagree. "
+        "Run `smriti compare` for the full diff."
+    )
+    for pair in pairs:
+        branch = pair.get("branch_name") or "?"
+        branch_hash = (pair.get("branch_commit_hash") or "")[:7]
+        lines.append("")
+        lines.append(f"### main ↔ `{branch}` (`{branch_hash}`)")
+        main_only = pair.get("main_only_decisions") or []
+        branch_only = pair.get("branch_only_decisions") or []
+        if main_only:
+            lines.append("Only on `main`:")
+            for d in main_only:
+                lines.append(f"- {d}")
+        if branch_only:
+            lines.append(f"Only on `{branch}`:")
+            for d in branch_only:
+                lines.append(f"- {d}")
+    return "\n".join(lines) + "\n"
+
+
 def format_state_brief(
     space: dict,
     head: dict,
     commit: dict,
     *,
     full_artifacts: bool = False,
+    space_state: dict | None = None,
 ) -> str:
     """A continuation-oriented markdown brief for the current project state.
 
     Intended to be pasted directly into an agent's (or human's) working
     context. Sections are elided cleanly when empty.
+
+    When `space_state` is provided (as returned by
+    `GET /api/v4/chat/spaces/{id}/state`), two additional sections are
+    appended after the main brief:
+
+      - ## Active branches  (when `space_state["active_branches"]` is non-empty)
+      - ## Divergence signal (when `space_state["divergence"]["pairs"]` is non-empty)
+
+    Both sections are fully elided when their payload is empty, so
+    passing `space_state` for a project with no fork activity yields
+    output identical to the pre-multi-branch version.
+
+    The main continuation brief always renders first and is unchanged —
+    the multi-branch extensions are additive pointers, not a replacement.
     """
     parts: list[str] = []
     parts.append(f"# {space.get('name', 'Untitled space')}\n")
@@ -129,6 +199,18 @@ def format_state_brief(
 
     if entities:
         parts.append(f"## Key entities\n{', '.join(entities)}\n")
+
+    # Multi-branch extensions. Appended after the main brief so the
+    # agent's continuation context stays at the top of the output where
+    # it is most useful. Both helpers return "" for empty input, so
+    # projects with no fork activity produce no change.
+    if space_state is not None:
+        parts.append(
+            _format_active_branches_section(space_state.get("active_branches") or [])
+        )
+        parts.append(
+            _format_divergence_signal_section(space_state.get("divergence"))
+        )
 
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
