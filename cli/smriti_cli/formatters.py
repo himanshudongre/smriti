@@ -7,7 +7,23 @@ Use --json on any command for structured output instead.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+
+
+def _pretty_path(path: str | None) -> str | None:
+    """Shorten an absolute path for display: $HOME becomes ~."""
+    if not path:
+        return None
+    try:
+        home = os.path.expanduser("~")
+        if path == home:
+            return "~"
+        if path.startswith(home + os.sep):
+            return "~" + path[len(home):]
+    except Exception:
+        pass
+    return path
 
 
 def _relative_time(iso_ts: str) -> str:
@@ -81,11 +97,16 @@ def format_state_brief(
 
     commit_hash = commit.get("commit_hash")
     created_at = commit.get("created_at") or head.get("commit_hash") or ""
-    parts.append(
-        f"Latest checkpoint: `{_short_hash(commit_hash)}`"
-        + (f" · {_relative_time(created_at)}" if created_at else "")
-        + "\n"
-    )
+    meta_bits = [f"Latest checkpoint: `{_short_hash(commit_hash)}`"]
+    author_agent = commit.get("author_agent")
+    if author_agent:
+        meta_bits.append(f"by `{author_agent}`")
+    if created_at:
+        meta_bits.append(_relative_time(created_at))
+    project_root = _pretty_path(commit.get("project_root"))
+    if project_root:
+        meta_bits.append(f"at `{project_root}`")
+    parts.append(" · ".join(meta_bits) + "\n")
 
     if commit.get("objective"):
         parts.append(f"## Current objective\n{commit['objective'].rstrip()}\n")
@@ -120,11 +141,17 @@ def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:
     commit_hash = commit.get("commit_hash")
     created_at = commit.get("created_at") or ""
     branch = commit.get("branch_name") or "main"
-    meta_line = f"`{_short_hash(commit_hash)}`"
+    author_agent = commit.get("author_agent")
+    project_root = _pretty_path(commit.get("project_root"))
+    meta_bits = [f"`{_short_hash(commit_hash)}`"]
     if created_at:
-        meta_line += f" · {_relative_time(created_at)}"
-    meta_line += f" · branch `{branch}`"
-    parts.append(meta_line + "\n")
+        meta_bits.append(_relative_time(created_at))
+    meta_bits.append(f"branch `{branch}`")
+    if author_agent:
+        meta_bits.append(f"by `{author_agent}`")
+    if project_root:
+        meta_bits.append(f"at `{project_root}`")
+    parts.append(" · ".join(meta_bits) + "\n")
 
     if commit.get("objective"):
         parts.append(f"## Objective\n{commit['objective'].rstrip()}\n")

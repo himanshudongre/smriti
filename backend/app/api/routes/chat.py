@@ -272,6 +272,8 @@ class ManualCommitRequest(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
     artifacts: list[dict] = Field(default_factory=list)
+    author_agent: Optional[str] = None
+    project_root: Optional[str] = None
 
 
 class CommitResponse(BaseModel):
@@ -280,6 +282,8 @@ class CommitResponse(BaseModel):
     commit_hash: str
     parent_commit_id: Optional[uuid.UUID]
     branch_name: str
+    author_agent: Optional[str] = None
+    project_root: Optional[str] = None
     message: str
     summary: str
     objective: str
@@ -652,8 +656,14 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
         commit_hash=commit_hash,
         parent_commit_id=parent_id,
         branch_name=session_branch,
-        author_agent=session.active_provider,
+        # Agent identity: explicit payload value wins over the session's
+        # active provider. Allows a CLI caller (or any client) to tag the
+        # checkpoint with a real agent name instead of just the provider
+        # (e.g. "claude-code" vs. "anthropic"). Falls back to the session's
+        # active provider when the payload omits it.
+        author_agent=payload.author_agent or session.active_provider,
         author_type="llm",
+        project_root=payload.project_root,
         message=payload.message,
         summary=payload.summary,
         objective=payload.objective,

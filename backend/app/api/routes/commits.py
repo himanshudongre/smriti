@@ -34,6 +34,7 @@ class CommitCreate(BaseModel):
     branch_name: str = "main"
     author_agent: str | None = None
     author_type: str = Field("llm", description="user, llm, agent, system")
+    project_root: str | None = None
     message: str
     summary: str = ""
     objective: str = ""
@@ -78,6 +79,7 @@ def create_commit(payload: CommitCreate, db: Session = Depends(get_db)):
         branch_name=payload.branch_name,
         author_agent=payload.author_agent,
         author_type=payload.author_type,
+        project_root=payload.project_root,
         message=payload.message,
         summary=payload.summary,
         objective=payload.objective,

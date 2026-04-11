@@ -30,8 +30,8 @@ smriti space list
 smriti space create <name> [--description "..."]
 smriti space delete <space> [-y]
 
-smriti state <space>                                     # continuation brief
-smriti state <space> --full-artifacts                    # include full artifacts
+smriti state <space>                                     # continuation brief (full artifacts by default)
+smriti state <space> --preview                           # truncate artifacts to a short preview
 smriti state <space> --json                              # structured output
 
 smriti fork <checkpoint-id> [--branch <name>]            # new session from checkpoint
@@ -41,11 +41,17 @@ smriti compare <checkpoint-a> <checkpoint-b>             # structured diff
 smriti checkpoint create <space>                         # reads JSON from stdin
 smriti checkpoint create <space> --from-json <path>      # from file
 smriti checkpoint create <space> --session <session-id>  # attach to existing session
+smriti checkpoint create <space> --author-agent claude-code
+smriti checkpoint create <space> --project-root /path    # override cwd auto-capture
 smriti checkpoint show <checkpoint-id>
 smriti checkpoint list <space>
 smriti checkpoint review <checkpoint-id>
 smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
 ```
+
+`smriti state` shows full artifact content by default — flip to `--preview` for the truncated brief.
+
+`smriti checkpoint create` auto-captures the current working directory as the checkpoint's `project_root` so cross-agent handoffs know where the project actually lives on disk. Pass `--project-root /absolute/path` to override or `--no-project-root` to skip. Tag the checkpoint with an explicit `--author-agent <name>` (like `claude-code` or `codex-local`); without it, the backend falls back to the session's active provider.
 
 Every command supports `--json` for structured output.
 
@@ -124,6 +130,8 @@ Only `message` is required. Every other field defaults to empty.
 | `open_questions` | string[] | Unresolved issues |
 | `entities` | string[] | Key concepts, tools, names |
 | `artifacts` | object[] | `{id, type, label, content}` entries |
+| `project_root` | string | Absolute path to the project's working directory. Auto-captured by the CLI at commit time; can be overridden via the payload or `--project-root`. |
+| `author_agent` | string | Agent identifier. The CLI flag `--author-agent` overrides any payload value; when unset the backend tags the checkpoint with the session's active provider. |
 
 ## Space resolution
 

@@ -5,11 +5,13 @@ Commands for agent and programmatic use:
     smriti space list
     smriti space create <name> [--description]
     smriti space delete <space> [-y]
-    smriti state <space>
+    smriti state <space> [--preview]
     smriti fork <checkpoint-id> [--branch <name>]
     smriti restore <checkpoint-id>
     smriti compare <checkpoint-a> <checkpoint-b>
-    smriti checkpoint create <space> [--session <id>]   # reads JSON from stdin
+    smriti checkpoint create <space> [--session <id>]
+                                     [--project-root <path>] [--no-project-root]
+                                     [--author-agent <name>]   # reads JSON from stdin
     smriti checkpoint show <checkpoint-id>
     smriti checkpoint list <space>
     smriti checkpoint review <checkpoint-id>
@@ -21,6 +23,11 @@ session on a new branch, then `smriti checkpoint create <space> --session
 compare <a> <b>` to see how the branches diverged, and `smriti restore
 <checkpoint>` to read any checkpoint as a continuation brief.
 
+`smriti checkpoint create` auto-captures the current working directory
+as the checkpoint's project_root and can tag the checkpoint with an
+explicit `--author-agent`. `smriti state` shows full artifact content
+by default; pass `--preview` for the truncated brief.
+
 Every command supports --json for structured output.
 Default output is a readable markdown brief.
 
@@ -31,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
@@ -171,11 +179,15 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
         return
 
     commit = client.get_commit(head["commit_id"])
+    # Default to full artifacts (agent-first). --preview restores the old
+    # truncated behaviour; --full-artifacts is still accepted as a no-op
+    # so scripts that explicitly asked for full content still work.
+    full_artifacts = not args.preview
     if args.json:
         _print_json({"space": space, "head": head, "commit": commit})
     else:
         print(
-            format_state_brief(space, head, commit, full_artifacts=args.full_artifacts),
+            format_state_brief(space, head, commit, full_artifacts=full_artifacts),
             end="",
         )
 
@@ -205,7 +217,22 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
         )
         session_id = session["id"]
 
-    commit_payload = {
+    # project_root precedence: CLI flag > payload field > auto-capture cwd
+    # (unless --no-project-root is passed, in which case the field stays null).
+    if args.no_project_root:
+        project_root: str | None = None
+    elif args.project_root:
+        project_root = args.project_root
+    elif payload.get("project_root"):
+        project_root = payload["project_root"]
+    else:
+        project_root = os.getcwd()
+
+    # author_agent precedence: CLI flag > payload field > None (backend falls
+    # back to session.active_provider for nothing-specified).
+    author_agent = args.author_agent or payload.get("author_agent")
+
+    commit_payload: dict = {
         "repo_id": space["id"],
         "session_id": session_id,
         "message": payload["message"],
@@ -218,6 +245,10 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
         "entities": payload.get("entities", []),
         "artifacts": payload.get("artifacts", []),
     }
+    if project_root is not None:
+        commit_payload["project_root"] = project_root
+    if author_agent is not None:
+        commit_payload["author_agent"] = author_agent
 
     commit = client.create_chat_commit(commit_payload)
 
@@ -372,9 +403,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     state_parser.add_argument("space", help="Space name or UUID")
     state_parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Truncate artifact content to a short preview (default: show full)",
+    )
+    # Back-compat: --full-artifacts is a no-op because full is now the
+    # default. Kept so existing scripts don't break.
+    state_parser.add_argument(
         "--full-artifacts",
         action="store_true",
-        help="Include full artifact content (default truncates previews)",
+        help="(default) Include full artifact content. Kept for backwards "
+             "compatibility; the default is now always full. Use --preview to "
+             "truncate instead.",
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)
@@ -396,6 +436,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "--session",
         help="Attach the checkpoint to an existing session UUID instead of "
              "creating a new one (used for fork workflows: pair with `smriti fork`)",
+    )
+    cp_create.add_argument(
+        "--project-root",
+        dest="project_root",
+        help="Explicit working directory path to record on the checkpoint. "
+             "Default: the CLI's current working directory.",
+    )
+    cp_create.add_argument(
+        "--no-project-root",
+        dest="no_project_root",
+        action="store_true",
+        help="Do not record any project_root on the checkpoint (overrides "
+             "the default cwd auto-capture).",
+    )
+    cp_create.add_argument(
+        "--author-agent",
+        dest="author_agent",
+        help="Tag the checkpoint with an explicit agent identifier "
+             "(e.g. 'claude-code', 'codex-local'). Default: None; the "
+             "backend falls back to the session's active provider.",
     )
     cp_create.add_argument("--json", action="store_true", help="Output structured JSON")
     cp_create.set_defaults(func=cmd_checkpoint_create)

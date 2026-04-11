@@ -148,6 +148,7 @@ class ReachableCheckpoint(BaseModel):
     branch_name: str
     author_agent: Optional[str]
     author_type: str
+    project_root: Optional[str] = None
     message: str
     summary: str
     objective: str

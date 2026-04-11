@@ -163,6 +163,7 @@ class CommitModel(Base):
     branch_name: Mapped[str] = mapped_column(String(255), default="main")
     author_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     author_type: Mapped[str] = mapped_column(String(50), default="user") # user, llm, agent, system
+    project_root: Mapped[str | None] = mapped_column(String(512), nullable=True)
     message: Mapped[str] = mapped_column(String(255), nullable=False)
     
     # State snapshots

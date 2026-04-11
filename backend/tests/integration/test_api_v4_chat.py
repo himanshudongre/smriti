@@ -150,6 +150,60 @@ def test_manual_commit_from_session(client):
     assert len(commit["commit_hash"]) == 64
 
 
+def test_manual_commit_with_project_root_and_author_agent(client):
+    """project_root and explicit author_agent round-trip through the V4 commit
+    endpoint and are readable via the V2 single-commit GET."""
+    repo_id = _create_repo(client, "Metadata Round Trip")
+    s = client.post(f"/api/v4/chat/spaces/{repo_id}/sessions", json={
+        "provider": "openrouter", "model": "mock",
+    })
+    session_id = s.json()["id"]
+
+    commit_r = client.post("/api/v4/chat/commit", json={
+        "repo_id": repo_id,
+        "session_id": session_id,
+        "message": "Base",
+        "summary": "Setting up.",
+        "project_root": "/Users/test/Documents/GitHub/foo",
+        "author_agent": "claude-code",
+    })
+    assert commit_r.status_code == 201, commit_r.text
+    commit_id = commit_r.json()["id"]
+
+    # Read back via the V2 single-commit endpoint — this is the canonical
+    # path the CLI uses, so asserting here covers the full schema surface.
+    get_r = client.get(f"/api/v2/commits/{commit_id}")
+    assert get_r.status_code == 200, get_r.text
+    payload = get_r.json()
+    assert payload["project_root"] == "/Users/test/Documents/GitHub/foo"
+    assert payload["author_agent"] == "claude-code"
+
+
+def test_manual_commit_author_agent_falls_back_to_session_provider(client):
+    """When the commit request omits author_agent, the backend falls back
+    to the session's active_provider so nothing goes un-tagged."""
+    repo_id = _create_repo(client, "Author Fallback")
+    s = client.post(f"/api/v4/chat/spaces/{repo_id}/sessions", json={
+        "provider": "openrouter", "model": "mock",
+    })
+    session_id = s.json()["id"]
+
+    commit_r = client.post("/api/v4/chat/commit", json={
+        "repo_id": repo_id,
+        "session_id": session_id,
+        "message": "No explicit author",
+    })
+    assert commit_r.status_code == 201, commit_r.text
+    commit_id = commit_r.json()["id"]
+
+    get_r = client.get(f"/api/v2/commits/{commit_id}")
+    assert get_r.status_code == 200, get_r.text
+    payload = get_r.json()
+    # Session was created with provider=openrouter, so that's the fallback value
+    assert payload["author_agent"] == "openrouter"
+    assert payload["project_root"] is None
+
+
 def test_head_endpoint(client):
     repo_id = _create_repo(client, "Head Repo")
 

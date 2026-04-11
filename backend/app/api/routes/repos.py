@@ -42,6 +42,7 @@ class CommitResponse(BaseModel):
     branch_name: str
     author_agent: str | None
     author_type: str
+    project_root: str | None = None
     message: str
     summary: str
     objective: str
