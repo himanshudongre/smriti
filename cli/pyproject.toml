@@ -24,6 +24,7 @@ dev = [
 
 [project.scripts]
 smriti = "smriti_cli.main:main"
+smriti-mcp = "smriti_cli.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

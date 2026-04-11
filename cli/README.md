@@ -23,6 +23,60 @@ export SMRITI_API_URL=http://localhost:8000
 
 Or pass `--api-url` on any command.
 
+## MCP server
+
+Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsurf can read and write reasoning state natively — no subprocess-shelling to the `smriti` binary.
+
+**Installation.** Bundled with the CLI. `pip install -e ./cli` installs both `smriti` and `smriti-mcp` on your PATH.
+
+**Claude Code config** (typically `~/.config/claude-code/mcp.json` or `~/Library/Application Support/Claude/claude_desktop_config.json` — check your host's docs for the exact path):
+
+```json
+{
+  "mcpServers": {
+    "smriti": {
+      "command": "smriti-mcp",
+      "env": { "SMRITI_API_URL": "http://localhost:8000" }
+    }
+  }
+}
+```
+
+Restart the host and the `smriti_*` tools appear in the tool picker.
+
+**Available tools (12):**
+
+| Tool | Purpose |
+|---|---|
+| `smriti_list_spaces` | List all spaces |
+| `smriti_create_space` | Create a new space |
+| `smriti_delete_space` | Delete a space and all its checkpoints |
+| `smriti_state` | Continuation brief for the current project state |
+| `smriti_list_checkpoints` | List checkpoints in a space (optional branch filter) |
+| `smriti_show_checkpoint` | Print a specific checkpoint as markdown |
+| `smriti_create_checkpoint` | Create a checkpoint from freeform markdown (via extractor) |
+| `smriti_review_checkpoint` | Run consistency review on a checkpoint |
+| `smriti_delete_checkpoint` | Delete a checkpoint (refuses with dependents unless `cascade=true`) |
+| `smriti_restore` | Print a specific checkpoint as a continuation brief |
+| `smriti_fork` | Fork a new session from an existing checkpoint |
+| `smriti_compare` | Structured diff between two checkpoints |
+
+**Example.** In a Claude Code session with Smriti MCP connected, ask *"show me the current state of my-project"*. The agent calls `smriti_state(space="my-project")`, the MCP server hits the backend, pipes the result through the same `format_state_brief` formatter the CLI uses, and returns the continuation brief you'd otherwise get from `smriti state my-project` at the terminal — directly inside the chat context.
+
+**Notes:**
+- The MCP server talks to the same backend as the CLI. Keep the backend running.
+- Destructive tools (`smriti_delete_space`, `smriti_delete_checkpoint`) have no per-tool confirmation prompt — the MCP host's tool-approval UI is the gate.
+- `smriti_create_checkpoint` always uses the extract path. Agents pass freeform markdown and Smriti's background LLM extracts the structured fields. Pass `dry_run=True` to preview the extracted payload before committing.
+- `smriti_create_checkpoint` does NOT auto-capture `project_root` (unlike the CLI, which uses cwd). MCP servers run in the host's arbitrary working directory, so cwd would plant garbage paths on every checkpoint. Pass `project_root="/absolute/path"` explicitly if you want that field populated.
+
+**Smoke-test the server without a host.** The `mcp` SDK ships with an Inspector UI:
+
+```bash
+mcp dev smriti_cli.mcp_server:mcp
+```
+
+Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 12 entries, all prefixed `smriti_`) and try each tool interactively.
+
 ## Commands
 
 ```
