@@ -135,18 +135,26 @@ It is stricter than typical chat systems. But it felt important to try.
 
 ---
 
-## This is not just for chat
+## Smriti is a backend, not just a chat app
 
-I initially built this thinking about chat. But the more I worked on it, the more it felt like this might matter more for agents.
+I initially built this thinking about chat, but the more I worked on it, the more it felt like a reasoning-state backend that happens to have a chat UI on top. Agents have the same drift / recovery / handoff problems as humans, just worse.
 
-Because agents have the same problem, just worse:
+The concrete use case that drove this direction: working on a coding project and wanting to switch between different coding agents mid-project. Context reset every time. Markdown handoff files that broke down the moment reasoning branched. The strengths Smriti already had — checkpoints, restore, fork, compare, assumptions, artifacts, model interchangeability — mapped directly onto that pain.
 
-- multi-step reasoning chains
-- hard to debug
-- hard to reproduce
-- no clean way to "go back"
+So Smriti now has two surfaces on the same core:
 
-With checkpoints, you can persist intermediate reasoning, resume from a known state, fork execution paths, and compare outcomes across runs.
+1. **The chat UI**: how a human reads, steers, and debugs shared reasoning state. Still the primary way I inspect what is happening in a project.
+2. **A CLI**: how a coding agent reads and writes the same reasoning state from a shell tool loop.
+
+One project, one Smriti Space, multiple agents reading from and writing to the same structured state. Agents don't need to know about each other. They just need to know how to read the current state and write a checkpoint when they reach an inflection point.
+
+See `cli/README.md` for the agent-facing CLI. Quick taste:
+
+```bash
+smriti state my-project                        # continuation brief
+cat checkpoint.json | smriti checkpoint create my-project
+smriti checkpoint review <id>                  # consistency check before continuing
+```
 
 ---
 
@@ -177,6 +185,16 @@ Frontend: http://localhost:5173
 Backend: http://localhost:8000
 
 There is also a mock mode if you don't want to deal with API keys.
+
+### CLI (for agents and scripts)
+
+```bash
+cd cli
+pip install -e .
+smriti space list
+```
+
+The CLI wraps the backend API. See `cli/README.md` for the full command list and the agent handoff workflow.
 
 ---
 
@@ -296,7 +314,9 @@ There is also a mock mode for trying the product without API keys.
 
 ## Where this is going
 
-The same idea that makes reasoning recoverable in chat also applies when the reasoning happens more autonomously. If something is making decisions over multiple steps, you want to be able to inspect what it decided, go back to where it was still on track, and try a different path. That does not require a different system. It requires the same one.
+The chat UI is not going away — it is how I read, steer, and debug what is happening. But the thing underneath both the chat UI and the CLI is a shared reasoning-state layer that any client can read from and write to. Coding agents are the first real programmatic client. More transports (including MCP) can come later, but only after the basic loop is proven in real use.
+
+What I care about right now: can you use two different coding agents on the same project, hand off cleanly between them via Smriti, and have the receiving agent pick up where the sender left off without re-explaining context?
 
 ---
 

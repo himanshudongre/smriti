@@ -304,16 +304,40 @@ pivot, not an incremental change.
 | Prefix | Status | Purpose |
 |---|---|---|
 | `/api/v1` | Legacy | Transcript paste ingestion → session/artifact pipeline. Not part of current workflow. |
-| `/api/v2` | Legacy | Agent-push model: repos, commits, context packs. Direct API-to-API handoff. Not part of current UI workflow. |
-| `/api/v4` | Current | Chat sessions, message sending, provider management. The primary API. |
-| `/api/v5` | Current | Checkpoint drafting. Isolated from chat API by design. |
+| `/api/v2` | Partial | Space CRUD, checkpoint read by ID, checkpoint list by space. `CommitResponse` includes `assumptions` and `artifacts` so programmatic clients (CLI, agents) can read full checkpoints via this surface. |
+| `/api/v4` | Current | Chat sessions, message sending, provider management. The primary chat API. Also the canonical checkpoint write path (`POST /chat/commit`) because it accepts the full schema including `assumptions` and `artifacts`. |
+| `/api/v5` | Current | Checkpoint drafting, review, fork, compare, lineage. Isolated from chat API by design. |
 
-V1 and V2 endpoints remain registered for compatibility. They are not used by the
-current frontend. New development targets V4 and V5 exclusively.
+V1 remains registered for compatibility but is not used by the frontend or CLI.
 
 The split between V4 and V5 is intentional: checkpoint operations (which involve a
 background LLM call and structured extraction) are separated from the real-time chat
 path. This allows different latency budgets and error handling strategies for each.
+
+---
+
+## Smriti as an agent-facing backend
+
+The REST API is the canonical interface to Smriti. The chat UI and the CLI are
+both clients of the same model. Nothing in the core (checkpoints, assumptions,
+decisions, artifacts, fork, compare, review) is specific to one surface.
+
+Two clients ship today:
+
+- **Chat UI** (`frontend/`) — the human inspection and steering surface.
+  Reads and writes via V2/V4/V5 endpoints. Drives the live conversation runtime
+  (`POST /api/v4/chat/send`) that injects checkpoint context into model calls.
+- **CLI** (`cli/`) — the programmatic surface for coding agents and scripts.
+  Reads via V2 (`GET /commits/{id}`, `GET /repos/{id}/commits`) and V4
+  (`GET /chat/spaces/{id}/head`). Writes via V4 (`POST /chat/commit`) with the
+  full schema including `assumptions` and `artifacts`. Triggers review via V5
+  (`POST /checkpoint/{id}/review`). Does not touch `/chat/send` — agents run
+  their own reasoning in their own context, using their own LLM provider.
+  Smriti is their shared memory, not their runtime.
+
+Agents interact with structured state (checkpoints) via the CLI. The chat UI
+and CLI can be used simultaneously on the same project: the human steers and
+inspects, the agent reads and writes. Both see the same reasoning state.
 
 ---
 

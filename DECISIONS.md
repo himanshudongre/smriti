@@ -181,6 +181,54 @@ the model's responses are grounded in actual content rather than just summaries 
 what was discussed. Artifact content is capped at 2000 characters per artifact in
 the prompt to manage context size.
 
+### Why a CLI is the first agent-facing surface, not MCP
+
+Agents need a way to read and write Smriti's reasoning state from inside their
+tool loops. The two realistic transports are a CLI they can invoke via shell
+commands, and an MCP server they can call as structured tools. MCP is the better
+long-term answer: structured tool calls, native integration with hosts that
+support it, no shell indirection.
+
+The CLI was chosen for V1 anyway. Reasons:
+
+- Fastest path to a real end-to-end test. A CLI can be installed and wired into
+  any agent that runs shell commands on the same day it ships.
+- Protocol-agnostic. Works with any host, including ones that do not speak MCP
+  or treat MCP inconsistently.
+- MCP is an evolving protocol with different levels of support per host. A CLI
+  is a stable contract.
+- MCP is a wrapper around the same operations the CLI already exposes. Adding
+  MCP later as a second transport over the same underlying commands is a
+  smaller, cleaner move than building MCP first without knowing which commands
+  agents actually use.
+
+MCP is the expected second transport. It gets added once the basic handoff loop
+has been proven in real use.
+
+### Why the chat UI remains alongside agent-facing surfaces
+
+It would be tempting to frame Smriti as "an agent backend" and deprecate the
+chat UI as legacy. That would be a mistake. The chat UI is the human inspection
+and steering surface over the same reasoning state that agents are writing to.
+When two agents have been working on a project and one of them has gone in the
+wrong direction, the human needs a way to look at what happened, fork or restore
+cleanly, and point the next agent at a better state.
+
+The chat UI is not a stepping stone to an agent-only product. It is the
+permanent human-in-the-loop interface over shared reasoning state.
+
+### Why agents do not touch the live chat API (`/chat/send`)
+
+The V4 chat send endpoint drives the live conversation runtime: it accepts user
+messages, manages provider routing, injects checkpoint context, and stores
+turns. Agents should not invoke it. Agents write directly to structured state
+(checkpoints via `/chat/commit`) and read structured state (HEAD + commit
+fetch). They run their own reasoning in their own context, using their own LLM
+provider. Smriti is their shared memory, not their runtime.
+
+This keeps the chat runtime focused on human-driven exploration, and keeps the
+agent surface narrow and composable.
+
 ---
 
 ## Open questions and deferred decisions

@@ -46,14 +46,16 @@ class CommitResponse(BaseModel):
     summary: str
     objective: str
     decisions: list
+    assumptions: list
     tasks: list
     open_questions: list
     entities: list
+    artifacts: list
     context_blob: dict
     raw_source_text: str | None
     metadata_: dict = Field(serialization_alias="metadata")
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 import logging
