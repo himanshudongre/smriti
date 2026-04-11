@@ -125,65 +125,102 @@ cat /tmp/r3_agent_a_output.md | smriti checkpoint create my-project --extract --
 
 Every command supports `--json` for structured output.
 
-## Typical agent workflow
+## Using Smriti from a coding agent
 
-Read current project state:
+Smriti is designed to be driven by a coding agent inside its tool loop — either by shelling out to `smriti` from any host, or by calling the `smriti_*` MCP tools directly (Claude Code, Cursor, Windsurf). The workflow is the same in both modes, and the rest of this section is transport-agnostic — CLI commands and their MCP equivalents are shown side by side. The shape was validated across five rounds of dogfood testing with real cross-agent handoffs.
+
+The pattern is always:
+
+1. **Orient.** Read the current state of the space before doing anything.
+2. **Work.** Do whatever the task requires. Smriti has no opinion about what happens between checkpoints.
+3. **Checkpoint.** Write a structured snapshot at each inflection point.
+4. **Hand off.** The next agent reads the new state and continues.
+
+### 1. Orient
 
 ```bash
 smriti state my-project
 ```
 
-Write a checkpoint from a JSON object piped on stdin:
+From an MCP host, the agent calls `smriti_state(space="my-project")`. Either way you get the same markdown brief — objective, summary, decisions, assumptions, tasks, open questions, and full artifact content — rendered into the agent's context. This is the minimum set of facts the next agent needs to continue work.
+
+For a list of past checkpoints (with full UUIDs so you can feed them back into fork / compare / restore):
 
 ```bash
-cat <<'JSON' | smriti checkpoint create my-project
-{
-  "message": "Decided to use Pydantic for state validation",
-  "objective": "Build runtime-enforced state layer",
-  "summary": "...",
-  "decisions": ["Use Pydantic BaseModel for state", "extra=forbid blocks injection"],
-  "assumptions": ["Latency cost is acceptable"],
-  "tasks": ["Benchmark validation overhead"],
-  "open_questions": ["How to handle shared state across agents"],
-  "entities": ["Pydantic", "BaseModel"],
-  "artifacts": [
-    {"id": "a1", "type": "text", "label": "Draft implementation", "content": "..."}
-  ]
-}
-JSON
+smriti checkpoint list my-project
 ```
 
-Review a specific checkpoint for consistency issues:
+MCP equivalent: `smriti_list_checkpoints(space="my-project")`.
+
+### 2. Checkpoint at each inflection point
+
+In early rounds of dogfood, agents had to hand-write JSON payloads. From V3 onward, the preferred path is freeform markdown through the LLM extractor — pass the same kind of note you'd leave a teammate and Smriti pulls out the structured fields:
+
+```bash
+cat <<'MD' | smriti checkpoint create my-project --extract --author-agent claude-code
+# Decided on Pydantic for the state validation layer
+
+After trying dataclass-based validation and hitting the injection-attack
+surface from unbounded extra fields, going with Pydantic BaseModel and
+`extra="forbid"`. Latency overhead is ~0.3 ms per call, well under budget.
+
+## Open questions
+- How do we share state across parallel agent runs?
+- Cleaner schema-versioning story for migrations?
+
+## Artifacts
+- Draft implementation: see `state_layer.py`
+MD
+```
+
+`--extract` posts the markdown to `/api/v5/checkpoint/extract`, gets back the structured fields, and commits. Add `--dry-run` to preview the extraction without writing anything:
+
+```bash
+cat /tmp/handoff.md | smriti checkpoint create my-project --extract --dry-run
+```
+
+The CLI auto-captures `$(pwd)` as the checkpoint's `project_root` so the next agent knows where the project lives on disk. Override with `--project-root /absolute/path` or skip with `--no-project-root`. Tag the author with `--author-agent claude-code` / `--author-agent codex-local` so space history attributes each checkpoint to the agent that wrote it.
+
+MCP equivalent — agent calls `smriti_create_checkpoint(space="my-project", content="# Decided on Pydantic ...", author_agent="claude-code")`. The MCP server runs the same extract → commit pipeline. Note that MCP does **not** auto-capture `project_root` (the MCP server lives in the host's arbitrary cwd); pass `project_root="/absolute/path"` explicitly when you want the field populated.
+
+Review a checkpoint for consistency before handing it off:
 
 ```bash
 smriti checkpoint review <checkpoint-id>
 ```
 
-## Multi-branch workflow
+Surfaces possible contradictions, hidden assumptions, already-resolved open questions, and unused entities. MCP equivalent: `smriti_review_checkpoint(checkpoint_id="<id>")`.
 
-When you want to explore an alternative direction from a checkpoint without losing the main branch, fork it into a new session and write checkpoints there:
+### 3. Hand off to the next agent
+
+A second agent (different process, different model family, different session) starts fresh. It runs `smriti state my-project` — or calls `smriti_state` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
+
+This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 12 MCP tools from a host-less Python client. The shape holds.
+
+## Branching when you want to explore an alternative
+
+Sometimes an agent wants to try a different direction without losing the main line. Fork from any checkpoint into a new session on its own branch:
 
 ```bash
 # Fork a new session off checkpoint C1
-smriti fork <C1-checkpoint-id> --branch experiment
+smriti fork <C1-checkpoint-id> --branch alternative-design
 
-# The output gives you the new session ID. Write a checkpoint to that session:
-cat <<'JSON' | smriti checkpoint create my-project --session <fork-session-id>
-{
-  "message": "Alternative design direction",
-  "summary": "...",
-  "decisions": ["Try stdlib only instead of click"]
-}
-JSON
+# Output gives you a new session UUID. Write a checkpoint into it:
+cat alternative.md | smriti checkpoint create my-project \
+    --extract --session <fork-session-id> --author-agent codex-local
 
 # Compare the two branches
-smriti compare <C1-checkpoint-id> <new-checkpoint-id>
+smriti compare <C1-checkpoint-id> <fork-checkpoint-id>
 
-# Read any checkpoint as a continuation brief (what you'd need to continue from it)
-smriti restore <new-checkpoint-id>
+# Pull any checkpoint back into context as a continuation brief
+smriti restore <fork-checkpoint-id>
 ```
 
-`smriti compare` shows a structured diff with `Shared`, `Only in A`, and `Only in B` sections for decisions, assumptions, and tasks, plus the lowest common ancestor of the two checkpoints. The shared-set matching is case- and punctuation-insensitive, so two agents phrasing the same commitment differently still show up as shared.
+`smriti compare` shows the common ancestor, per-side objectives / summaries, and `Shared` / `Only in A` / `Only in B` splits for decisions, assumptions, and tasks. The shared-set matching is case- and punctuation-insensitive, so two agents phrasing the same commitment differently still show up as shared.
+
+`smriti restore` renders a specific checkpoint in the same shape as `smriti state`, so the agent reads it and continues as if that checkpoint were current HEAD.
+
+MCP equivalents: `smriti_fork(checkpoint_id="<C1>", branch="alternative-design")`, `smriti_create_checkpoint(..., session="<fork-session-id>")`, `smriti_compare(checkpoint_a="<A>", checkpoint_b="<B>")`, `smriti_restore(checkpoint_id="<id>")`. The same four tools, the same four operations, no host-specific glue.
 
 ## Checkpoint payload schema
 

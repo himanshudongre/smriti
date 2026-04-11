@@ -202,8 +202,61 @@ The CLI was chosen for V1 anyway. Reasons:
   smaller, cleaner move than building MCP first without knowing which commands
   agents actually use.
 
-MCP is the expected second transport. It gets added once the basic handoff loop
-has been proven in real use.
+MCP was the expected second transport once the basic handoff loop was proven in
+real use. That happened in rounds 3 and 4 of dogfood testing (Claude Code ↔
+Codex and Codex ↔ Codex handoffs with the extractor), and MCP shipped as the
+next build on top. See the next entry.
+
+### Shipping MCP as the second transport
+
+MCP shipped as V3 Build 2 after rounds 3 and 4 validated the handoff loop.
+Design decisions made at ship time:
+
+- **Same package, two entry points.** `cli/pyproject.toml` exposes both
+  `smriti` (CLI) and `smriti-mcp` (server). One `pip install -e ./cli`
+  installs both. The MCP server lives next to the CLI in
+  `cli/smriti_cli/mcp_server.py` and imports `SmritiClient` and the
+  existing formatters directly. Zero reimplementation.
+- **FastMCP over the low-level Server class.** The high-level API
+  (`mcp.server.fastmcp.FastMCP` + `@mcp.tool()` decorators) keeps each tool
+  handler to a dozen lines: build a client, call one or two methods, run
+  through a formatter, return a string. The cost is coupling to the FastMCP
+  shape; the benefit is that a handler reads like an ordinary Python function.
+- **Stdio transport only for v1.** HTTP / SSE and remote deployments are out
+  of scope. Stdio is what Claude Code, Cursor, and Windsurf all support, and
+  it's the cheapest thing to run (the host manages the subprocess lifecycle).
+- **Twelve tools, one per CLI command.** No consolidation into fewer
+  megatools, no hidden helpers. `smriti_state`, `smriti_list_checkpoints`,
+  `smriti_fork`, etc. map 1:1 onto what the CLI exposes so docs and agent
+  prompts translate directly.
+- **Destructive tools have no per-tool confirmation prompt.** The MCP host's
+  tool-approval UI is already the gate — adding a second confirmation layer
+  inside the tool itself would be redundant, and agents can't interact with
+  prompt dialogs from inside an MCP tool call anyway. (The CLI still has
+  `-y` because a terminal has no equivalent approval UI.)
+- **`smriti_create_checkpoint` is extract-only.** No JSON stdin mode. The
+  round-4 verdict was that once the extractor exists, hand-written JSON is
+  never the right path for an agent. MCP agents pass freeform markdown and
+  Smriti's background LLM structures it. `dry_run=True` previews the
+  extraction without committing.
+- **`project_root` defaults to empty, not cwd.** MCP servers run in the host's
+  arbitrary working directory, so auto-capturing cwd would plant garbage paths
+  on every checkpoint. Agents pass `project_root="/absolute/path"` explicitly
+  when they want the field populated. The CLI's cwd auto-capture is
+  deliberately kept because `smriti` runs from the project directory.
+- **Tests are plain Python unit tests against a mocked `SmritiClient`.** No
+  full MCP protocol integration tests. The tool handlers are normal functions
+  and FastMCP's role is a thin decorator layer; testing them with a
+  `MagicMock(spec=SmritiClient)` fixture covers the behavior that matters
+  without spinning up a stdio server. The protocol round-trip was validated
+  separately via the `mcp` SDK's Inspector UI and a host-less Python client.
+
+The MCP server is a pure sibling to the CLI — no shared mutable state, no
+code paths that one transport uses and the other doesn't. Both talk to the
+same backend via the same `SmritiClient`, and both render via the same
+formatters. This is the property that makes "the CLI and the MCP server have
+feature parity" not a maintenance commitment but a mechanical consequence of
+the architecture.
 
 ### Why the chat UI remains alongside agent-facing surfaces
 

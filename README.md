@@ -141,20 +141,25 @@ I initially built this thinking about chat, but the more I worked on it, the mor
 
 The concrete use case that drove this direction: working on a coding project and wanting to switch between different coding agents mid-project. Context reset every time. Markdown handoff files that broke down the moment reasoning branched. The strengths Smriti already had — checkpoints, restore, fork, compare, assumptions, artifacts, model interchangeability — mapped directly onto that pain.
 
-So Smriti now has two surfaces on the same core:
+So Smriti now has three surfaces on the same core:
 
 1. **The chat UI**: how a human reads, steers, and debugs shared reasoning state. Still the primary way I inspect what is happening in a project.
-2. **A CLI**: how a coding agent reads and writes the same reasoning state from a shell tool loop.
+2. **A CLI** (`smriti`): how a coding agent reads and writes the same reasoning state from a shell tool loop. Works from any host that can run a shell command.
+3. **An MCP server** (`smriti-mcp`): the same surface, wrapped as 12 MCP tools for hosts that speak the Model Context Protocol natively (Claude Code, Cursor, Windsurf). Agents call `smriti_state`, `smriti_create_checkpoint`, `smriti_fork`, etc. as structured tool calls instead of shelling out.
 
 One project, one Smriti Space, multiple agents reading from and writing to the same structured state. Agents don't need to know about each other. They just need to know how to read the current state and write a checkpoint when they reach an inflection point.
 
-See `cli/README.md` for the agent-facing CLI. Quick taste:
+See `cli/README.md` for both surfaces. Quick taste:
 
 ```bash
-smriti state my-project                        # continuation brief
-cat checkpoint.json | smriti checkpoint create my-project
-smriti checkpoint review <id>                  # consistency check before continuing
+smriti state my-project                                    # continuation brief
+cat handoff.md | smriti checkpoint create my-project --extract   # structured commit from freeform markdown
+smriti checkpoint review <id>                              # consistency check before handing off
+smriti fork <id> --branch experiment                       # branch off a checkpoint
+smriti compare <id-a> <id-b>                               # structured diff of two checkpoints
 ```
+
+Or from inside Claude Code, after adding `smriti-mcp` to your MCP config: "*show me the current state of my-project*" → the agent calls `smriti_state(space="my-project")` and the brief lands in its context.
 
 ---
 
@@ -314,9 +319,9 @@ There is also a mock mode for trying the product without API keys.
 
 ## Where this is going
 
-The chat UI is not going away — it is how I read, steer, and debug what is happening. But the thing underneath both the chat UI and the CLI is a shared reasoning-state layer that any client can read from and write to. Coding agents are the first real programmatic client. More transports (including MCP) can come later, but only after the basic loop is proven in real use.
+The chat UI is not going away — it is how I read, steer, and debug what is happening. But the thing underneath the chat UI, the CLI, and the MCP server is a shared reasoning-state layer that any client can read from and write to. Five rounds of dogfood testing — Claude Code ↔ Codex, Codex ↔ Codex, and a full host-less protocol run — have exercised the basic handoff loop end to end. The CLI and the MCP server now ship from the same package with feature parity across 12 tools: spaces, checkpoints, fork, compare, restore, review, delete, and an LLM-backed extractor so agents can write checkpoints from freeform markdown instead of hand-crafted JSON.
 
-What I care about right now: can you use two different coding agents on the same project, hand off cleanly between them via Smriti, and have the receiving agent pick up where the sender left off without re-explaining context?
+What I care about right now: two different coding agents working on the same project, handing off cleanly between them via Smriti, and the receiving agent picking up where the sender left off without re-explaining context. That loop works. The questions I'm still chasing are shape questions — is this the right mental model, are these the right fields, does treating reasoning state as an explicit versioned object scale past the single-user case — not transport questions.
 
 ---
 

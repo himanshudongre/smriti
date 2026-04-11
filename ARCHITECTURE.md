@@ -318,26 +318,44 @@ path. This allows different latency budgets and error handling strategies for ea
 
 ## Smriti as an agent-facing backend
 
-The REST API is the canonical interface to Smriti. The chat UI and the CLI are
-both clients of the same model. Nothing in the core (checkpoints, assumptions,
-decisions, artifacts, fork, compare, review) is specific to one surface.
+The REST API is the canonical interface to Smriti. The chat UI, the CLI, and
+the MCP server are all clients of the same model. Nothing in the core
+(checkpoints, assumptions, decisions, artifacts, fork, compare, review,
+extract) is specific to one surface.
 
-Two clients ship today:
+Three clients ship today:
 
 - **Chat UI** (`frontend/`) — the human inspection and steering surface.
   Reads and writes via V2/V4/V5 endpoints. Drives the live conversation runtime
   (`POST /api/v4/chat/send`) that injects checkpoint context into model calls.
-- **CLI** (`cli/`) — the programmatic surface for coding agents and scripts.
+- **CLI** (`cli/smriti_cli/main.py`, entry point `smriti`) — the programmatic
+  surface for coding agents and scripts running in a shell tool loop.
   Reads via V2 (`GET /commits/{id}`, `GET /repos/{id}/commits`) and V4
   (`GET /chat/spaces/{id}/head`). Writes via V4 (`POST /chat/commit`) with the
-  full schema including `assumptions` and `artifacts`. Triggers review via V5
-  (`POST /checkpoint/{id}/review`). Does not touch `/chat/send` — agents run
-  their own reasoning in their own context, using their own LLM provider.
-  Smriti is their shared memory, not their runtime.
+  full schema including `assumptions`, `artifacts`, `project_root`, and
+  `author_agent`. Extracts structured fields from freeform markdown via V5
+  (`POST /checkpoint/extract`). Triggers review via V5
+  (`POST /checkpoint/{id}/review`). Drives fork / compare / restore via V5
+  lineage endpoints. Does not touch `/chat/send` — agents run their own
+  reasoning in their own context, using their own LLM provider. Smriti is
+  their shared memory, not their runtime.
+- **MCP server** (`cli/smriti_cli/mcp_server.py`, entry point `smriti-mcp`) —
+  the same surface wrapped as 12 MCP tools for hosts that speak the Model
+  Context Protocol natively (Claude Code, Cursor, Windsurf). Stdio transport.
+  Each tool is a thin shim: build a `SmritiClient`, call one or two methods,
+  run the result through an existing formatter, return markdown. Feature
+  parity with the CLI modulo two deliberate differences: (1) MCP does not
+  auto-capture `project_root` from cwd because the MCP server runs in the
+  host's arbitrary working directory, (2) destructive tools have no per-tool
+  confirmation prompt — the host's tool-approval UI is the gate. Shares the
+  formatters (`format_state_brief`, `format_checkpoint`, `format_commit_list`,
+  `format_compare_result`, etc.) with the CLI, so both transports produce
+  byte-identical output for the same backend response.
 
-Agents interact with structured state (checkpoints) via the CLI. The chat UI
-and CLI can be used simultaneously on the same project: the human steers and
-inspects, the agent reads and writes. Both see the same reasoning state.
+Agents interact with structured state (checkpoints) via the CLI or the MCP
+server. The chat UI and either agent-facing surface can be used simultaneously
+on the same project: the human steers and inspects, the agent reads and writes.
+Both see the same reasoning state.
 
 ---
 
