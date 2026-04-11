@@ -14,6 +14,12 @@ authors = [
 ]
 dependencies = [
     "requests>=2.31.0",
+    "mcp>=1.27.0,<2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
 ]
 
 [project.scripts]
@@ -22,3 +28,7 @@ smriti = "smriti_cli.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["smriti_cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
