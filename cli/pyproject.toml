@@ -30,6 +30,12 @@ smriti-mcp = "smriti_cli.mcp_server:main"
 where = ["."]
 include = ["smriti_cli*"]
 
+[tool.setuptools.package-data]
+# Ship the skill pack source-of-truth template with the installed
+# package so `smriti skills install` and `smriti_install_skill` can
+# find it via __file__-relative path resolution.
+smriti_cli = ["skill_pack/template.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
