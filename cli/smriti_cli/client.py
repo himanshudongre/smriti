@@ -155,6 +155,37 @@ class SmritiClient:
     def review_checkpoint(self, commit_id: str) -> dict:
         return self._request("POST", f"/api/v5/checkpoint/{commit_id}/review")
 
+    def compare_checkpoints(self, checkpoint_a_id: str, checkpoint_b_id: str) -> dict:
+        """GET /api/v5/lineage/checkpoints/{a}/compare/{b}
+
+        Returns the full CompareResponse dict with `checkpoint_a`,
+        `checkpoint_b`, and `diff` (including the new
+        `common_ancestor_commit_id` field and normalized shared sets).
+        """
+        return self._request(
+            "GET",
+            f"/api/v5/lineage/checkpoints/{checkpoint_a_id}/compare/{checkpoint_b_id}",
+        )
+
+    def fork_session(
+        self,
+        space_id: str,
+        checkpoint_id: str,
+        branch_name: str = "",
+    ) -> dict:
+        """POST /api/v5/lineage/sessions/fork
+
+        Returns the ForkSessionResponse: session_id, branch_name,
+        forked_from_checkpoint_id, history_base_seq.
+        """
+        payload: dict = {
+            "space_id": space_id,
+            "checkpoint_id": checkpoint_id,
+        }
+        if branch_name:
+            payload["branch_name"] = branch_name
+        return self._request("POST", "/api/v5/lineage/sessions/fork", json=payload)
+
     def delete_commit(self, commit_id: str, cascade: bool = False) -> None:
         params = {"cascade": "true"} if cascade else None
         self._request("DELETE", f"/api/v2/commits/{commit_id}", params=params)

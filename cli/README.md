@@ -28,16 +28,23 @@ Or pass `--api-url` on any command.
 ```
 smriti space list
 smriti space create <name> [--description "..."]
+smriti space delete <space> [-y]
 
 smriti state <space>                                     # continuation brief
 smriti state <space> --full-artifacts                    # include full artifacts
 smriti state <space> --json                              # structured output
 
+smriti fork <checkpoint-id> [--branch <name>]            # new session from checkpoint
+smriti restore <checkpoint-id>                           # brief of a specific checkpoint
+smriti compare <checkpoint-a> <checkpoint-b>             # structured diff
+
 smriti checkpoint create <space>                         # reads JSON from stdin
 smriti checkpoint create <space> --from-json <path>      # from file
+smriti checkpoint create <space> --session <session-id>  # attach to existing session
 smriti checkpoint show <checkpoint-id>
 smriti checkpoint list <space>
 smriti checkpoint review <checkpoint-id>
+smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
 ```
 
 Every command supports `--json` for structured output.
@@ -75,6 +82,32 @@ Review a specific checkpoint for consistency issues:
 ```bash
 smriti checkpoint review <checkpoint-id>
 ```
+
+## Multi-branch workflow
+
+When you want to explore an alternative direction from a checkpoint without losing the main branch, fork it into a new session and write checkpoints there:
+
+```bash
+# Fork a new session off checkpoint C1
+smriti fork <C1-checkpoint-id> --branch experiment
+
+# The output gives you the new session ID. Write a checkpoint to that session:
+cat <<'JSON' | smriti checkpoint create my-project --session <fork-session-id>
+{
+  "message": "Alternative design direction",
+  "summary": "...",
+  "decisions": ["Try stdlib only instead of click"]
+}
+JSON
+
+# Compare the two branches
+smriti compare <C1-checkpoint-id> <new-checkpoint-id>
+
+# Read any checkpoint as a continuation brief (what you'd need to continue from it)
+smriti restore <new-checkpoint-id>
+```
+
+`smriti compare` shows a structured diff with `Shared`, `Only in A`, and `Only in B` sections for decisions, assumptions, and tasks, plus the lowest common ancestor of the two checkpoints. The shared-set matching is case- and punctuation-insensitive, so two agents phrasing the same commitment differently still show up as shared.
 
 ## Checkpoint payload schema
 

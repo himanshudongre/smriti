@@ -181,6 +181,136 @@ _REVIEW_ISSUE_LABELS = {
 }
 
 
+def format_fork_result(fork: dict, source_commit: dict) -> str:
+    """One-screen output for `smriti fork` confirming the new session and
+    giving the user the next command to run."""
+    src_hash = _short_hash(source_commit.get("commit_hash"))
+    src_message = source_commit.get("message", "").strip() or "(no message)"
+    space_id = source_commit.get("repo_id", "")
+
+    branch = fork.get("branch_name", "?")
+    session_id = fork.get("session_id", "?")
+
+    lines = [
+        f"Forked from `{src_hash}` — \"{src_message}\"",
+        f"  → new session: {branch} ({session_id})",
+        f"  → seeded from: {src_hash}",
+        "",
+        "Next: write a checkpoint to this session with",
+        f"  smriti checkpoint create {space_id} --session {session_id} < checkpoint.json",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def format_restore_brief(
+    space: dict,
+    commit: dict,
+    *,
+    full_artifacts: bool = False,
+) -> str:
+    """Render a specific checkpoint as a continuation brief.
+
+    Shape mirrors `format_state_brief` so an agent reading the output
+    can continue work from this checkpoint just as if it were HEAD.
+    A header line disambiguates from `smriti state` output.
+    """
+    head = {
+        "commit_id": commit.get("id"),
+        "commit_hash": commit.get("commit_hash"),
+        "summary": commit.get("summary", ""),
+        "objective": commit.get("objective", ""),
+        "latest_session_id": None,
+        "latest_session_title": None,
+    }
+    header = (
+        f"_Continuation brief for checkpoint "
+        f"`{_short_hash(commit.get('commit_hash'))}`_\n\n"
+    )
+    return header + format_state_brief(space, head, commit, full_artifacts=full_artifacts)
+
+
+def format_compare_result(result: dict, *, full_artifacts: bool = False) -> str:
+    """Render a checkpoint compare response as a readable markdown diff.
+
+    Sections elided when empty. full_artifacts is accepted for CLI
+    consistency but not currently used — compare does not surface
+    artifacts in this build.
+    """
+    a = result.get("checkpoint_a") or {}
+    b = result.get("checkpoint_b") or {}
+    diff = result.get("diff") or {}
+
+    a_hash = _short_hash(a.get("commit_hash"))
+    b_hash = _short_hash(b.get("commit_hash"))
+    a_branch = a.get("branch_name") or "main"
+    b_branch = b.get("branch_name") or "main"
+
+    parts: list[str] = []
+    parts.append(f"# Compare `{a_hash}` ↔ `{b_hash}`\n")
+
+    lca = diff.get("common_ancestor_commit_id")
+    if lca:
+        parts.append(f"Common ancestor: `{lca}`\n")
+    else:
+        parts.append("Common ancestor: _none — unrelated histories_\n")
+
+    parts.append(
+        f"- A: `{a_hash}` on `{a_branch}` — {a.get('message', '').strip() or '(no message)'}\n"
+        f"- B: `{b_hash}` on `{b_branch}` — {b.get('message', '').strip() or '(no message)'}\n"
+    )
+
+    # Summary / objective — show side-by-side when they differ
+    summary_a = (diff.get("summary_a") or "").strip()
+    summary_b = (diff.get("summary_b") or "").strip()
+    if summary_a or summary_b:
+        if summary_a == summary_b and summary_a:
+            parts.append(f"## Summary (identical)\n{summary_a}\n")
+        else:
+            if summary_a:
+                parts.append(f"## Summary (A)\n{summary_a}\n")
+            if summary_b:
+                parts.append(f"## Summary (B)\n{summary_b}\n")
+
+    objective_a = (diff.get("objective_a") or "").strip()
+    objective_b = (diff.get("objective_b") or "").strip()
+    if objective_a or objective_b:
+        if objective_a == objective_b and objective_a:
+            parts.append(f"## Objective (identical)\n{objective_a}\n")
+        else:
+            if objective_a:
+                parts.append(f"## Objective (A)\n{objective_a}\n")
+            if objective_b:
+                parts.append(f"## Objective (B)\n{objective_b}\n")
+
+    def _bullet_group(heading: str, items: list[str]) -> str:
+        if not items:
+            return ""
+        lines = [f"### {heading}"]
+        for item in items:
+            lines.append(f"- {item}")
+        return "\n".join(lines) + "\n"
+
+    def _field_section(label: str, shared_key: str, only_a_key: str, only_b_key: str) -> None:
+        shared = diff.get(shared_key) or []
+        only_a = diff.get(only_a_key) or []
+        only_b = diff.get(only_b_key) or []
+        if not (shared or only_a or only_b):
+            return
+        parts.append(f"## {label}\n")
+        group = ""
+        group += _bullet_group("Shared", shared)
+        group += _bullet_group(f"Only in A (`{a_hash}`)", only_a)
+        group += _bullet_group(f"Only in B (`{b_hash}`)", only_b)
+        parts.append(group)
+
+    _field_section("Decisions", "decisions_shared", "decisions_only_a", "decisions_only_b")
+    _field_section("Assumptions", "assumptions_shared", "assumptions_only_a", "assumptions_only_b")
+    _field_section("Tasks", "tasks_shared", "tasks_only_a", "tasks_only_b")
+
+    return "\n".join(p for p in parts if p).rstrip() + "\n"
+
+
 def format_review(result: dict) -> str:
     issues = result.get("issues") or []
     suggestions = result.get("suggestions") or []

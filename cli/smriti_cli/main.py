@@ -6,11 +6,20 @@ Commands for agent and programmatic use:
     smriti space create <name> [--description]
     smriti space delete <space> [-y]
     smriti state <space>
-    smriti checkpoint create <space>               # reads JSON from stdin
+    smriti fork <checkpoint-id> [--branch <name>]
+    smriti restore <checkpoint-id>
+    smriti compare <checkpoint-a> <checkpoint-b>
+    smriti checkpoint create <space> [--session <id>]   # reads JSON from stdin
     smriti checkpoint show <checkpoint-id>
     smriti checkpoint list <space>
     smriti checkpoint review <checkpoint-id>
     smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
+
+Multi-branch workflow: use `smriti fork <checkpoint>` to start a new
+session on a new branch, then `smriti checkpoint create <space> --session
+<fork-session-id>` to write a checkpoint on that branch, then `smriti
+compare <a> <b>` to see how the branches diverged, and `smriti restore
+<checkpoint>` to read any checkpoint as a continuation brief.
 
 Every command supports --json for structured output.
 Default output is a readable markdown brief.
@@ -29,6 +38,9 @@ from .client import SmritiClient, SmritiError
 from .formatters import (
     format_checkpoint,
     format_commit_list,
+    format_compare_result,
+    format_fork_result,
+    format_restore_brief,
     format_review,
     format_space_list,
     format_state_brief,
@@ -180,15 +192,22 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
 
     # The V4 commit endpoint requires a session_id. Agents typically do not
     # have one — the CLI creates a lightweight session on demand and attaches
-    # the checkpoint to it. Agents should not care about the session.
-    session = client.create_session(
-        repo_id=space["id"],
-        title=f"cli: {payload['message'][:80]}",
-    )
+    # the checkpoint to it. With --session <id>, attach the checkpoint to an
+    # existing session instead (used for fork workflows where the caller
+    # already ran `smriti fork` and wants to write a checkpoint on the new
+    # branch).
+    if args.session:
+        session_id = args.session
+    else:
+        session = client.create_session(
+            repo_id=space["id"],
+            title=f"cli: {payload['message'][:80]}",
+        )
+        session_id = session["id"]
 
     commit_payload = {
         "repo_id": space["id"],
-        "session_id": session["id"],
+        "session_id": session_id,
         "message": payload["message"],
         "summary": payload.get("summary", ""),
         "objective": payload.get("objective", ""),
@@ -270,6 +289,42 @@ def cmd_checkpoint_delete(client: SmritiClient, args: argparse.Namespace) -> Non
         print(f"Deleted checkpoint `{commit['commit_hash'][:7]}`{note}.")
 
 
+def cmd_fork(client: SmritiClient, args: argparse.Namespace) -> None:
+    # Fetch the checkpoint first to derive space_id. This also gives us the
+    # source message for the output line so the user sees what they forked.
+    commit = client.get_commit(args.checkpoint_id)
+    space_id = commit.get("repo_id", "")
+    fork = client.fork_session(
+        space_id=str(space_id),
+        checkpoint_id=args.checkpoint_id,
+        branch_name=args.branch or "",
+    )
+    if args.json:
+        _print_json(fork)
+    else:
+        print(format_fork_result(fork, commit), end="")
+
+
+def cmd_compare(client: SmritiClient, args: argparse.Namespace) -> None:
+    result = client.compare_checkpoints(args.checkpoint_a, args.checkpoint_b)
+    if args.json:
+        _print_json(result)
+    else:
+        print(format_compare_result(result, full_artifacts=args.full_artifacts), end="")
+
+
+def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
+    commit = client.get_commit(args.checkpoint_id)
+    space = client.get_space(str(commit.get("repo_id", "")))
+    if args.json:
+        _print_json({"space": space, "commit": commit})
+    else:
+        print(
+            format_restore_brief(space, commit, full_artifacts=args.full_artifacts),
+            end="",
+        )
+
+
 # ── argparse wiring ──────────────────────────────────────────────────────
 
 
@@ -337,6 +392,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--from-json",
         help="Path to a JSON file with the checkpoint payload (use '-' for stdin)",
     )
+    cp_create.add_argument(
+        "--session",
+        help="Attach the checkpoint to an existing session UUID instead of "
+             "creating a new one (used for fork workflows: pair with `smriti fork`)",
+    )
     cp_create.add_argument("--json", action="store_true", help="Output structured JSON")
     cp_create.set_defaults(func=cmd_checkpoint_create)
 
@@ -376,6 +436,48 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     cp_delete.add_argument("--json", action="store_true", help="Output structured JSON")
     cp_delete.set_defaults(func=cmd_checkpoint_delete)
+
+    # fork (top-level: crosses checkpoint → session)
+    fork_parser = subparsers.add_parser(
+        "fork",
+        help="Fork a new session from an existing checkpoint",
+    )
+    fork_parser.add_argument("checkpoint_id", help="Checkpoint UUID to fork from")
+    fork_parser.add_argument(
+        "--branch",
+        help="Branch name for the new session (default: branch-YYYY-MM-DD)",
+    )
+    fork_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    fork_parser.set_defaults(func=cmd_fork)
+
+    # restore (top-level: reads a specific checkpoint as a continuation brief)
+    restore_parser = subparsers.add_parser(
+        "restore",
+        help="Print a continuation-oriented brief of a specific checkpoint",
+    )
+    restore_parser.add_argument("checkpoint_id", help="Checkpoint UUID")
+    restore_parser.add_argument(
+        "--full-artifacts",
+        action="store_true",
+        help="Include full artifact content",
+    )
+    restore_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    restore_parser.set_defaults(func=cmd_restore)
+
+    # compare (top-level: operates on two checkpoints)
+    compare_parser = subparsers.add_parser(
+        "compare",
+        help="Compare two checkpoints and show the structured diff",
+    )
+    compare_parser.add_argument("checkpoint_a", help="First checkpoint UUID (side A)")
+    compare_parser.add_argument("checkpoint_b", help="Second checkpoint UUID (side B)")
+    compare_parser.add_argument(
+        "--full-artifacts",
+        action="store_true",
+        help="Include full artifact content in the diff view",
+    )
+    compare_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    compare_parser.set_defaults(func=cmd_compare)
 
     return parser
 

@@ -13,6 +13,7 @@ Checkpoint comparison:
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -128,6 +129,7 @@ class CheckpointDiff(BaseModel):
     tasks_only_a: list[str]
     tasks_only_b: list[str]
     tasks_shared: list[str]
+    common_ancestor_commit_id: Optional[uuid.UUID] = None
 
 
 class CompareResponse(BaseModel):
@@ -174,15 +176,108 @@ def _extract_text(item) -> str:
     return str(item)
 
 
+def _normalize_text(text: str) -> str:
+    """Lightweight normalization for compare shared-set matching.
+
+    Lowercase, strip non-alphanumeric characters (keep spaces), collapse
+    whitespace. Catches case and punctuation differences. This is not
+    semantic equality — two items that mean the same thing but share
+    no tokens ("use stdlib only" vs "no third-party runtime deps") will
+    still look different. Semantic match is a later build.
+    """
+    lowered = text.lower()
+    stripped = re.sub(r"[^a-z0-9 ]", "", lowered)
+    return " ".join(stripped.split())
+
+
 def _diff_lists(a: list, b: list) -> tuple[list[str], list[str], list[str]]:
-    """Return (only_in_a, only_in_b, in_both) comparing by normalised text."""
-    set_a = {_extract_text(x) for x in a}
-    set_b = {_extract_text(x) for x in b}
-    return (
-        sorted(set_a - set_b),
-        sorted(set_b - set_a),
-        sorted(set_a & set_b),
-    )
+    """Return (only_in_a, only_in_b, in_both) using normalized keys for
+    matching but returning the original strings.
+
+    Matching uses _normalize_text as the equivalence key. When two items
+    normalize to the same key, the A-side original wins (deterministic).
+    Items whose normalized form is empty (e.g. "---", "..." or whitespace
+    only) are treated as unmatchable and fall into only_a / only_b based
+    on their origin, never into shared.
+    """
+    a_items = [_extract_text(x) for x in a]
+    b_items = [_extract_text(x) for x in b]
+
+    a_norm: dict[str, str] = {}
+    a_unmatchable: list[str] = []
+    for item in a_items:
+        key = _normalize_text(item)
+        if not key:
+            a_unmatchable.append(item)
+        elif key not in a_norm:
+            a_norm[key] = item
+
+    b_norm: dict[str, str] = {}
+    b_unmatchable: list[str] = []
+    for item in b_items:
+        key = _normalize_text(item)
+        if not key:
+            b_unmatchable.append(item)
+        elif key not in b_norm:
+            b_norm[key] = item
+
+    a_keys = set(a_norm.keys())
+    b_keys = set(b_norm.keys())
+
+    only_a = sorted([a_norm[k] for k in (a_keys - b_keys)] + a_unmatchable)
+    only_b = sorted([b_norm[k] for k in (b_keys - a_keys)] + b_unmatchable)
+    shared = sorted(a_norm[k] for k in (a_keys & b_keys))
+
+    return only_a, only_b, shared
+
+
+def _find_common_ancestor(
+    a_id: uuid.UUID,
+    b_id: uuid.UUID,
+    db: Session,
+    max_depth: int = 1000,
+) -> Optional[uuid.UUID]:
+    """Find the lowest common ancestor of two checkpoints by walking
+    parent_commit_id chains.
+
+    Walk A's chain upward, collecting every ancestor id into a set, then
+    walk B's chain upward and return the first id that appears in A's set.
+    Returns None if the two checkpoints share no ancestor within max_depth.
+
+    max_depth bounds both walks so a corrupt parent cycle can't hang the
+    endpoint. Smriti histories are shallow in practice (dozens of commits
+    for a long-running project, not thousands), so 1000 is generous.
+
+    When a_id == b_id, the checkpoint is its own LCA — returns a_id.
+    """
+    a_ancestors: set[uuid.UUID] = set()
+    current: Optional[uuid.UUID] = a_id
+    for _ in range(max_depth):
+        if current is None:
+            break
+        if current in a_ancestors:
+            break  # cycle guard
+        a_ancestors.add(current)
+        commit = db.get(CommitModel, current)
+        if commit is None:
+            break
+        current = commit.parent_commit_id
+
+    current = b_id
+    seen_on_b: set[uuid.UUID] = set()
+    for _ in range(max_depth):
+        if current is None:
+            return None
+        if current in a_ancestors:
+            return current
+        if current in seen_on_b:
+            return None  # cycle guard
+        seen_on_b.add(current)
+        commit = db.get(CommitModel, current)
+        if commit is None:
+            return None
+        current = commit.parent_commit_id
+    return None
 
 
 # ── Fork endpoint ─────────────────────────────────────────────────────────────
@@ -305,6 +400,8 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
     commit_a = _get_commit(a_id, db)
     commit_b = _get_commit(b_id, db)
 
+    lca = _find_common_ancestor(commit_a.id, commit_b.id, db)
+
     dec_only_a, dec_only_b, dec_shared = _diff_lists(
         commit_a.decisions or [], commit_b.decisions or []
     )
@@ -347,6 +444,7 @@ def compare_checkpoints(a_id: uuid.UUID, b_id: uuid.UUID, db: Session = Depends(
             tasks_only_a=task_only_a,
             tasks_only_b=task_only_b,
             tasks_shared=task_shared,
+            common_ancestor_commit_id=lca,
         ),
     )
 

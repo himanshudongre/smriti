@@ -374,6 +374,104 @@ def test_compare_nonexistent_checkpoint(client):
     assert r.status_code == 404, r.text
 
 
+# ── Compare: common ancestor walk + normalized shared-set matching ────────────
+
+
+def test_compare_finds_direct_common_ancestor(client):
+    """LCA is computed when two checkpoints share a direct parent.
+
+    C1 on main. C2 on main (parent=C1). Fork from C1, commit C3 on the
+    fork (parent=C1). Compare C2 vs C3 -> LCA is C1.
+    """
+    repo_id = _create_repo(client, "LCA Direct")
+    session_id = _create_session(client, repo_id)
+    c1 = _commit(client, repo_id, session_id, "root")
+    _send(client, session_id, "turn 1")
+    c2 = _commit(client, repo_id, session_id, "c2 on main")
+
+    fork = _fork(client, repo_id, c1["id"], branch_name="branch-a").json()
+    fork_session_id = fork["session_id"]
+    _send(client, fork_session_id, "turn on fork")
+    c3 = _commit(client, repo_id, fork_session_id, "c3 on fork")
+
+    r = client.get(f"/api/v5/lineage/checkpoints/{c2['id']}/compare/{c3['id']}")
+    assert r.status_code == 200, r.text
+    diff = r.json()["diff"]
+    assert diff["common_ancestor_commit_id"] == c1["id"]
+
+
+def test_compare_finds_two_step_ancestor(client):
+    """LCA walks multiple parent steps up both chains.
+
+    C1 -> C2 -> C3 on main. Fork from C2, commit C4 on fork.
+    Compare C3 vs C4 -> LCA is C2 (two steps up from C3, one step from C4).
+    """
+    repo_id = _create_repo(client, "LCA Two Step")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "c1")
+    _send(client, session_id, "turn a")
+    c2 = _commit(client, repo_id, session_id, "c2")
+    _send(client, session_id, "turn b")
+    c3 = _commit(client, repo_id, session_id, "c3")
+
+    fork = _fork(client, repo_id, c2["id"], branch_name="branch-two").json()
+    fork_session_id = fork["session_id"]
+    _send(client, fork_session_id, "turn on fork")
+    c4 = _commit(client, repo_id, fork_session_id, "c4 on fork")
+
+    r = client.get(f"/api/v5/lineage/checkpoints/{c3['id']}/compare/{c4['id']}")
+    assert r.status_code == 200, r.text
+    diff = r.json()["diff"]
+    assert diff["common_ancestor_commit_id"] == c2["id"]
+
+
+def test_compare_returns_null_ancestor_for_unrelated_checkpoints(client):
+    """Checkpoints in separate spaces share no ancestor -> LCA is None."""
+    repo_a = _create_repo(client, "LCA Unrelated A")
+    session_a = _create_session(client, repo_a)
+    c_a = _commit(client, repo_a, session_a, "isolated a")
+
+    repo_b = _create_repo(client, "LCA Unrelated B")
+    session_b = _create_session(client, repo_b)
+    c_b = _commit(client, repo_b, session_b, "isolated b")
+
+    r = client.get(f"/api/v5/lineage/checkpoints/{c_a['id']}/compare/{c_b['id']}")
+    assert r.status_code == 200, r.text
+    diff = r.json()["diff"]
+    assert diff["common_ancestor_commit_id"] is None
+
+
+def test_compare_shared_set_matches_normalized(client):
+    """Shared-set matching ignores case + punctuation differences.
+
+    Two agents agreeing on the same commitment with slightly different
+    wording should show the overlap in shared. The A-side original is
+    the deterministic winner for the displayed shared value.
+    """
+    repo_id = _create_repo(client, "Shared Normalized")
+    session_id = _create_session(client, repo_id)
+    c_a = _commit(client, repo_id, session_id, "a",
+                  decisions=["Use stdlib only", "Prefer PostgreSQL", "Ship a CLI"])
+
+    fork = _fork(client, repo_id, c_a["id"], branch_name="variant").json()
+    fork_session_id = fork["session_id"]
+    _send(client, fork_session_id, "turn")
+    c_b = _commit(client, repo_id, fork_session_id, "b",
+                  decisions=["use STDLIB only.", "Prefer postgresql!", "Skip the CLI"])
+
+    r = client.get(f"/api/v5/lineage/checkpoints/{c_a['id']}/compare/{c_b['id']}")
+    assert r.status_code == 200, r.text
+    diff = r.json()["diff"]
+
+    # The two stdlib / postgresql commitments normalize equally and show
+    # up in shared with the A-side originals.
+    assert "Use stdlib only" in diff["decisions_shared"]
+    assert "Prefer PostgreSQL" in diff["decisions_shared"]
+    # "Ship a CLI" and "Skip the CLI" normalize differently, so they split.
+    assert "Ship a CLI" in diff["decisions_only_a"]
+    assert "Skip the CLI" in diff["decisions_only_b"]
+
+
 # ── Regression: existing sessions default to main branch ──────────────────────
 
 def test_existing_session_defaults_to_main_branch(client):
