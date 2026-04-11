@@ -168,14 +168,27 @@ def test_show_checkpoint_not_found(mock_client):
 def test_list_checkpoints_happy_path(mock_client):
     mock_client.resolve_space.return_value = _space_dict()
     mock_client.list_commits.return_value = [
-        _commit_dict(commit_hash="aaaa1111" * 8, message="First"),
-        _commit_dict(commit_hash="bbbb2222" * 8, message="Second"),
+        _commit_dict(
+            id="11111111-1111-4111-8111-111111111111",
+            commit_hash="aaaa1111" * 8,
+            message="First",
+        ),
+        _commit_dict(
+            id="22222222-2222-4222-8222-222222222222",
+            commit_hash="bbbb2222" * 8,
+            message="Second",
+        ),
     ]
 
     result = mcp_server.smriti_list_checkpoints(space="my-project")
 
     assert "First" in result
     assert "Second" in result
+    # Full UUIDs must be in the output so agents can pass them into
+    # smriti_fork / smriti_compare / smriti_restore without a second
+    # round-trip to the backend.
+    assert "11111111-1111-4111-8111-111111111111" in result
+    assert "22222222-2222-4222-8222-222222222222" in result
     mock_client.list_commits.assert_called_once_with("space-uuid", branch=None)
 
 

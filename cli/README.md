@@ -68,6 +68,8 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 - Destructive tools (`smriti_delete_space`, `smriti_delete_checkpoint`) have no per-tool confirmation prompt — the MCP host's tool-approval UI is the gate.
 - `smriti_create_checkpoint` always uses the extract path. Agents pass freeform markdown and Smriti's background LLM extracts the structured fields. Pass `dry_run=True` to preview the extracted payload before committing.
 - `smriti_create_checkpoint` does NOT auto-capture `project_root` (unlike the CLI, which uses cwd). MCP servers run in the host's arbitrary working directory, so cwd would plant garbage paths on every checkpoint. Pass `project_root="/absolute/path"` explicitly if you want that field populated.
+- **Protocol version.** The `mcp` SDK negotiates the protocol version on its own during the `initialize` handshake — you get whatever the installed `mcp` package and your host agree on, and that's fine. No Smriti code pins a version.
+- **Logging.** The SDK logs `Processing request of type …` at INFO on every tool call. `smriti-mcp` defaults the `mcp` logger to `WARNING` so host log panels stay readable. Set `SMRITI_MCP_LOG_LEVEL=INFO` (or `DEBUG`) in the host's MCP env block when you need to debug a transport issue.
 
 **Smoke-test the server without a host.** The `mcp` SDK ships with an Inspector UI:
 

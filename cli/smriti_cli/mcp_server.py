@@ -467,7 +467,18 @@ def smriti_delete_checkpoint(checkpoint_id: str, cascade: bool = False) -> str:
 
 
 def main() -> None:
-    """Entry point for the `smriti-mcp` console script. Runs over stdio."""
+    """Entry point for the `smriti-mcp` console script. Runs over stdio.
+
+    The `mcp` SDK emits an INFO line ("Processing request of type …") on
+    every tool call, which clutters host log panels during normal use.
+    Default the `mcp` logger to WARNING; set `SMRITI_MCP_LOG_LEVEL=INFO`
+    (or DEBUG) to re-enable verbose logging when debugging a transport
+    issue.
+    """
+    import logging
+
+    log_level = os.environ.get("SMRITI_MCP_LOG_LEVEL", "WARNING").upper()
+    logging.getLogger("mcp").setLevel(log_level)
     mcp.run(transport="stdio")
 
 

@@ -193,8 +193,16 @@ def format_commit_list(commits: list[dict]) -> str:
         created = _relative_time(c.get("created_at") or "")
         branch = c.get("branch_name") or "main"
         marker = "" if branch == "main" else f" (branch: {branch})"
+        # Include the full checkpoint UUID in parentheses right after the
+        # short hash. Humans skim past it; agents need it as a handle to
+        # pass into smriti_fork / smriti_compare / smriti_restore.
+        # Rendered when c["id"] is populated; omitted otherwise so legacy
+        # callers without ids still produce a clean line.
+        commit_id = c.get("id")
+        id_part = f" ({commit_id})" if commit_id else ""
         lines.append(
-            f"- `{_short_hash(c.get('commit_hash'))}` {c.get('message', 'Untitled')}"
+            f"- `{_short_hash(c.get('commit_hash'))}`{id_part} "
+            f"{c.get('message', 'Untitled')}"
             f" · {created}{marker}"
         )
     return "\n".join(lines) + "\n"
