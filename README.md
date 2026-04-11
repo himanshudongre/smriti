@@ -141,15 +141,16 @@ I initially built this thinking about chat, but the more I worked on it, the mor
 
 The concrete use case that drove this direction: working on a coding project and wanting to switch between different coding agents mid-project. Context reset every time. Markdown handoff files that broke down the moment reasoning branched. The strengths Smriti already had — checkpoints, restore, fork, compare, assumptions, artifacts, model interchangeability — mapped directly onto that pain.
 
-So Smriti now has three surfaces on the same core:
+So Smriti now has four surfaces on the same core:
 
 1. **The chat UI**: how a human reads, steers, and debugs shared reasoning state. Still the primary way I inspect what is happening in a project.
-2. **A CLI** (`smriti`): how a coding agent reads and writes the same reasoning state from a shell tool loop. Works from any host that can run a shell command.
-3. **An MCP server** (`smriti-mcp`): the same surface, wrapped as 12 MCP tools for hosts that speak the Model Context Protocol natively (Claude Code, Cursor, Windsurf). Agents call `smriti_state`, `smriti_create_checkpoint`, `smriti_fork`, etc. as structured tool calls instead of shelling out.
+2. **A CLI** (`smriti`): how a coding agent reads and writes the same reasoning state from a shell tool loop. Works from any host that can run a shell command. `smriti state` is multi-branch by default — it shows main plus active non-main branches plus a lightweight divergence signal when agents disagree on decisions.
+3. **An MCP server** (`smriti-mcp`): the same surface, wrapped as 13 MCP tools for hosts that speak the Model Context Protocol natively (Claude Code, Cursor, Windsurf). Agents call `smriti_state`, `smriti_create_checkpoint`, `smriti_fork`, etc. as structured tool calls instead of shelling out.
+4. **An agent skill pack**: a versioned markdown instruction file installed into an agent host's project directory (`.claude/skills/smriti/SKILL.md` for Claude Code, `AGENTS.md` for Codex). The skill pack teaches the agent *when* and *why* to use Smriti's tools — when to checkpoint, critically when NOT to checkpoint, when to fork, how to detect drift, and the explicit anti-patterns to reject. Install it once per project with `smriti skills install <target>` and Smriti becomes the agent's default reflex instead of a tool it has to remember to call.
 
-One project, one Smriti Space, multiple agents reading from and writing to the same structured state. Agents don't need to know about each other. They just need to know how to read the current state and write a checkpoint when they reach an inflection point.
+One project, one Smriti Space, multiple agents reading from and writing to the same structured state. Agents don't need to know about each other. They just need to (a) know how to read the current state and write a checkpoint at each inflection point, which is what the skill pack teaches, and (b) see each other's work on that state, which is what multi-branch `smriti state` makes visible.
 
-See `cli/README.md` for both surfaces. Quick taste:
+See `cli/README.md` for all three agent-facing surfaces (CLI, MCP, skill pack). Quick taste:
 
 ```bash
 smriti state my-project                                    # continuation brief
@@ -319,9 +320,9 @@ There is also a mock mode for trying the product without API keys.
 
 ## Where this is going
 
-The chat UI is not going away — it is how I read, steer, and debug what is happening. But the thing underneath the chat UI, the CLI, and the MCP server is a shared reasoning-state layer that any client can read from and write to. Five rounds of dogfood testing — Claude Code ↔ Codex, Codex ↔ Codex, and a full host-less protocol run — have exercised the basic handoff loop end to end. The CLI and the MCP server now ship from the same package with feature parity across 12 tools: spaces, checkpoints, fork, compare, restore, review, delete, and an LLM-backed extractor so agents can write checkpoints from freeform markdown instead of hand-crafted JSON.
+The chat UI is not going away — it is how I read, steer, and debug what is happening. But the thing underneath the chat UI, the CLI, the MCP server, and the skill pack is a shared reasoning-state layer that any client can read from and write to. Five rounds of dogfood testing exercised the basic handoff loop end to end; transport parity landed; the next gap was that agents didn't reliably know when or why to use the tools. That gap is what the skill pack closes — the workflow heuristics (when to checkpoint, when NOT to checkpoint, how to detect drift) live in the agent's system context as a versioned markdown instruction file installed into the project directory, and `smriti state` is multi-branch by default so the first command an agent runs on a shared project actually shows the other agents' work.
 
-What I care about right now: two different coding agents working on the same project, handing off cleanly between them via Smriti, and the receiving agent picking up where the sender left off without re-explaining context. That loop works. The questions I'm still chasing are shape questions — is this the right mental model, are these the right fields, does treating reasoning state as an explicit versioned object scale past the single-user case — not transport questions.
+What I care about right now: two different coding agents working on the same project, handing off cleanly through Smriti, surfacing their disagreements through the divergence signal when they diverge, and neither of them ever writing `HANDOFF.md`. When that holds reliably, Smriti is the default backend for multi-agent coding. The questions I'm still chasing are shape questions — is this the right mental model, are these the right checkpoint fields, does the pattern scale past single-user — not transport questions and not tool-fluency questions.
 
 ---
 

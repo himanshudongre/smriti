@@ -44,14 +44,14 @@ Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsu
 
 Restart the host and the `smriti_*` tools appear in the tool picker.
 
-**Available tools (12):**
+**Available tools (13):**
 
 | Tool | Purpose |
 |---|---|
 | `smriti_list_spaces` | List all spaces |
 | `smriti_create_space` | Create a new space |
 | `smriti_delete_space` | Delete a space and all its checkpoints |
-| `smriti_state` | Continuation brief for the current project state |
+| `smriti_state` | Multi-branch continuation brief for the current project state |
 | `smriti_list_checkpoints` | List checkpoints in a space (optional branch filter) |
 | `smriti_show_checkpoint` | Print a specific checkpoint as markdown |
 | `smriti_create_checkpoint` | Create a checkpoint from freeform markdown (via extractor) |
@@ -60,6 +60,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 | `smriti_restore` | Print a specific checkpoint as a continuation brief |
 | `smriti_fork` | Fork a new session from an existing checkpoint |
 | `smriti_compare` | Structured diff between two checkpoints |
+| `smriti_install_skill` | Return the Smriti agent skill pack for a host (`claude-code` / `codex`) |
 
 **Example.** In a Claude Code session with Smriti MCP connected, ask *"show me the current state of my-project"*. The agent calls `smriti_state(space="my-project")`, the MCP server hits the backend, pipes the result through the same `format_state_brief` formatter the CLI uses, and returns the continuation brief you'd otherwise get from `smriti state my-project` at the terminal — directly inside the chat context.
 
@@ -77,7 +78,45 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 mcp dev smriti_cli.mcp_server:mcp
 ```
 
-Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 12 entries, all prefixed `smriti_`) and try each tool interactively.
+Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 13 entries, all prefixed `smriti_`) and try each tool interactively.
+
+## Installing the Smriti skill pack
+
+The MCP server and CLI give an agent the *ability* to read and write reasoning state. They don't teach it *when* or *why*. Without explicit guidance, an agent dropped into a Smriti-enabled project will call a few tools, fail to reach for them at session start, and quietly fall back to writing `HANDOFF.md` — the exact pattern Smriti exists to replace. The skill pack closes that gap.
+
+A skill pack is a single versioned markdown file installed into the agent host's project directory. It lives in the agent's system context, so the heuristics are always in scope during a session instead of behind a docs link nobody opens. Two targets ship today:
+
+| Target | Default destination | Primary tool mode |
+|---|---|---|
+| `claude-code` | `./.claude/skills/smriti/SKILL.md` | MCP (`smriti_state(...)`) |
+| `codex`       | `./AGENTS.md`                      | CLI (`smriti state ...`) |
+
+Both targets render from the same source-of-truth template, so the workflow heuristics (when to checkpoint, when NOT to checkpoint, when to fork, how to detect drift) are identical across hosts — only the primary tool notation varies.
+
+**Install via the CLI:**
+
+```bash
+smriti skills list                              # show targets + template version
+smriti skills show claude-code                  # print the rendered content to stdout
+smriti skills install claude-code               # write to default destination
+smriti skills install claude-code --dry-run     # preview without writing
+smriti skills install codex --destination my-AGENTS.md   # override destination
+smriti skills install claude-code --force       # overwrite an existing same-version file
+```
+
+The installer is version-aware: it refuses to overwrite a destination whose installed version is at least as new as the template's version unless you pass `--force`. Older versions are upgraded in place with no flag needed.
+
+**Install from an MCP host.** Ask the agent directly: *"Install the Smriti skill pack for this project."* The agent calls `smriti_install_skill(target="claude-code")`, which returns the rendered markdown plus the suggested destination path. Unlike the CLI, the MCP tool does **not** write files — the MCP server lives in the host's arbitrary working directory and has no business planting files. The agent is expected to read the suggested destination from the tool output and write the file using its host's own file tools (Edit, Write, Bash).
+
+**What the skill pack teaches.** In order of weight:
+
+1. **Read state first.** Unconditional reflex at session start. Call `smriti_state` before reading any file or writing any code.
+2. **When to checkpoint.** At inflection points — decisions made, hypotheses rejected, sub-problems solved, handoffs imminent.
+3. **When NOT to checkpoint.** This is the load-bearing section and it gets equal weight to the previous one. Agents are told explicitly not to checkpoint after every small step, not to produce end-of-session blobs, not to treat commits as a save button, not to stack commits on inconsistent state, and not to re-checkpoint existing state. A three-question signal test and a concrete frequency target (2–4 checkpoints per 4-hour session) give the agent deterministic criteria for each call.
+4. **Drift detection.** Specific heuristics for noticing when the state brief disagrees with the agent's own work, and three correct responses (review, compare, surface to the human) — with an explicit prohibition on "quietly picking a side."
+5. **Anti-patterns.** A concise list of things to reject: `HANDOFF.md`, silent state reads, inconsistent `author_agent` tags, `/chat/send` from inside a tool loop.
+
+**Verifying it worked.** After `smriti skills install claude-code`, open Claude Code on the project and ask it to do work. A correctly-installed skill pack means the agent calls `smriti_state` unprompted at session start, says "Reading current state from Smriti." out loud, and never writes a `HANDOFF.md` no matter how long the session runs.
 
 ## Commands
 
@@ -86,9 +125,15 @@ smriti space list
 smriti space create <name> [--description "..."]
 smriti space delete <space> [-y]
 
-smriti state <space>                                     # continuation brief (full artifacts by default)
+smriti state <space>                                     # multi-branch continuation brief (full artifacts by default)
 smriti state <space> --preview                           # truncate artifacts to a short preview
+smriti state <space> --main-only                         # legacy single-HEAD path (pre-V4 behaviour)
 smriti state <space> --json                              # structured output
+
+smriti skills list                                       # list skill pack targets and template version
+smriti skills show <target>                              # print rendered skill pack to stdout
+smriti skills install <target>                           # write skill pack to target's default path
+smriti skills install <target> [--destination <path>] [--dry-run] [--force]
 
 smriti fork <checkpoint-id> [--branch <name>]            # new session from checkpoint
 smriti restore <checkpoint-id>                           # brief of a specific checkpoint
@@ -143,6 +188,8 @@ smriti state my-project
 ```
 
 From an MCP host, the agent calls `smriti_state(space="my-project")`. Either way you get the same markdown brief — objective, summary, decisions, assumptions, tasks, open questions, and full artifact content — rendered into the agent's context. This is the minimum set of facts the next agent needs to continue work.
+
+**Multi-branch by default.** If other agents are working on the same project on different branches, `smriti state` appends a concise `## Active branches` section listing up to 5 recent non-main branches (one line per branch, with author attribution), and a `## Divergence signal` section when any active branch disagrees with main on decisions. Both sections are elided cleanly when the project has no fork activity, so single-agent projects see output identical to the pre-V4 format. The divergence signal caps at the top 3 conflicting decisions per side per branch and points at `smriti compare` for the full diff — it stays digestible even on busy projects. Pass `--main-only` (CLI) or `main_only=True` (MCP) to fall back to the legacy single-HEAD view when a script needs the old shape.
 
 For a list of past checkpoints (with full UUIDs so you can feed them back into fork / compare / restore):
 

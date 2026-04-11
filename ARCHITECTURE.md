@@ -305,7 +305,7 @@ pivot, not an incremental change.
 |---|---|---|
 | `/api/v1` | Legacy | Transcript paste ingestion → session/artifact pipeline. Not part of current workflow. |
 | `/api/v2` | Partial | Space CRUD, checkpoint read by ID, checkpoint list by space. `CommitResponse` includes `assumptions` and `artifacts` so programmatic clients (CLI, agents) can read full checkpoints via this surface. |
-| `/api/v4` | Current | Chat sessions, message sending, provider management. The primary chat API. Also the canonical checkpoint write path (`POST /chat/commit`) because it accepts the full schema including `assumptions` and `artifacts`. |
+| `/api/v4` | Current | Chat sessions, message sending, provider management. The primary chat API. Also the canonical checkpoint write path (`POST /chat/commit`) because it accepts the full schema including `assumptions` and `artifacts`. Multi-branch continuation brief served from `GET /chat/spaces/{id}/state` — the agent-facing default; `GET /chat/spaces/{id}/head` remains as the main-only legacy endpoint. |
 | `/api/v5` | Current | Checkpoint drafting, review, fork, compare, lineage. Isolated from chat API by design. |
 
 V1 remains registered for compatibility but is not used by the frontend or CLI.
@@ -318,12 +318,20 @@ path. This allows different latency budgets and error handling strategies for ea
 
 ## Smriti as an agent-facing backend
 
-The REST API is the canonical interface to Smriti. The chat UI, the CLI, and
-the MCP server are all clients of the same model. Nothing in the core
-(checkpoints, assumptions, decisions, artifacts, fork, compare, review,
-extract) is specific to one surface.
+The REST API is the canonical interface to Smriti. The chat UI, the CLI, the
+MCP server, and the agent skill pack are all surfaces over the same model.
+Nothing in the core (checkpoints, assumptions, decisions, artifacts, fork,
+compare, review, extract) is specific to one surface.
 
-Three clients ship today:
+The four surfaces fall into two categories:
+
+- **Runtime surfaces** (CLI, MCP server, chat UI) — how an agent or human
+  *calls* Smriti. These are the HTTP clients talking to the same backend.
+- **Onboarding surface** (skill pack) — how an agent *learns* when and why
+  to call Smriti. Not an HTTP client; a versioned markdown instruction file
+  installed into the agent host's project directory.
+
+Surfaces:
 
 - **Chat UI** (`frontend/`) — the human inspection and steering surface.
   Reads and writes via V2/V4/V5 endpoints. Drives the live conversation runtime
@@ -331,31 +339,76 @@ Three clients ship today:
 - **CLI** (`cli/smriti_cli/main.py`, entry point `smriti`) — the programmatic
   surface for coding agents and scripts running in a shell tool loop.
   Reads via V2 (`GET /commits/{id}`, `GET /repos/{id}/commits`) and V4
-  (`GET /chat/spaces/{id}/head`). Writes via V4 (`POST /chat/commit`) with the
-  full schema including `assumptions`, `artifacts`, `project_root`, and
-  `author_agent`. Extracts structured fields from freeform markdown via V5
-  (`POST /checkpoint/extract`). Triggers review via V5
-  (`POST /checkpoint/{id}/review`). Drives fork / compare / restore via V5
-  lineage endpoints. Does not touch `/chat/send` — agents run their own
-  reasoning in their own context, using their own LLM provider. Smriti is
+  (`GET /chat/spaces/{id}/head` for main-only, or `GET /chat/spaces/{id}/state`
+  for the multi-branch continuation brief, which is the default). Writes via
+  V4 (`POST /chat/commit`) with the full schema including `assumptions`,
+  `artifacts`, `project_root`, and `author_agent`. Extracts structured fields
+  from freeform markdown via V5 (`POST /checkpoint/extract`). Triggers review
+  via V5 (`POST /checkpoint/{id}/review`). Drives fork / compare / restore
+  via V5 lineage endpoints. Does not touch `/chat/send` — agents run their
+  own reasoning in their own context, using their own LLM provider. Smriti is
   their shared memory, not their runtime.
 - **MCP server** (`cli/smriti_cli/mcp_server.py`, entry point `smriti-mcp`) —
-  the same surface wrapped as 12 MCP tools for hosts that speak the Model
+  the same surface wrapped as 13 MCP tools for hosts that speak the Model
   Context Protocol natively (Claude Code, Cursor, Windsurf). Stdio transport.
   Each tool is a thin shim: build a `SmritiClient`, call one or two methods,
   run the result through an existing formatter, return markdown. Feature
-  parity with the CLI modulo two deliberate differences: (1) MCP does not
+  parity with the CLI modulo three deliberate differences: (1) MCP does not
   auto-capture `project_root` from cwd because the MCP server runs in the
   host's arbitrary working directory, (2) destructive tools have no per-tool
-  confirmation prompt — the host's tool-approval UI is the gate. Shares the
-  formatters (`format_state_brief`, `format_checkpoint`, `format_commit_list`,
-  `format_compare_result`, etc.) with the CLI, so both transports produce
-  byte-identical output for the same backend response.
+  confirmation prompt — the host's tool-approval UI is the gate, (3) the
+  `smriti_install_skill` tool returns the rendered skill pack markdown rather
+  than writing a file, because the MCP server has no business planting files
+  in the host's arbitrary cwd. Shares the formatters with the CLI, so both
+  transports produce byte-identical output for the same backend response.
+- **Skill pack** (`cli/smriti_cli/skill_pack/`, CLI subcommand
+  `smriti skills install`, MCP tool `smriti_install_skill`) — the agent-
+  onboarding surface. A single versioned `template.md` renders for two
+  targets (`claude-code` → `.claude/skills/smriti/SKILL.md`, `codex` →
+  `AGENTS.md`) via a pure-function substituter. Workflow heuristics
+  (when to checkpoint, critically when NOT to checkpoint, when to fork,
+  how to detect drift) are identical across both targets by design; only
+  the primary tool notation varies. The renderer is version-aware and
+  refuses to overwrite a destination whose installed version is newer or
+  equal unless `--force` is passed. Tests assert that every anti-pattern
+  rule, the signal test, the frequency target, and the drift-detection
+  heuristics appear in the rendered output, so future template edits
+  cannot silently drop load-bearing content. Lives in the CLI package
+  for distribution (ships via the same `pip install -e ./cli`) but has
+  no runtime dependency on the HTTP client — rendering is entirely local.
+
+### Multi-branch state (`/api/v4/chat/spaces/{id}/state`)
+
+The CLI's `smriti state` and the MCP's `smriti_state` default to the multi-
+branch state endpoint rather than the older main-only `/head` endpoint.
+The endpoint returns a composite response in one round trip: the space
+header, main-branch HEAD metadata (same shape as `/head`), the full
+main-branch HEAD commit, a list of active non-main branches with their
+latest checkpoint metadata, and a lightweight divergence summary when any
+active branch disagrees with main on decisions.
+
+Hard caps are constants in the endpoint source: `ACTIVE_BRANCHES_CAP = 5`,
+`DIVERGENCE_BRANCHES_CAP = 2`, `DIVERGENCE_DECISIONS_CAP = 3`. These are
+not query parameters because the agent-facing contract is "digestible by
+default" — a caller who needs unbounded history should hit
+`/api/v5/lineage/spaces/{id}`, which is the detail surface.
+
+Divergence detection reuses `lineage._diff_lists` so matching stays
+consistent with `smriti compare` — decisions differing only in case or
+punctuation normalize to the same key and do not trigger false divergence
+signals. The two helper functions (`_get_active_branch_heads`,
+`_compute_space_divergence`) live alongside `_get_latest_commit` in
+`chat.py`; no new module.
+
+The legacy single-HEAD path is preserved behind `--main-only` / `main_only=True`
+for scripts that parsed the old `HeadResponse` shape.
 
 Agents interact with structured state (checkpoints) via the CLI or the MCP
 server. The chat UI and either agent-facing surface can be used simultaneously
 on the same project: the human steers and inspects, the agent reads and writes.
-Both see the same reasoning state.
+Both see the same reasoning state. The skill pack is what makes the agent's
+use of that state reflexive rather than something it has to re-derive at the
+start of every session.
 
 ---
 

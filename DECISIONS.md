@@ -282,6 +282,81 @@ provider. Smriti is their shared memory, not their runtime.
 This keeps the chat runtime focused on human-driven exploration, and keeps the
 agent surface narrow and composable.
 
+### Why skill packs are a first-class surface, not documentation
+
+After shipping the CLI and the MCP server, the next friction item from real
+agent sessions was not about the tools — it was about agents not reaching for
+them. An agent dropped into a Smriti-enabled project with 13 MCP tools
+available would call a few of them reactively, miss the reflex of reading
+state at session start, and quietly fall back to writing `HANDOFF.md` under
+context pressure because markdown handoff files are what the training data
+shows. The tools were technically reachable and operationally invisible.
+
+The options for closing this gap were (a) ship documentation and hope agents
+read it, (b) rely on richer tool docstrings and hope agents synthesize a
+workflow from them, or (c) ship a versioned instruction file into the agent
+host's project directory so the workflow heuristics live in the agent's
+system context during every session on that project.
+
+(a) is known not to work. (b) depends on agents generalizing from tool
+descriptions the way a human would — real agents don't, reliably, under
+context pressure. (c) is the skill pack.
+
+The skill pack is installed via `smriti skills install <target>`, which writes
+a single versioned markdown file to the target host's conventional project
+location (`.claude/skills/smriti/SKILL.md` for Claude Code, `AGENTS.md` for
+Codex). The content is a single source-of-truth `template.md` rendered
+per-target via a pure-function substituter — both targets share the same
+workflow heuristics; only the primary tool notation differs. Versioning is
+frontmatter-based and the installer refuses to overwrite a same-or-newer
+destination without `--force`.
+
+The most important content is Section 5, "When NOT to checkpoint," which gets
+equal weight to "When to checkpoint" on purpose. Without the anti-pattern
+section, agents either checkpoint reflexively (noise) or not at all (missed
+inflection points). A three-question signal test and a concrete frequency
+target (2-4 checkpoints per 4-hour session) give agents deterministic
+criteria for each call.
+
+Treating this as a first-class surface rather than a README means it versions
+alongside the code, ships via `pip install -e ./cli`, lives on the install
+path, and has a test suite that asserts the critical content cannot be
+silently dropped by future template edits.
+
+### Why smriti state is multi-branch by default
+
+The original `smriti state` (and `smriti_state`) returned only the main-branch
+HEAD. That was correct for single-agent use and silently wrong for
+multi-agent: on a shared project where Claude Code was on main and Codex was
+on a fork branch, the first command every well-behaved agent runs hid the
+other agent's work entirely. The skill pack teaches agents to call `state`
+unconditionally at session start — but if that call returns a blind spot, the
+skill pack is teaching the wrong reflex.
+
+Multi-branch is the new default. `GET /api/v4/chat/spaces/{id}/state` returns
+the main continuation brief unchanged at the top of the response, then
+appends a concise `## Active branches` section (one line per non-main branch
+with author attribution, capped at 5 branches) and a lightweight
+`## Divergence signal` section when any active branch disagrees with main on
+decisions. Divergence detection reuses `_normalize_text` and `_diff_lists`
+from the existing compare endpoint so matching stays consistent —
+decisions differing only in case or punctuation do not trigger false
+divergence.
+
+Both extensions are fully elided when their payload is empty, so a
+single-agent project with no forks sees output identical to the pre-build
+shape. Hard caps (5 branches, 2 divergent pairs per signal, 3 decisions per
+side per pair) keep the aggregate response digestible on busy projects. When
+the divergence signal fires, it names the specific conflicting decisions and
+points at `smriti compare` for the full diff; it does not reproduce the full
+diff inline, because the signal's job is to be noticeable, not complete.
+
+The legacy single-HEAD path is preserved behind `--main-only` (CLI) and
+`main_only=True` (MCP) so scripts that parsed the old shape still work.
+Nothing else changed: `/head` still exists, `get_head` still returns the
+same shape, `format_state_brief` accepts the new `space_state` kwarg as
+optional so existing callers are unaffected.
+
 ---
 
 ## Open questions and deferred decisions
