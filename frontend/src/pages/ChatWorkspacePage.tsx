@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  ApiError,
   createChatCommit,
   createChatSessionGeneric,
+  deleteCommit,
   getChatSessionGeneric,
   getRepo,
   getRepos,
@@ -39,10 +41,12 @@ import {
   FolderInput,
   RotateCcw,
   Paperclip,
+  Trash2,
   X,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
+import { ConfirmDeleteModal, type Dependents as DependentsPayload } from '../components/ConfirmDeleteModal';
 
 // ── Provider / model config ───────────────────────────────────────────────────
 
@@ -831,6 +835,7 @@ function MemorySpacePanel({
   providerStatus,
   onMount,
   onFork,
+  onDeleteCheckpoint,
   onClose,
 }: {
   repoId: string;
@@ -843,6 +848,7 @@ function MemorySpacePanel({
   providerStatus: Record<string, ProviderStatus> | null;
   onMount: (info: { id: string; message: string } | null) => void;
   onFork: (checkpoint: Commit) => void;
+  onDeleteCheckpoint: (checkpoint: Commit) => void;
   onClose: () => void;
 }) {
   const navigate = useNavigate();
@@ -1050,6 +1056,14 @@ function MemorySpacePanel({
                         >
                           <GitBranch className="w-3 h-3" />
                           Fork
+                        </button>
+                        <button
+                          onClick={() => onDeleteCheckpoint(c)}
+                          title="Delete this checkpoint"
+                          className="text-xs px-3 py-1.5 rounded-md border border-gray-800 text-gray-500 hover:text-red-300 hover:border-red-500/40 hover:bg-red-900/20 transition-colors flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -1316,6 +1330,11 @@ export function ChatWorkspacePage() {
   const [mountedAtSeq, setMountedAtSeq] = useState<number | null>(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [forkTarget, setForkTarget] = useState<Commit | null>(null);
+  // Delete-checkpoint flow state. `deleteCheckpointTarget` opens the modal;
+  // `deleteCheckpointDependents` is populated after a 409 response to show
+  // the cascade-confirm second step.
+  const [deleteCheckpointTarget, setDeleteCheckpointTarget] = useState<Commit | null>(null);
+  const [deleteCheckpointDependents, setDeleteCheckpointDependents] = useState<DependentsPayload | null>(null);
   // Artifacts captured from messages, passed to CommitModal when opening
   const [pendingArtifacts, setPendingArtifacts] = useState<Artifact[]>([]);
 
@@ -2051,6 +2070,10 @@ export function ChatWorkspacePage() {
                 }
               }}
               onFork={checkpoint => setForkTarget(checkpoint)}
+              onDeleteCheckpoint={checkpoint => {
+                setDeleteCheckpointTarget(checkpoint);
+                setDeleteCheckpointDependents(null);
+              }}
               onClose={() => setShowHistoryPanel(false)}
             />
           )}
@@ -2064,6 +2087,48 @@ export function ChatWorkspacePage() {
               onForked={newSessionId => {
                 setForkTarget(null);
                 navigate(`/sessions/${newSessionId}`);
+              }}
+            />
+          )}
+
+          {/* ── Delete Checkpoint Modal ───────────────────────────────── */}
+          {deleteCheckpointTarget && (
+            <ConfirmDeleteModal
+              title={`Delete checkpoint '${deleteCheckpointTarget.commit_hash.slice(0, 7)}'?`}
+              body={`"${deleteCheckpointTarget.message}"\n\nDescendant commits and forked sessions will block this delete unless you confirm cascade.`}
+              dependents={deleteCheckpointDependents}
+              onClose={() => {
+                setDeleteCheckpointTarget(null);
+                setDeleteCheckpointDependents(null);
+              }}
+              onConfirm={async (cascade) => {
+                try {
+                  await deleteCommit(deleteCheckpointTarget.id, { cascade });
+                  if (mountedCheckpointId === deleteCheckpointTarget.id) {
+                    setMountedCheckpointId(null);
+                    setMountedCheckpointLabel(null);
+                    setMountedAtSeq(null);
+                  }
+                  const wasForkSource = forkSourceCommit?.id === deleteCheckpointTarget.id;
+                  setDeleteCheckpointTarget(null);
+                  setDeleteCheckpointDependents(null);
+                  setCheckpointRefreshKey(k => k + 1);
+                  if (wasForkSource) {
+                    navigate('/');
+                  }
+                } catch (e) {
+                  if (
+                    e instanceof ApiError &&
+                    e.status === 409 &&
+                    e.detail &&
+                    typeof e.detail === 'object' &&
+                    'dependents' in e.detail
+                  ) {
+                    setDeleteCheckpointDependents((e.detail as { dependents: DependentsPayload }).dependents);
+                  } else {
+                    throw e;
+                  }
+                }
               }}
             />
           )}

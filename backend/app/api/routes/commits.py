@@ -3,15 +3,30 @@ import json
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import RepoModel, CommitModel
+from app.db.models import RepoModel, CommitModel, ChatSession
 from app.api.routes.repos import CommitResponse, DEMO_USER_ID
 
 router = APIRouter(prefix="/commits", tags=["commits"])
+
+
+class CheckpointDependent(BaseModel):
+    kind: str  # "child_commit" | "forked_session" | "seeded_session"
+    id: uuid.UUID
+    label: str
+
+
+class CheckpointDependentsResponse(BaseModel):
+    checkpoint_id: uuid.UUID
+    child_commits: list[CheckpointDependent]
+    forked_sessions: list[CheckpointDependent]
+    seeded_sessions: list[CheckpointDependent]
+    blocking_count: int
 
 class CommitCreate(BaseModel):
     repo_id: str
@@ -88,9 +103,135 @@ def get_commit(commit_id: uuid.UUID, db: Session = Depends(get_db)):
     commit = db.get(CommitModel, commit_id)
     if not commit:
         raise HTTPException(status_code=404, detail="Commit not found")
-        
+
     repo = db.get(RepoModel, commit.repo_id)
     if not repo or repo.user_id != DEMO_USER_ID:
         raise HTTPException(status_code=404, detail="Commit/Repo not found")
-        
+
     return commit
+
+
+def _dependents_payload(
+    commit_id: uuid.UUID,
+    child_commits: list[CommitModel],
+    forks: list[ChatSession],
+    seeds: list[ChatSession],
+) -> CheckpointDependentsResponse:
+    return CheckpointDependentsResponse(
+        checkpoint_id=commit_id,
+        child_commits=[
+            CheckpointDependent(
+                kind="child_commit",
+                id=c.id,
+                label=f"{c.commit_hash[:7]} — {(c.message or '')[:60]}",
+            )
+            for c in child_commits
+        ],
+        forked_sessions=[
+            CheckpointDependent(
+                kind="forked_session",
+                id=s.id,
+                label=f"{s.branch_name} — {(s.title or 'Untitled')[:60]}",
+            )
+            for s in forks
+        ],
+        seeded_sessions=[
+            CheckpointDependent(
+                kind="seeded_session",
+                id=s.id,
+                label=(s.title or "Untitled")[:60],
+            )
+            for s in seeds
+        ],
+        blocking_count=len(child_commits) + len(forks),
+    )
+
+
+def _collect_descendant_subtree(root_id: uuid.UUID, db: Session) -> list[CommitModel]:
+    """BFS down the parent_commit_id DAG; return deepest-first so SET NULL
+    never fires on a live row during cascade delete."""
+    frontier = [root_id]
+    visited: set[uuid.UUID] = set()
+    ordered: list[CommitModel] = []
+    while frontier:
+        next_frontier = []
+        for pid in frontier:
+            children = db.scalars(
+                select(CommitModel).where(CommitModel.parent_commit_id == pid)
+            ).all()
+            for child in children:
+                if child.id in visited:
+                    continue
+                visited.add(child.id)
+                ordered.append(child)
+                next_frontier.append(child.id)
+        frontier = next_frontier
+    return list(reversed(ordered))  # deepest first
+
+
+@router.delete("/{commit_id}", status_code=204)
+def delete_commit(
+    commit_id: uuid.UUID,
+    cascade: bool = Query(
+        False,
+        description="Also delete descendant commits and forked sessions",
+    ),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete a checkpoint. Refuses if it has child commits or forked sessions
+    unless cascade=true is passed."""
+    commit = db.get(CommitModel, commit_id)
+    if not commit:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+    repo = db.get(RepoModel, commit.repo_id)
+    if not repo or repo.user_id != DEMO_USER_ID:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+    child_commits = db.scalars(
+        select(CommitModel).where(CommitModel.parent_commit_id == commit_id)
+    ).all()
+    forked_sessions = db.scalars(
+        select(ChatSession).where(ChatSession.forked_from_checkpoint_id == commit_id)
+    ).all()
+    seeded_sessions = db.scalars(
+        select(ChatSession).where(
+            ChatSession.seeded_commit_id == commit_id,
+            ChatSession.forked_from_checkpoint_id != commit_id,
+        )
+    ).all()
+
+    blocking_count = len(child_commits) + len(forked_sessions)
+
+    if blocking_count > 0 and not cascade:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"Cannot delete checkpoint {commit.commit_hash[:7]}: "
+                    f"it has {len(child_commits)} child commit(s) and "
+                    f"{len(forked_sessions)} forked session(s). "
+                    f"Re-send with ?cascade=true to delete the subtree."
+                ),
+                "dependents": _dependents_payload(
+                    commit_id, list(child_commits), list(forked_sessions), list(seeded_sessions)
+                ).model_dump(mode="json"),
+            },
+        )
+
+    if cascade:
+        descendants = _collect_descendant_subtree(commit_id, db)  # deepest first
+        ids_in_subtree = {c.id for c in descendants} | {commit_id}
+        dep_forks = db.scalars(
+            select(ChatSession).where(
+                ChatSession.forked_from_checkpoint_id.in_(ids_in_subtree)
+            )
+        ).all()
+        for sess in dep_forks:
+            db.delete(sess)  # cascades to TurnEvent
+        for descendant in descendants:
+            db.delete(descendant)
+
+    db.delete(commit)
+    db.commit()
+    return Response(status_code=204)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -7,16 +7,20 @@ import {
   GitCommit,
   Loader2,
   MessageSquare,
+  MoreVertical,
   Plus,
   RotateCcw,
   Settings2,
+  Trash2,
 } from 'lucide-react';
 import {
+  deleteRepo,
   getRecentSessionsGeneric,
   getRepos,
   getSpaceHead,
 } from '../api/client';
 import type { ChatSession, HeadState, Repo } from '../types';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
 /**
  * Landing page focused on resume.
@@ -35,6 +39,43 @@ export function WorkspaceOverviewPage() {
   const [headBySpace, setHeadBySpace] = useState<Record<string, HeadState>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Repo | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the kebab menu when clicking anywhere outside of it.
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (!menuContainerRef.current) return;
+      if (!menuContainerRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenuId]);
+
+  const refreshWorkspace = async () => {
+    const [s, r] = await Promise.all([getRecentSessionsGeneric(), getRepos()]);
+    setSessions(s);
+    setRepos(r);
+    const repoIds = Array.from(
+      new Set(s.map(sess => sess.repo_id).filter((id): id is string => !!id)),
+    ).slice(0, 8);
+    const heads = await Promise.all(
+      repoIds.map(id =>
+        getSpaceHead(id)
+          .then(h => [id, h] as const)
+          .catch(() => null),
+      ),
+    );
+    const headMap: Record<string, HeadState> = {};
+    for (const entry of heads) {
+      if (entry) headMap[entry[0]] = entry[1];
+    }
+    setHeadBySpace(headMap);
+  };
 
   useEffect(() => {
     (async () => {
@@ -169,6 +210,10 @@ export function WorkspaceOverviewPage() {
                   <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-3">
                     Pick up where you left off
                   </p>
+                  <div
+                    className="relative"
+                    ref={openMenuId === resumeRepo.id ? menuContainerRef : undefined}
+                  >
                   <button
                     onClick={() => handleOpenSession(resumeSession.id)}
                     className="w-full text-left border border-purple-500/30 bg-gradient-to-br from-purple-900/10 to-transparent rounded-xl p-6 hover:border-purple-500/50 hover:from-purple-900/20 transition-colors group"
@@ -226,6 +271,32 @@ export function WorkspaceOverviewPage() {
                         )}
                     </div>
                   </button>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === resumeRepo.id ? null : resumeRepo.id);
+                      }}
+                      className="absolute top-4 right-4 p-1.5 rounded hover:bg-zinc-800 text-gray-600 hover:text-gray-300 transition-colors"
+                      title="Space actions"
+                      aria-label="Space actions"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {openMenuId === resumeRepo.id && (
+                      <div className="absolute top-12 right-3 z-20 bg-zinc-950 border border-gray-800 rounded-lg shadow-xl py-1 min-w-[140px]">
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            setOpenMenuId(null);
+                            setDeleteTarget(resumeRepo);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" /> Delete space
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </section>
               ) : sessions.length > 0 ? (
                 // Fallback: no checkpointed session to resume, but sessions exist
@@ -265,36 +336,66 @@ export function WorkspaceOverviewPage() {
                       const head = headBySpace[id];
                       const latestSession = sessions.find(s => s.repo_id === id);
                       return (
-                        <button
+                        <div
                           key={id}
-                          onClick={() =>
-                            latestSession
-                              ? handleOpenSession(latestSession.id)
-                              : handleNewSession()
-                          }
-                          className="text-left border border-gray-800 bg-zinc-900/30 rounded-lg p-4 hover:bg-zinc-900/50 hover:border-gray-700 transition-colors"
+                          className="relative"
+                          ref={openMenuId === id ? menuContainerRef : undefined}
                         >
-                          <div className="flex items-center gap-2 mb-1">
-                            <FolderOpen className="w-3 h-3 text-gray-600 flex-shrink-0" />
-                            <span className="text-sm text-gray-200 truncate flex-1">
-                              {repo.name}
-                            </span>
-                          </div>
-                          {head?.summary ? (
-                            <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2 mt-1">
-                              {head.summary}
-                            </p>
-                          ) : (
-                            <p className="text-[11px] text-gray-700 italic mt-1">
-                              No checkpoints yet
-                            </p>
+                          <button
+                            onClick={() =>
+                              latestSession
+                                ? handleOpenSession(latestSession.id)
+                                : handleNewSession()
+                            }
+                            className="w-full text-left border border-gray-800 bg-zinc-900/30 rounded-lg p-4 hover:bg-zinc-900/50 hover:border-gray-700 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 mb-1 pr-5">
+                              <FolderOpen className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                              <span className="text-sm text-gray-200 truncate flex-1">
+                                {repo.name}
+                              </span>
+                            </div>
+                            {head?.summary ? (
+                              <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2 mt-1">
+                                {head.summary}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-gray-700 italic mt-1">
+                                No checkpoints yet
+                              </p>
+                            )}
+                            {latestSession && (
+                              <p className="text-[10px] text-gray-700 mt-2">
+                                {formatAgo(latestSession.updated_at)}
+                              </p>
+                            )}
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setOpenMenuId(openMenuId === id ? null : id);
+                            }}
+                            className="absolute top-3 right-3 p-1 rounded hover:bg-zinc-800 text-gray-600 hover:text-gray-300 transition-colors"
+                            title="Space actions"
+                            aria-label="Space actions"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                          {openMenuId === id && (
+                            <div className="absolute top-10 right-2 z-20 bg-zinc-950 border border-gray-800 rounded-lg shadow-xl py-1 min-w-[140px]">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(null);
+                                  setDeleteTarget(repo);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" /> Delete space
+                              </button>
+                            </div>
                           )}
-                          {latestSession && (
-                            <p className="text-[10px] text-gray-700 mt-2">
-                              {formatAgo(latestSession.updated_at)}
-                            </p>
-                          )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -322,6 +423,19 @@ export function WorkspaceOverviewPage() {
           )}
         </div>
       </main>
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          title={`Delete space '${deleteTarget.name}'?`}
+          body="This will permanently delete the space, all of its checkpoints, sessions, and turns. This cannot be undone."
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            await deleteRepo(deleteTarget.id);
+            setDeleteTarget(null);
+            await refreshWorkspace();
+          }}
+        />
+      )}
     </div>
   );
 }

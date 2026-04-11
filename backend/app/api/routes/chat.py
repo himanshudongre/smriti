@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -405,6 +405,22 @@ def list_turns_generic(session_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Session not found")
     stmt = select(TurnEvent).where(TurnEvent.session_id == session_id).order_by(TurnEvent.sequence_number)
     return db.scalars(stmt).all()
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_session_generic(session_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    """Delete a chat session and cascade to its turn events. Commits authored
+    by this session are preserved (they are owned by the space, not the session)."""
+    session = db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.repo_id is not None:
+        repo = db.get(RepoModel, session.repo_id)
+        if not repo or repo.user_id != DEMO_USER_ID:
+            raise HTTPException(status_code=404, detail="Session not found")
+    db.delete(session)
+    db.commit()
+    return Response(status_code=204)
 
 
 class AttachSessionRequest(BaseModel):

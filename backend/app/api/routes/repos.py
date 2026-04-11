@@ -4,7 +4,7 @@ from typing import Annotated
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -127,3 +127,13 @@ def get_latest_commit(repo_id: uuid.UUID, branch: str = "main", db: Session = De
     if not commit:
         raise HTTPException(status_code=404, detail="No commits found for this repo/branch")
     return commit
+
+@router.delete("/{repo_id}", status_code=204)
+def delete_repo(repo_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    """Delete a space and cascade to all its commits, sessions, and turns."""
+    repo = db.get(RepoModel, repo_id)
+    if not repo or repo.user_id != DEMO_USER_ID:
+        raise HTTPException(status_code=404, detail="Repo not found")
+    db.delete(repo)
+    db.commit()
+    return Response(status_code=204)

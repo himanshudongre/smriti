@@ -21,9 +21,10 @@ DEFAULT_API_URL = "http://localhost:8000"
 class SmritiError(Exception):
     """Raised for any API error or unreachable backend."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, detail: Any = None):
         super().__init__(message)
         self.status = status
+        self.detail = detail
 
 
 class SmritiClient:
@@ -53,14 +54,24 @@ class SmritiClient:
             raise SmritiError(f"Request to {url} timed out after {self.timeout}s")
 
         if not resp.ok:
-            detail = None
+            detail_obj: Any = None
+            message: str
             try:
-                detail = resp.json().get("detail")
+                detail_obj = resp.json().get("detail")
             except Exception:
-                detail = resp.text[:200]
+                detail_obj = None
+                message = resp.text[:200]
+            else:
+                if isinstance(detail_obj, str):
+                    message = detail_obj
+                elif isinstance(detail_obj, dict) and "message" in detail_obj:
+                    message = str(detail_obj.get("message"))
+                else:
+                    message = str(detail_obj) if detail_obj is not None else ""
             raise SmritiError(
-                f"{method} {path} failed: HTTP {resp.status_code} — {detail}",
+                f"{method} {path} failed: HTTP {resp.status_code} — {message}",
                 status=resp.status_code,
+                detail=detail_obj,
             )
 
         if resp.status_code == 204 or not resp.content:
@@ -81,6 +92,9 @@ class SmritiClient:
             "/api/v2/repos",
             json={"name": name, "description": description},
         )
+
+    def delete_space(self, space_id: str) -> None:
+        self._request("DELETE", f"/api/v2/repos/{space_id}")
 
     def resolve_space(self, name_or_id: str) -> dict:
         """Look up a space by UUID or by name. Returns the full space dict.
@@ -140,6 +154,13 @@ class SmritiClient:
 
     def review_checkpoint(self, commit_id: str) -> dict:
         return self._request("POST", f"/api/v5/checkpoint/{commit_id}/review")
+
+    def delete_commit(self, commit_id: str, cascade: bool = False) -> None:
+        params = {"cascade": "true"} if cascade else None
+        self._request("DELETE", f"/api/v2/commits/{commit_id}", params=params)
+
+    def delete_session(self, session_id: str) -> None:
+        self._request("DELETE", f"/api/v4/chat/sessions/{session_id}")
 
     # ── sessions (used internally by CLI) ──────────────────────────────────
 

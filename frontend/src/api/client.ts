@@ -2,6 +2,34 @@
 
 import type { Artifacts, ContextPack, Session, TargetTool } from '../types';
 
+/**
+ * Error thrown from any API helper on non-2xx responses.
+ *
+ * `detail` is the parsed `detail` field from the backend's error body when
+ * it is present. Some endpoints (notably `DELETE /api/v2/commits/{id}`) return
+ * structured details like `{ message, dependents }` so the UI can render a
+ * second-step cascade confirmation.
+ */
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+  constructor(message: string, status: number, detail: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+function _errorMessageFromDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const msg = (detail as { message: unknown }).message;
+    if (typeof msg === 'string') return msg;
+  }
+  return fallback;
+}
+
 const BASE_URL = '/api/v1';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -10,9 +38,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = body?.detail;
+    throw new ApiError(
+      _errorMessageFromDetail(detail, `HTTP ${res.status}`),
+      res.status,
+      detail,
+    );
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -59,9 +93,15 @@ async function requestV2<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = body?.detail;
+    throw new ApiError(
+      _errorMessageFromDetail(detail, `HTTP ${res.status}`),
+      res.status,
+      detail,
+    );
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -167,9 +207,15 @@ async function requestV4<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = body?.detail;
+    throw new ApiError(
+      _errorMessageFromDetail(detail, `HTTP ${res.status}`),
+      res.status,
+      detail,
+    );
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -280,9 +326,15 @@ async function requestV5<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    const detail = body?.detail;
+    throw new ApiError(
+      _errorMessageFromDetail(detail, `HTTP ${res.status}`),
+      res.status,
+      detail,
+    );
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -362,5 +414,32 @@ export async function reviewCheckpoint(checkpointId: string): Promise<import('..
   return requestV5<import('../types').CheckpointReviewResponse>(`/checkpoint/${checkpointId}/review`, {
     method: 'POST',
   });
+}
+
+// ── Delete endpoints ─────────────────────────────────────────────────────────
+
+/** Delete a space and cascade to all its checkpoints, sessions, and turns. */
+export async function deleteRepo(repoId: string): Promise<void> {
+  return requestV2<void>(`/repos/${repoId}`, { method: 'DELETE' });
+}
+
+/**
+ * Delete a checkpoint. Without cascade the backend refuses with 409 if the
+ * checkpoint has child commits or forked sessions, and the ApiError.detail
+ * payload will contain { message, dependents } that the UI can use to render
+ * a second-step cascade confirmation.
+ */
+export async function deleteCommit(
+  commitId: string,
+  opts?: { cascade?: boolean },
+): Promise<void> {
+  const qs = opts?.cascade ? '?cascade=true' : '';
+  return requestV2<void>(`/commits/${commitId}${qs}`, { method: 'DELETE' });
+}
+
+/** Delete a chat session. Cascades to turn events; commits authored by the
+ * session remain (they are owned by the space). */
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  return requestV4<void>(`/chat/sessions/${sessionId}`, { method: 'DELETE' });
 }
 
