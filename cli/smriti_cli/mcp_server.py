@@ -455,6 +455,56 @@ def smriti_delete_space(space: str) -> str:
 
 
 @mcp.tool()
+def smriti_install_skill(target: str) -> str:
+    """Return the Smriti agent skill pack for an agent target.
+
+    The skill pack is a versioned markdown file that teaches the
+    agent when and why to use Smriti's tools — when to checkpoint
+    (and critically, when NOT to checkpoint), when to fork, when to
+    review, how to detect drift, and the explicit anti-patterns to
+    reject (including "don't write HANDOFF.md when a Smriti space
+    exists"). Treat this as onboarding for the agent — installing it
+    into the project's host should make Smriti usage reflexive
+    rather than something the agent has to reason through each
+    call.
+
+    IMPORTANT: unlike the CLI install command, this MCP tool does
+    NOT write any files. The MCP server runs in the host's
+    arbitrary working directory and has no business planting files
+    on disk without the host's file-system tool approval. The tool
+    returns the rendered markdown inside a fenced code block; the
+    agent is expected to read the suggested destination from the
+    tool's output and write the file using its host's own file
+    tools (Edit, Write, Bash, etc.). This keeps the MCP server
+    read-only from the host's perspective.
+
+    The same content renders for each target — only the primary
+    tool notation differs (MCP tool calls for claude-code, shell
+    commands for codex).
+
+    Args:
+        target: "claude-code" or "codex".
+    """
+    from .skill_pack import get_target, render
+
+    try:
+        target_obj = get_target(target)
+        content = render(target)
+    except ValueError as e:
+        raise SmritiToolError(str(e))
+
+    return (
+        f"# Smriti skill pack for {target_obj.display_name}\n\n"
+        f"**Suggested destination (relative to project root):** "
+        f"`{target_obj.default_destination}`\n\n"
+        f"Write the markdown block below to that path using your "
+        f"host's file tools. Re-run this tool whenever the skill "
+        f"pack version changes.\n\n"
+        f"```markdown\n{content}\n```\n"
+    )
+
+
+@mcp.tool()
 def smriti_delete_checkpoint(checkpoint_id: str, cascade: bool = False) -> str:
     """Delete a checkpoint.
 

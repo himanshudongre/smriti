@@ -639,3 +639,50 @@ def test_delete_checkpoint_not_found(mock_client):
         mcp_server.smriti_delete_checkpoint(checkpoint_id="ghost")
 
     mock_client.delete_commit.assert_not_called()
+
+
+# ── smriti_install_skill ───────────────────────────────────────────────
+
+
+def test_install_skill_claude_code_returns_markdown():
+    """The tool returns a markdown block with the rendered Claude Code
+    skill pack and a pointer to the suggested destination path. It
+    does NOT touch the client — the renderer is entirely local."""
+    result = mcp_server.smriti_install_skill(target="claude-code")
+
+    assert "Claude Code" in result
+    assert ".claude/skills/smriti/SKILL.md" in result
+    # Rendered content is wrapped in a fenced markdown block for the
+    # agent to write via its host's file tools.
+    assert "```markdown" in result
+    # MCP-primary notation is in the body.
+    assert "smriti_state(" in result
+    # The "When NOT to checkpoint" section must make it through.
+    assert "after every small step" in result.lower()
+
+
+def test_install_skill_codex_returns_markdown():
+    """Codex target uses CLI-primary notation."""
+    result = mcp_server.smriti_install_skill(target="codex")
+
+    assert "Codex" in result
+    assert "AGENTS.md" in result
+    assert "smriti state " in result
+    # And the MCP-primary notation is absent.
+    assert "smriti_state(space" not in result
+
+
+def test_install_skill_unknown_target_raises():
+    """Unknown target → SmritiToolError with the known targets listed."""
+    with pytest.raises(SmritiToolError, match="Unknown skill pack target"):
+        mcp_server.smriti_install_skill(target="windsurf-skill")
+
+
+def test_install_skill_does_not_touch_client(mock_client):
+    """Skill pack rendering is fully local; the tool must not call
+    any SmritiClient method. Regression guard against accidentally
+    turning the tool into a network call."""
+    mcp_server.smriti_install_skill(target="claude-code")
+
+    # No method on the mocked client should have been called.
+    assert mock_client.method_calls == []

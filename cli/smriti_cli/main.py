@@ -433,6 +433,126 @@ def cmd_compare(client: SmritiClient, args: argparse.Namespace) -> None:
         print(format_compare_result(result, full_artifacts=args.full_artifacts), end="")
 
 
+# ── skills subcommand handlers ──────────────────────────────────────────────
+
+
+def cmd_skills_list(client: SmritiClient, args: argparse.Namespace) -> None:
+    """List available skill pack targets and the template version.
+
+    Does not talk to the backend — the skill pack is a local package
+    resource. The `client` arg is unused but kept for signature
+    uniformity with the other command handlers.
+    """
+    from .skill_pack import get_version, list_targets
+
+    version = get_version()
+    targets = list_targets()
+
+    if args.json:
+        _print_json({
+            "version": version,
+            "targets": [
+                {
+                    "key": t.key,
+                    "display_name": t.display_name,
+                    "default_destination": str(t.default_destination),
+                    "primary_mode": t.primary_mode,
+                    "description": t.description,
+                }
+                for t in targets
+            ],
+        })
+        return
+
+    print(f"Smriti skill pack v{version}")
+    print()
+    print("Available targets:")
+    for t in targets:
+        print(f"  {t.key:<14} {t.description}")
+        print(f"  {'':14} → {t.default_destination}")
+    print()
+    print("Install with: smriti skills install <target>")
+
+
+def cmd_skills_show(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Print the rendered skill pack for a target to stdout. Useful for
+    piping to a custom location: `smriti skills show codex > my-AGENTS.md`.
+    """
+    from .skill_pack import render
+
+    try:
+        content = render(args.target)
+    except ValueError as e:
+        _fail(f"error: {e}")
+        return
+    print(content, end="")
+
+
+def cmd_skills_install(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Install the rendered skill pack for a target.
+
+    Writes to the target's default destination unless --destination
+    overrides. Refuses to overwrite an existing same-or-newer version
+    without --force. --dry-run returns the rendered content without
+    touching disk.
+    """
+    from pathlib import Path
+
+    from .skill_pack import install
+
+    destination = Path(args.destination) if args.destination else None
+
+    try:
+        result = install(
+            args.target,
+            destination=destination,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
+    except ValueError as e:
+        _fail(f"error: {e}")
+        return
+
+    if args.json:
+        _print_json({
+            "target": result.target.key,
+            "destination": str(result.destination),
+            "action": result.action,
+            "version": result.version,
+            "previous_version": result.previous_version,
+        })
+        return
+
+    if result.action == "dry_run":
+        print(
+            f"Dry run — would write {result.destination} "
+            f"(version {result.version}, not creating)."
+        )
+        print()
+        print(result.content, end="")
+        return
+
+    if result.action == "skipped":
+        msg = (
+            f"Skipped: {result.destination} already has skill pack version "
+            f"{result.previous_version} (template is {result.version}). "
+            f"Use --force to overwrite."
+        )
+        _fail(msg)
+        return
+
+    verb = "Overwrote" if result.action == "overwritten" else "Installed"
+    prev = (
+        f" (was version {result.previous_version})"
+        if result.previous_version
+        else ""
+    )
+    print(
+        f"{verb} skill pack for {result.target.display_name} "
+        f"at {result.destination} — version {result.version}{prev}"
+    )
+
+
 def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
     commit = client.get_commit(args.checkpoint_id)
     space = client.get_space(str(commit.get("repo_id", "")))
@@ -663,6 +783,64 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     compare_parser.set_defaults(func=cmd_compare)
+
+    # skills — install the Smriti agent skill pack into an agent host's
+    # project directory. The skill pack teaches agents when and why to
+    # use Smriti's tools (the load-bearing anti-pattern section is in
+    # the template at section 5). This group does not hit the backend —
+    # rendering is local.
+    skills_parser = subparsers.add_parser(
+        "skills",
+        help="Install the Smriti agent skill pack for Claude Code / Codex",
+    )
+    skills_sub = skills_parser.add_subparsers(dest="subcommand", required=True)
+
+    sk_list = skills_sub.add_parser(
+        "list",
+        help="List available skill pack targets and the template version",
+    )
+    sk_list.add_argument("--json", action="store_true", help="Output structured JSON")
+    sk_list.set_defaults(func=cmd_skills_list)
+
+    sk_show = skills_sub.add_parser(
+        "show",
+        help="Print the rendered skill pack for a target to stdout",
+    )
+    sk_show.add_argument(
+        "target",
+        choices=["claude-code", "codex"],
+        help="Which target to render",
+    )
+    sk_show.set_defaults(func=cmd_skills_show)
+
+    sk_install = skills_sub.add_parser(
+        "install",
+        help="Install the rendered skill pack to the target's destination",
+    )
+    sk_install.add_argument(
+        "target",
+        choices=["claude-code", "codex"],
+        help="Which target to install",
+    )
+    sk_install.add_argument(
+        "--destination",
+        help="Override the target's default destination path "
+             "(e.g. --destination my-AGENTS.md)",
+    )
+    sk_install.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Render the skill pack and print it without writing to disk",
+    )
+    sk_install.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing skill pack file even if its version is "
+             "equal to or newer than the template's. Use with care.",
+    )
+    sk_install.add_argument("--json", action="store_true", help="Output structured JSON")
+    sk_install.set_defaults(func=cmd_skills_install)
 
     return parser
 
