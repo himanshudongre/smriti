@@ -11,8 +11,15 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import ChatSession, CommitModel, TurnEvent
-from app.schemas import CheckpointDraftRequest, CheckpointDraftResponse, CheckpointReviewResponse, ReviewIssue
-from app.providers.registry import get_adapter
+from app.schemas import (
+    CheckpointDraftRequest,
+    CheckpointDraftResponse,
+    CheckpointExtractRequest,
+    CheckpointExtractResponse,
+    CheckpointReviewResponse,
+    ReviewIssue,
+)
+from app.providers.registry import get_adapter, get_mock_adapter
 from app.config_loader import get_config
 
 router = APIRouter()
@@ -270,3 +277,114 @@ Return STRICT JSON — no markdown, no explanation:
     except Exception as e:
         logger.error(f"Review error: {e}")
         raise HTTPException(status_code=502, detail=f"Review failed: {e}")
+
+
+# ── Extract endpoint ─────────────────────────────────────────────────────────
+
+
+@router.post("/extract", response_model=CheckpointExtractResponse)
+def extract_checkpoint_content(request: CheckpointExtractRequest):
+    """
+    Extract Smriti checkpoint schema fields from a freeform markdown document.
+
+    Stateless LLM call that maps the content into title, objective, summary,
+    decisions, assumptions, tasks, open_questions, entities, and artifacts.
+    Intended to be called from `smriti checkpoint create --extract`, where
+    the caller pipes an agent's output document and gets back a ready-to-
+    commit payload without hand-writing JSON.
+    """
+    prompt = f"""You are a precise metadata extraction assistant.
+Your task: extract structured checkpoint fields from the freeform markdown document below.
+Extract ONLY what is explicitly stated in the document.
+Do NOT infer, hallucinate, or add content beyond what the document says.
+If a field has nothing relevant, return an empty string or empty array.
+
+If the document already has headed sections matching these field names
+("Decisions", "Assumptions", "Tasks", "Open Questions", etc.), preserve
+the items in those sections verbatim. If the document uses different
+wording but the meaning is clear, map it to the right field.
+
+DOCUMENT:
+{request.content}
+
+Return a STRICT JSON object with exactly this schema — no extra keys, no markdown:
+{{
+  "title": "Short 3-8 word title capturing the core topic",
+  "objective": "The main goal this document is working toward (1 sentence)",
+  "summary": "Concise narrative of what the document covers (2-5 sentences)",
+  "decisions": ["An explicit choice made in the document"],
+  "assumptions": ["Something taken for granted but not explicitly debated"],
+  "tasks": ["A concrete action item or next step"],
+  "open_questions": ["An unresolved question"],
+  "entities": ["Key concept, tool, technology, or place mentioned"],
+  "artifacts": [
+    {{
+      "id": "short-alpha-id",
+      "type": "python|markdown|json|bash|text",
+      "label": "Short descriptive label",
+      "content": "Full content of the artifact"
+    }}
+  ]
+}}
+
+Rules:
+- decisions: only explicit choices from the document, not hypothetical ones
+- assumptions: things the document takes for granted that were NOT explicitly debated
+- tasks: concrete next steps, implementation items, or action items
+- entities: proper nouns and technical terms only
+- artifacts: fenced code blocks, JSON blocks, or other structured content that should
+  be preserved verbatim. The "type" field should match the code fence language when
+  present (python, json, bash, etc.) or "text"/"markdown" otherwise. Choose short,
+  alphanumeric "id" values (e.g. "a1", "plan", "sample"). Label each artifact briefly.
+- All arrays may be empty if nothing relevant appears in the document.
+- Output ONLY valid JSON. No markdown wrappers, no explanation.
+"""
+
+    try:
+        if request.use_mock:
+            adapter = get_mock_adapter()
+            bg_model = "mock"
+        else:
+            cfg = get_config()
+            bg_model = cfg.background.model
+            # allow_mock=True so an unconfigured test env falls back to
+            # MockAdapter (which supports JSON-mode responses); production
+            # envs always have a real provider configured and go through
+            # the real adapter path.
+            adapter = get_adapter(cfg.background.provider, allow_mock=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Background provider not configured. Error: {e}",
+        )
+
+    try:
+        raw_response = adapter.send(
+            [{"role": "user", "content": prompt}],
+            model=bg_model,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(raw_response)
+
+        _dedup = lambda items: list(dict.fromkeys([str(x).strip() for x in items if x]))
+
+        return CheckpointExtractResponse(
+            title=str(data.get("title", "")).strip(),
+            objective=str(data.get("objective", "")).strip(),
+            summary=str(data.get("summary", "")).strip(),
+            decisions=_dedup(data.get("decisions", [])),
+            assumptions=_dedup(data.get("assumptions", [])),
+            tasks=_dedup(data.get("tasks", [])),
+            open_questions=_dedup(data.get("open_questions", [])),
+            entities=_dedup(data.get("entities", [])),
+            artifacts=[a for a in data.get("artifacts", []) if isinstance(a, dict)],
+        )
+    except json.JSONDecodeError:
+        logger.error(f"Extract LLM returned invalid JSON: {raw_response}")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to parse extracted checkpoint (invalid JSON from provider).",
+        )
+    except Exception as e:
+        logger.error(f"Extract LLM call failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Extract failed: {e}")

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.enums import SessionStatus, TargetTool
 
@@ -125,3 +125,36 @@ class CheckpointReviewResponse(BaseModel):
     checkpoint_id: uuid.UUID
     issues: list[ReviewIssue] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
+
+
+class CheckpointExtractRequest(BaseModel):
+    """Request body for the freeform-markdown checkpoint extractor.
+
+    Takes a freeform markdown document and asks the background LLM to
+    extract Smriti checkpoint schema fields from it. Stateless — no
+    session or checkpoint ID required.
+    """
+    content: str = Field(..., description="Freeform markdown document to extract checkpoint fields from")
+    use_mock: bool = Field(False, description="Force MockAdapter even when a real provider is configured (for tests and dry-run flows)")
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("content must not be empty")
+        if len(stripped) > 200_000:
+            raise ValueError("content exceeds 200000 character limit")
+        return v
+
+
+class CheckpointExtractResponse(BaseModel):
+    title: str = ""
+    objective: str = ""
+    summary: str = ""
+    decisions: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    tasks: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    artifacts: list[dict] = Field(default_factory=list)

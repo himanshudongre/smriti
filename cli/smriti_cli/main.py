@@ -11,7 +11,9 @@ Commands for agent and programmatic use:
     smriti compare <checkpoint-a> <checkpoint-b>
     smriti checkpoint create <space> [--session <id>]
                                      [--project-root <path>] [--no-project-root]
-                                     [--author-agent <name>]   # reads JSON from stdin
+                                     [--author-agent <name>]       # reads JSON from stdin
+    smriti checkpoint create <space> --extract                     # reads markdown, LLM extracts fields
+    smriti checkpoint create <space> --extract --dry-run           # preview extracted payload, no commit
     smriti checkpoint show <checkpoint-id>
     smriti checkpoint list <space>
     smriti checkpoint review <checkpoint-id>
@@ -25,8 +27,11 @@ compare <a> <b>` to see how the branches diverged, and `smriti restore
 
 `smriti checkpoint create` auto-captures the current working directory
 as the checkpoint's project_root and can tag the checkpoint with an
-explicit `--author-agent`. `smriti state` shows full artifact content
-by default; pass `--preview` for the truncated brief.
+explicit `--author-agent`. Pipe freeform agent markdown to `--extract`
+to have the background LLM fill in decisions/assumptions/tasks/etc
+for you instead of hand-writing JSON; add `--dry-run` to preview first.
+`smriti state` shows full artifact content by default; pass `--preview`
+for the truncated brief.
 
 Every command supports --json for structured output.
 Default output is a readable markdown brief.
@@ -92,6 +97,20 @@ _USAGE_HINT = (
     "Example:\n"
     '  echo \'{"message":"...","summary":"..."}\' | smriti checkpoint create my-space'
 )
+
+
+def _read_raw_content() -> str:
+    """Read freeform content from stdin. Used by --extract mode. Fails
+    cleanly if stdin is a tty (no content piped)."""
+    if sys.stdin.isatty():
+        _fail(
+            "No content provided for --extract. Pipe a markdown document on stdin:\n"
+            "  cat handoff.md | smriti checkpoint create my-space --extract"
+        )
+    raw = sys.stdin.read()
+    if not raw.strip():
+        _fail("Empty content on stdin for --extract.")
+    return raw
 
 
 def _read_checkpoint_json(args: argparse.Namespace) -> dict:
@@ -194,13 +213,43 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> None:
     space = client.resolve_space(args.space)
-    payload = _read_checkpoint_json(args)
 
-    if not isinstance(payload, dict):
-        _fail("Checkpoint JSON must be an object, got: " + type(payload).__name__)
+    if args.extract and args.from_json:
+        _fail("--extract and --from-json are mutually exclusive.")
 
-    if not payload.get("message"):
-        _fail("Checkpoint JSON must include a 'message' field.")
+    if args.extract:
+        # Read freeform markdown from stdin, send to the extract endpoint,
+        # and use the returned fields as the commit payload. No hand-written
+        # JSON required.
+        content = _read_raw_content()
+        extracted = client.extract_checkpoint_content(content)
+        # Extractor returns `title`; checkpoints store `message`. Map it.
+        # If the LLM returned an empty title, fall back to a generic label
+        # so the required `message` field is always populated.
+        payload = {
+            "message": (extracted.get("title") or "").strip() or "Extracted checkpoint",
+            "objective": extracted.get("objective", ""),
+            "summary": extracted.get("summary", ""),
+            "decisions": extracted.get("decisions", []),
+            "assumptions": extracted.get("assumptions", []),
+            "tasks": extracted.get("tasks", []),
+            "open_questions": extracted.get("open_questions", []),
+            "entities": extracted.get("entities", []),
+            "artifacts": extracted.get("artifacts", []),
+        }
+    else:
+        payload = _read_checkpoint_json(args)
+        if not isinstance(payload, dict):
+            _fail("Checkpoint JSON must be an object, got: " + type(payload).__name__)
+        if not payload.get("message"):
+            _fail("Checkpoint JSON must include a 'message' field.")
+
+    if args.dry_run:
+        # Print the full payload (extracted or hand-written) as JSON and
+        # exit without creating a checkpoint. Useful for reviewing the
+        # extractor's output before committing.
+        _print_json(payload)
+        return
 
     # The V4 commit endpoint requires a session_id. Agents typically do not
     # have one — the CLI creates a lightweight session on demand and attaches
@@ -435,6 +484,21 @@ def _build_parser() -> argparse.ArgumentParser:
     cp_create.add_argument(
         "--from-json",
         help="Path to a JSON file with the checkpoint payload (use '-' for stdin)",
+    )
+    cp_create.add_argument(
+        "--extract",
+        action="store_true",
+        help="Read stdin as freeform markdown and use the LLM extractor to "
+             "produce the checkpoint payload automatically. Mutually exclusive "
+             "with --from-json.",
+    )
+    cp_create.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Print the checkpoint payload (extracted or hand-written) as "
+             "JSON and exit without creating a checkpoint. Useful for "
+             "reviewing the extractor's output before committing.",
     )
     cp_create.add_argument(
         "--session",

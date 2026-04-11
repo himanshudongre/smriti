@@ -39,7 +39,9 @@ smriti restore <checkpoint-id>                           # brief of a specific c
 smriti compare <checkpoint-a> <checkpoint-b>             # structured diff
 
 smriti checkpoint create <space>                         # reads JSON from stdin
-smriti checkpoint create <space> --from-json <path>      # from file
+smriti checkpoint create <space> --from-json <path>      # from JSON file
+smriti checkpoint create <space> --extract               # reads markdown, LLM extracts schema fields
+smriti checkpoint create <space> --extract --dry-run     # preview the extracted payload without committing
 smriti checkpoint create <space> --session <session-id>  # attach to existing session
 smriti checkpoint create <space> --author-agent claude-code
 smriti checkpoint create <space> --project-root /path    # override cwd auto-capture
@@ -52,6 +54,18 @@ smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
 `smriti state` shows full artifact content by default — flip to `--preview` for the truncated brief.
 
 `smriti checkpoint create` auto-captures the current working directory as the checkpoint's `project_root` so cross-agent handoffs know where the project actually lives on disk. Pass `--project-root /absolute/path` to override or `--no-project-root` to skip. Tag the checkpoint with an explicit `--author-agent <name>` (like `claude-code` or `codex-local`); without it, the backend falls back to the session's active provider.
+
+**Extracting checkpoints from freeform agent output:** instead of hand-writing the JSON payload, pipe an agent's markdown output to `--extract` and let Smriti's background LLM extract the structured fields (decisions, assumptions, tasks, open questions, entities, artifacts) for you:
+
+```bash
+# Extract and commit in one step
+cat /tmp/r3_agent_a_output.md | smriti checkpoint create my-project --extract --author-agent codex-A
+
+# Preview what would be extracted, without committing
+cat /tmp/r3_agent_a_output.md | smriti checkpoint create my-project --extract --dry-run
+```
+
+`--extract` reads stdin as freeform markdown, sends it to `POST /api/v5/checkpoint/extract`, and uses the returned fields to build the commit payload. `--dry-run` prints the extracted payload as JSON and exits without creating a checkpoint. `--extract` and `--from-json` are mutually exclusive.
 
 Every command supports `--json` for structured output.
 

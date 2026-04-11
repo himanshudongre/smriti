@@ -155,6 +155,21 @@ class SmritiClient:
     def review_checkpoint(self, commit_id: str) -> dict:
         return self._request("POST", f"/api/v5/checkpoint/{commit_id}/review")
 
+    def extract_checkpoint_content(self, content: str, use_mock: bool = False) -> dict:
+        """POST /api/v5/checkpoint/extract
+
+        Sends a freeform markdown document to the extractor endpoint and
+        returns the structured checkpoint fields (title, objective, summary,
+        decisions, assumptions, tasks, open_questions, entities, artifacts).
+        Used by `smriti checkpoint create --extract` to build a commit
+        payload from agent output without hand-authoring JSON.
+        """
+        return self._request(
+            "POST",
+            "/api/v5/checkpoint/extract",
+            json={"content": content, "use_mock": use_mock},
+        )
+
     def compare_checkpoints(self, checkpoint_a_id: str, checkpoint_b_id: str) -> dict:
         """GET /api/v5/lineage/checkpoints/{a}/compare/{b}
 
