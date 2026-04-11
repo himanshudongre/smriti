@@ -308,6 +308,78 @@ class HeadResponse(BaseModel):
     latest_session_title: Optional[str]
 
 
+# ── Space state (multi-branch) schemas ────────────────────────────────────────
+#
+# `GET /api/v4/chat/spaces/{id}/state` is the richer sibling of `get_head`.
+# It returns the main-branch continuation brief the chat UI / CLI already
+# knew how to render, plus a concise per-branch summary of non-main activity
+# and a lightweight divergence signal when any active branch disagrees with
+# main on decisions. Both extensions are capped hard so the aggregate output
+# stays digestible for an agent reading it into its context window.
+
+class SpaceBrief(BaseModel):
+    """Minimal space header for the state response. Mirrors what the CLI
+    formatter already consumes from its `space` arg."""
+    id: uuid.UUID
+    name: str
+    description: Optional[str] = None
+
+
+class ActiveBranchSummary(BaseModel):
+    """One line per non-main branch in the `Active branches` section.
+    Kept minimal on purpose — this is not a brief, it is a pointer."""
+    branch_name: str
+    commit_id: uuid.UUID
+    commit_hash: str
+    message: str
+    author_agent: Optional[str] = None
+    created_at: datetime
+    # First ~200 chars of the commit's summary. Callers use this as a
+    # one-liner in the Active branches section, not a full read.
+    summary: str = ""
+
+
+class DivergencePair(BaseModel):
+    """Per-branch divergence entry. `main_only_decisions` are decisions
+    present on main but absent from this branch; `branch_only_decisions`
+    are the reverse. Both arrays capped at DIVERGENCE_DECISIONS_CAP items
+    by the endpoint so the state response cannot blow up on active
+    projects."""
+    branch_name: str
+    branch_commit_hash: str
+    main_only_decisions: list[str] = Field(default_factory=list)
+    branch_only_decisions: list[str] = Field(default_factory=list)
+
+
+class DivergenceSummary(BaseModel):
+    """Top-level divergence block. Only populated when at least one
+    active branch differs from main on decisions. Capped at
+    DIVERGENCE_BRANCHES_CAP pairs."""
+    pairs: list[DivergencePair] = Field(default_factory=list)
+
+
+class SpaceStateResponse(BaseModel):
+    """Composite response for `GET /spaces/{id}/state`.
+
+    One round trip, atomic snapshot. Replaces the CLI's previous 3-call
+    dance (resolve_space → get_head → get_commit) for the state brief.
+    """
+    space: SpaceBrief
+    head: HeadResponse
+    commit: Optional[CommitResponse] = None  # None when space has no checkpoints
+    active_branches: list[ActiveBranchSummary] = Field(default_factory=list)
+    divergence: Optional[DivergenceSummary] = None
+
+
+# Hard caps for the state response. These are constants on purpose —
+# not query params — because the agent-facing contract is "digestible by
+# default." Callers who need an unbounded view should hit the lineage
+# endpoint (/api/v5/lineage/spaces/{id}) which is already that.
+ACTIVE_BRANCHES_CAP = 5
+DIVERGENCE_BRANCHES_CAP = 2
+DIVERGENCE_DECISIONS_CAP = 3
+
+
 # ── Session endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/sessions", response_model=SessionResponse, status_code=201)
@@ -708,6 +780,162 @@ def get_head(repo_id: uuid.UUID, db: Session = Depends(get_db)):
         objective=latest_commit.objective if latest_commit else None,
         latest_session_id=latest_session.id if latest_session else None,
         latest_session_title=latest_session.title if latest_session else None,
+    )
+
+
+# ── Space state endpoint (multi-branch) ──────────────────────────────────────
+
+
+def _get_active_branch_heads(
+    repo_id: uuid.UUID, db: Session, limit: int = ACTIVE_BRANCHES_CAP
+) -> list[CommitModel]:
+    """Return the most recent checkpoint on each non-main branch of this space,
+    ordered by `created_at` descending, capped at `limit`.
+
+    Implemented in two steps so the SQL stays portable across the
+    SQLAlchemy dialects we use in tests: first fetch every non-main
+    checkpoint (cheap — there are dozens, not millions, in a real
+    project), then collapse per branch in Python. A Postgres-only
+    `DISTINCT ON (branch_name)` would be marginally faster but would
+    break sqlite-backed unit tests for no real gain.
+    """
+    stmt = (
+        select(CommitModel)
+        .where(
+            CommitModel.repo_id == repo_id,
+            CommitModel.branch_name != "main",
+        )
+        .order_by(CommitModel.created_at.desc())
+    )
+    seen: set[str] = set()
+    heads: list[CommitModel] = []
+    for commit in db.scalars(stmt):
+        if commit.branch_name in seen:
+            continue
+        seen.add(commit.branch_name)
+        heads.append(commit)
+        if len(heads) >= limit:
+            break
+    return heads
+
+
+def _compute_space_divergence(
+    main_head: CommitModel,
+    branch_heads: list[CommitModel],
+) -> Optional[DivergenceSummary]:
+    """Compute decision-level divergence between main HEAD and each
+    non-main branch HEAD. Returns `None` if no branch differs, otherwise
+    a capped `DivergenceSummary`.
+
+    Reuses `lineage._diff_lists` so matching stays consistent with what
+    `smriti compare` surfaces — case and punctuation differences already
+    normalize to the same key, so two agents saying "Use Pydantic" and
+    "use pydantic." do not look divergent.
+    """
+    # Imported lazily so we don't create a hard circular import at
+    # module load time between chat.py and lineage.py (both can be
+    # imported in either order by the FastAPI app bootstrap).
+    from app.api.routes.lineage import _diff_lists
+
+    pairs: list[DivergencePair] = []
+    for branch_head in branch_heads[:DIVERGENCE_BRANCHES_CAP]:
+        only_main, only_branch, _shared = _diff_lists(
+            main_head.decisions or [],
+            branch_head.decisions or [],
+        )
+        if not only_main and not only_branch:
+            continue
+        pairs.append(
+            DivergencePair(
+                branch_name=branch_head.branch_name,
+                branch_commit_hash=branch_head.commit_hash,
+                main_only_decisions=only_main[:DIVERGENCE_DECISIONS_CAP],
+                branch_only_decisions=only_branch[:DIVERGENCE_DECISIONS_CAP],
+            )
+        )
+    return DivergenceSummary(pairs=pairs) if pairs else None
+
+
+@router.get("/spaces/{repo_id}/state", response_model=SpaceStateResponse)
+def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Return the richer, multi-branch continuation brief for a space.
+
+    Contains:
+      - space header (id, name, description)
+      - main-branch HEAD metadata (same shape as /head)
+      - full main-branch HEAD commit (or None if no checkpoints yet)
+      - up to ACTIVE_BRANCHES_CAP most recent non-main branch heads
+      - a divergence summary when any active branch disagrees with main
+        on decisions — capped at DIVERGENCE_BRANCHES_CAP branches and
+        DIVERGENCE_DECISIONS_CAP decisions per side per pair.
+
+    The divergence section is the lightweight signal an agent or human
+    needs to notice cross-branch drift without reading the full compare
+    output. If the signal fires, the agent is expected to run
+    `smriti_compare` on the specific branches for the full diff.
+    """
+    repo = _get_repo(repo_id, db)
+    main_head_commit = _get_latest_commit(repo_id, db)
+
+    # Latest session (same query get_head uses — mirror it so clients can
+    # treat `head` in the state response as interchangeable with /head).
+    session_stmt = (
+        select(ChatSession)
+        .where(ChatSession.repo_id == repo_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(1)
+    )
+    latest_session = db.scalars(session_stmt).first()
+
+    head_resp = HeadResponse(
+        repo_id=repo_id,
+        commit_hash=main_head_commit.commit_hash if main_head_commit else None,
+        commit_id=main_head_commit.id if main_head_commit else None,
+        summary=main_head_commit.summary if main_head_commit else None,
+        objective=main_head_commit.objective if main_head_commit else None,
+        latest_session_id=latest_session.id if latest_session else None,
+        latest_session_title=latest_session.title if latest_session else None,
+    )
+
+    commit_resp = (
+        CommitResponse.model_validate(main_head_commit)
+        if main_head_commit
+        else None
+    )
+
+    active_branch_commits = _get_active_branch_heads(
+        repo_id, db, limit=ACTIVE_BRANCHES_CAP
+    )
+
+    active_branches = [
+        ActiveBranchSummary(
+            branch_name=c.branch_name,
+            commit_id=c.id,
+            commit_hash=c.commit_hash,
+            message=c.message or "",
+            author_agent=c.author_agent,
+            created_at=c.created_at,
+            # Cap at ~200 chars so the Active branches section stays a
+            # pointer, not a brief. Callers render this on one line.
+            summary=(c.summary or "")[:200],
+        )
+        for c in active_branch_commits
+    ]
+
+    divergence = None
+    if main_head_commit and active_branch_commits:
+        divergence = _compute_space_divergence(main_head_commit, active_branch_commits)
+
+    return SpaceStateResponse(
+        space=SpaceBrief(
+            id=repo.id,
+            name=repo.name,
+            description=repo.description,
+        ),
+        head=head_resp,
+        commit=commit_resp,
+        active_branches=active_branches,
+        divergence=divergence,
     )
 
 
