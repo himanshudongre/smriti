@@ -347,11 +347,15 @@ def cmd_compare(client: SmritiClient, args: argparse.Namespace) -> None:
 def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
     commit = client.get_commit(args.checkpoint_id)
     space = client.get_space(str(commit.get("repo_id", "")))
+    # Default to full artifacts (agent-first, matching `smriti state`).
+    # --preview restores the old truncated behaviour; --full-artifacts is
+    # kept as a no-op alias so existing scripts still work.
+    full_artifacts = not args.preview
     if args.json:
         _print_json({"space": space, "commit": commit})
     else:
         print(
-            format_restore_brief(space, commit, full_artifacts=args.full_artifacts),
+            format_restore_brief(space, commit, full_artifacts=full_artifacts),
             end="",
         )
 
@@ -517,9 +521,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     restore_parser.add_argument("checkpoint_id", help="Checkpoint UUID")
     restore_parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Truncate artifact content to a short preview (default: show full)",
+    )
+    # Back-compat: --full-artifacts is a no-op because full is now the
+    # default. Kept so existing scripts do not break. Matches smriti state.
+    restore_parser.add_argument(
         "--full-artifacts",
         action="store_true",
-        help="Include full artifact content",
+        help="(default) Include full artifact content. Kept for backwards "
+             "compatibility; the default is now always full. Use --preview to "
+             "truncate instead.",
     )
     restore_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     restore_parser.set_defaults(func=cmd_restore)
