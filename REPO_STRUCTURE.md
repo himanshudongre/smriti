@@ -3,49 +3,69 @@
 ```
 smriti/
 │
-├── README.md                   Product overview, core concepts, setup
-├── ARCHITECTURE.md             System model, isolation mechanism, API versioning
+├── README.md                   Product overview, core concepts, setup,
+│                                 coding-agent quick start
+├── ARCHITECTURE.md             System model, isolation mechanism, API versioning,
+│                                 multi-branch state, skill pack surface
 ├── DECISIONS.md                Key architectural and product decisions
 ├── CONTRIBUTING.md             Development setup and contribution guide
+├── AGENTS.md                   Smriti skill pack for Codex (generated, committed)
 ├── REPO_STRUCTURE.md           This file
 │
 ├── Makefile                    Dev, test, build, and migration targets
 ├── docker-compose.yml          Postgres + backend + frontend services
-├── .env.example                Environment variable template
+├── .env.example                Environment variable template (dotenv-loaded)
 │
 ├── backend/
 │   ├── app/
-│   │   ├── main.py             FastAPI app factory, CORS, router registration
+│   │   ├── main.py             FastAPI app factory, CORS, router registration,
+│   │   │                         startup provider validation
 │   │   ├── config.py           Pydantic settings (DATABASE_URL, DEBUG)
-│   │   ├── config_loader.py    Provider config loader (providers.yaml + env vars)
+│   │   ├── config_loader.py    Provider config loader (dotenv + providers.yaml
+│   │   │                         + env vars), reset_config() for dev reloads
 │   │   ├── schemas/
 │   │   │   └── __init__.py     Pydantic request/response schemas
 │   │   ├── db/
 │   │   │   ├── database.py     SQLAlchemy engine and session factory
 │   │   │   └── models.py       ORM models: RepoModel, CommitModel, ChatSession,
-│   │   │                         TurnEvent
+│   │   │                         TurnEvent, WorkClaim
 │   │   ├── domain/
 │   │   │   └── enums.py        SessionStatus, TargetTool, etc.
 │   │   ├── api/
 │   │   │   └── routes/
 │   │   │       ├── chat.py     V4: sessions, send_message, commit, head,
-│   │   │       │                 provider status
-│   │   │       ├── checkpoint.py  V5: draft_checkpoint
+│   │   │       │                 multi-branch state (/state), provider status
+│   │   │       ├── checkpoint.py  V5: draft, review, extract
 │   │   │       ├── lineage.py  V5: fork, branch tree, checkpoint compare,
 │   │   │       │                 reachable checkpoints
+│   │   │       ├── claims.py   V5: work claims (create, update, list)
 │   │   │       ├── repos.py    V2: Space CRUD, Checkpoint CRUD
-│   │   │       └── sessions.py V1: transcript ingestion (legacy)
-│   │   └── providers/
-│   │       ├── registry.py     Provider lookup and adapter instantiation
-│   │       ├── openai_adapter.py
-│   │       ├── anthropic_adapter.py
-│   │       └── mock_adapter.py Deterministic mock for testing
+│   │   │       ├── commits.py  V2: direct commit creation
+│   │   │       └── context_git.py  V2: context extraction
+│   │   ├── providers/
+│   │   │   ├── registry.py     Provider lookup, adapter instantiation,
+│   │   │   │                     MockAdapter fallback with warning log
+│   │   │   ├── openai_adapter.py
+│   │   │   ├── anthropic_adapter.py
+│   │   │   └── openrouter_adapter.py
+│   │   └── services/
+│   │       ├── extractor.py    Transcript → structured extraction
+│   │       └── pack_generator.py  Context pack rendering (V1 legacy)
 │   ├── config/
 │   │   ├── providers.example.yaml  Template — copy to providers.yaml
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
-│   ├── alembic/                Database migrations
-│   ├── tests/                  Backend tests
-│   └── pyproject.toml          Python dependencies
+│   ├── alembic/                Database migrations (10 versions)
+│   ├── tests/
+│   │   ├── integration/        API integration tests (177 tests)
+│   │   │   ├── test_api_v4_chat.py
+│   │   │   ├── test_api_v5_lineage.py
+│   │   │   ├── test_multi_branch_state.py
+│   │   │   ├── test_claims.py
+│   │   │   ├── test_checkpoint_extract.py
+│   │   │   └── test_delete_endpoints.py
+│   │   └── unit/               Unit tests (2 tests)
+│   │       └── test_config_loader.py
+│   └── pyproject.toml          Python dependencies (includes python-dotenv)
 │
 ├── frontend/
 │   ├── src/
@@ -53,21 +73,37 @@ smriti/
 │   │   │   ├── WorkspaceOverviewPage.tsx  Resume-focused landing page
 │   │   │   ├── ChatWorkspacePage.tsx      Primary chat UI: sidebar, checkpoint
 │   │   │   │                                modal, history panel, context indicators
-│   │   │   └── LineagePage.tsx            Branch tree, checkpoint compare
+│   │   │   └── LineagePage.tsx            Branch tree with author_agent tags,
+│   │   │                                   checkpoint compare
 │   │   ├── api/
 │   │   │   └── client.ts       API client functions (V4, V5, V2)
 │   │   ├── types/
-│   │   │   └── index.ts        TypeScript type definitions
+│   │   │   └── index.ts        TypeScript type definitions (includes
+│   │   │                         CheckpointNode.author_agent)
 │   │   └── main.tsx            App entry point, router
 │   └── package.json
 │
-├── cli/                        Programmatic CLI for agents and scripts
-│   ├── README.md               Command reference and agent handoff workflow
-│   ├── pyproject.toml          Installable as `pip install -e ./cli` → `smriti`
-│   └── smriti_cli/
-│       ├── main.py             argparse dispatcher, seven commands
-│       ├── client.py           thin HTTP wrapper over the REST API
-│       └── formatters.py       continuation-oriented markdown renderers
+├── cli/                        Programmatic CLI + MCP server for agents
+│   ├── README.md               Command reference, MCP tools, skill pack install,
+│   │                             agent handoff workflow
+│   ├── pyproject.toml          Installable as `pip install -e ./cli`
+│   │                             → `smriti` + `smriti-mcp` on PATH
+│   ├── smriti_cli/
+│   │   ├── main.py             argparse dispatcher: space, state, checkpoint,
+│   │   │                         fork, restore, compare, claim, skills
+│   │   ├── mcp_server.py       FastMCP server (15 tools, stdio transport)
+│   │   ├── client.py           SmritiClient HTTP wrapper (includes claims)
+│   │   ├── formatters.py       Continuation-oriented markdown renderers
+│   │   │                         (multi-branch, active claims, divergence)
+│   │   └── skill_pack/         Agent skill pack source and renderer
+│   │       ├── template.md     Single source of truth (v1.5, 15 sections)
+│   │       ├── renderer.py     Pure-function render + versioned install
+│   │       └── targets.py      Target configs (claude-code, codex)
+│   └── tests/                  CLI + MCP tests (70 tests)
+│       ├── test_mcp_server.py
+│       ├── test_skill_pack.py
+│       ├── test_state_multi_branch.py
+│       └── test_smoke.py
 │
 ├── docs/
 │   └── API.md                  V2, V4, and V5 endpoint reference
@@ -84,9 +120,9 @@ smriti/
 | Prefix | Module | Status | Notes |
 |---|---|---|---|
 | `/api/v1` | `sessions.py` | Legacy | Transcript paste ingestion |
-| `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read by id, checkpoint list by space. `CommitResponse` includes `assumptions` and `artifacts` so the CLI can read full checkpoints via the V2 single-resource endpoints. |
-| `/api/v4` | `chat.py` | Current | Chat sessions, send_message, the canonical checkpoint write path (`POST /chat/commit`) which accepts the full schema. |
-| `/api/v5` | `checkpoint.py`, `lineage.py` | Current | Checkpoint draft, review, fork, lineage, compare. |
+| `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read/list. `CommitResponse` includes `assumptions` and `artifacts`. |
+| `/api/v4` | `chat.py` | Current | Chat sessions, send_message, commit, head, multi-branch state (`/state` with active branches, active claims, and divergence signal). Provider status. |
+| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims. |
 
 ---
 
@@ -104,3 +140,14 @@ make format         Format backend code (ruff)
 make migrate        Run pending Alembic migrations
 make migration      Create a new migration (usage: make migration msg="...")
 ```
+
+---
+
+## Test counts (as of v1.5 skill pack + work claims)
+
+| Suite | Count | Location |
+|---|---|---|
+| Backend integration | 177 | `backend/tests/integration/` |
+| Backend unit | 2 | `backend/tests/unit/` |
+| CLI + MCP | 70 | `cli/tests/` |
+| **Total** | **249** | |
