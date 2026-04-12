@@ -139,7 +139,7 @@ smriti/
 ## Make targets
 
 ```
-make setup          Install deps + run migrations (first-time setup)
+make setup          Install all deps (backend + CLI + frontend) + run migrations
 make dev            Run backend dev server (port 8000)
 make dev-frontend   Run frontend dev server (port 5173)
 make up             Start all services via Docker Compose

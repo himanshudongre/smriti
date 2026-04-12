@@ -169,59 +169,40 @@ Or from inside Claude Code, after adding `smriti-mcp` to your MCP config: "*show
 
 ---
 
-## Quick start
+## Getting started
 
-You will need:
+You will need: Python 3.11+, Node 18+, Docker (for Postgres).
 
-- Python 3.11+
-- Node 18+
-- PostgreSQL 14+
+### 1. Clone and set up
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
 cd smriti
 
 cp .env.example .env
+# Edit .env to add your API keys (OpenAI, Anthropic, or both).
+# Leave keys commented out to use mock mode (no real LLM calls).
 
-make setup
-
-# backend
-make dev
-
-# frontend (separate terminal)
-make dev-frontend
+docker compose up -d postgres    # start the database
+make setup                       # backend venv + deps + migrations + CLI + frontend
 ```
 
-Frontend: http://localhost:5173
-Backend: http://localhost:8000
+`make setup` installs everything: the backend, the CLI (`smriti` + `smriti-mcp` on your PATH), and the frontend.
 
-There is also a mock mode if you don't want to deal with API keys.
-
-### CLI (for agents and scripts)
+### 2. Start the backend and frontend
 
 ```bash
-cd cli
-pip install -e .
-smriti space list
+make dev              # backend on http://localhost:8000 (keep running)
+make dev-frontend     # frontend on http://localhost:5173 (separate terminal)
 ```
 
-The CLI wraps the backend API. See `cli/README.md` for the full command list and the agent handoff workflow.
+**For the chat UI only, you're done.** Open http://localhost:5173.
 
----
+### 3. For coding agents, continue here
 
-## Quick start for coding agents
+**Runtime model.** Postgres runs in Docker. The backend runs locally via `make dev`. The human starts both. Agents are clients of `http://localhost:8000` — they do not start, restart, or manage the backend or Docker.
 
-If you want Claude Code or Codex to use Smriti as a shared reasoning-state backend, this is the fast path. Assumes the backend is already running (see Quick Start above).
-
-**Runtime model.** Postgres runs in Docker (`docker compose up -d postgres`). The backend runs locally via `make dev`. The human starts both. Agents are clients of `http://localhost:8000` — they do not start, restart, or manage the backend or Docker. If the backend is unreachable, agents should stop and tell the human.
-
-**1. Install the CLI + MCP server** (one command gets both):
-
-```bash
-cd cli && pip install -e . && cd ..
-```
-
-**2. Configure your MCP host** if your agent host supports MCP (Claude Code example — check your host's docs for the config file path):
+**3a. Configure your MCP host** (Claude Code, Cursor, Windsurf — skip for Codex):
 
 ```json
 {
@@ -234,33 +215,53 @@ cd cli && pip install -e . && cd ..
 }
 ```
 
-Restart the host. The `smriti_*` tools appear in the tool picker.
+Add this to your host's MCP config file and restart the host. The `smriti_*` tools appear in the tool picker. Codex uses the CLI directly and does not need MCP.
 
-If you are using Codex in CLI mode, you can skip this step and continue with the CLI + `AGENTS.md` path below.
-
-**3. Install the skill pack** so the agent knows *when* and *why* to use Smriti, not just *how*:
+**3b. Install the skill pack** so the agent knows *when* and *why* to use Smriti:
 
 ```bash
-# For Claude Code — installs to .claude/skills/smriti/SKILL.md
-smriti skills install claude-code
+smriti skills install claude-code     # → .claude/skills/smriti/SKILL.md
 
-# For Codex — installs to AGENTS.md (commit it so Codex sees it)
-smriti skills install codex
+smriti skills install codex           # → AGENTS.md (commit it so Codex sees it)
 git add AGENTS.md && git commit -m "Add Smriti skill pack for Codex"
 ```
 
-**4. Create a space and start working:**
+**3c. Create a space and start working:**
 
 ```bash
 smriti space create my-project --description "What this project is about"
-smriti state my-project                    # your agent's first action, every session
+smriti state my-project               # your agent's first action, every session
 ```
 
-From here, the skill pack teaches the agent to read state first, checkpoint at inflection points (not after every small step), fork before exploring alternatives, and never write `HANDOFF.md`. See `cli/README.md` for the full workflow walkthrough.
+### 4. Auto-inject state at session start (Claude Code)
 
-**Optional: auto-inject state at session start.** Claude Code supports SessionStart hooks. Add a `.claude/settings.json` with a hook that runs `smriti state <project> --preview` at startup — the state brief is injected into the agent's context before it processes the first prompt. See `CLAUDE.md` for the compact project-level instructions that complement the hook.
+Claude Code supports SessionStart hooks that run a command before the agent processes the first prompt. Add a `.claude/settings.json`:
 
-**Why this is better than markdown handoffs:** Smriti checkpoints are structured, branchable, comparable, and restorable. When reasoning drifts or an agent goes in the wrong direction, you can restore to a clean checkpoint and the bad context is excluded — not summarized, not hidden, actually excluded at the data layer. Markdown handoff files can't do that, and they fall apart the moment two agents need to work in parallel.
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "smriti state my-project --preview 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+With this hook, the state brief is injected into Claude's context automatically at session start — the agent doesn't need to remember to call `smriti_state`. See `CLAUDE.md` for the compact project-level instructions that complement the hook.
+
+Codex does not support session hooks. Its equivalent is `AGENTS.md` (installed in step 3b), which Codex reads at session start as project-level instructions.
+
+### Why this is better than markdown handoffs
+
+Smriti checkpoints are structured, branchable, comparable, and restorable. When reasoning drifts or an agent goes in the wrong direction, you can restore to a clean checkpoint and the bad context is excluded — not summarized, not hidden, actually excluded at the data layer. Markdown handoff files can't do that, and they fall apart the moment two agents need to work in parallel.
 
 ---
 

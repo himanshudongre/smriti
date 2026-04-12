@@ -66,8 +66,9 @@ install-frontend:  ## Install frontend dependencies
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
-install:  ## Install all dependencies (creates venv)
+install:  ## Install all dependencies (creates venv, installs CLI + MCP server)
 	cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+	cd cli && ../backend/.venv/bin/pip install -e .
 	cd frontend && npm install
 
 setup:  ## Full local setup (venv + deps + migrations)
