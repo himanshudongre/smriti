@@ -224,6 +224,14 @@ are a client of it. You do not own it.
   tool loop creates environment-variable inheritance issues that
   cause silent mock fallback on all LLM-backed endpoints. The
   human starts the backend; you use it.
+- **Runtime freshness after code changes.** If backend code has
+  been merged to main since the backend was last started (e.g.,
+  new API routes, schema changes, config fixes), the backend
+  must be restarted before agents can rely on the new endpoints.
+  Check `git log --oneline -5` against the running server's
+  behavior. If a new endpoint returns 404 or the behavior does
+  not match the merged code, tell the human: "The backend may
+  need a restart to pick up recent changes on main."
 
 ### 3.6 Work claims: declare intent before working
 

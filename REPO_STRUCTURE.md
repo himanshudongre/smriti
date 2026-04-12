@@ -50,7 +50,13 @@ smriti/
 │   │   │   └── openrouter_adapter.py
 │   │   └── services/
 │   │       ├── extractor.py    Transcript → structured extraction
-│   │       └── pack_generator.py  Context pack rendering (V1 legacy)
+│   │       ├── embedding.py    Embedding generation (pgvector)
+│   │       ├── parser.py       Transcript parsing utilities
+│   │       ├── pack_generator.py  Context pack rendering (V1 legacy)
+│   │       └── llm/
+│   │           ├── base.py         LLM provider base class
+│   │           ├── mock_provider.py  Deterministic mock for testing
+│   │           └── openai_provider.py  OpenAI chat completions
 │   ├── config/
 │   │   ├── providers.example.yaml  Template — copy to providers.yaml
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
@@ -63,8 +69,12 @@ smriti/
 │   │   │   ├── test_claims.py
 │   │   │   ├── test_checkpoint_extract.py
 │   │   │   └── test_delete_endpoints.py
-│   │   └── unit/               Unit tests (2 tests)
-│   │       └── test_config_loader.py
+│   │   └── unit/               Unit tests (97 tests)
+│   │       ├── test_config_loader.py
+│   │       ├── test_extractor.py
+│   │       ├── test_golden_outputs.py
+│   │       ├── test_pack_generator.py
+│   │       └── test_parser.py
 │   └── pyproject.toml          Python dependencies (includes python-dotenv)
 │
 ├── frontend/
@@ -148,6 +158,6 @@ make migration      Create a new migration (usage: make migration msg="...")
 | Suite | Count | Location |
 |---|---|---|
 | Backend integration | 177 | `backend/tests/integration/` |
-| Backend unit | 2 | `backend/tests/unit/` |
+| Backend unit | 97 | `backend/tests/unit/` |
 | CLI + MCP | 70 | `cli/tests/` |
-| **Total** | **249** | |
+| **Total** | **344** | |
