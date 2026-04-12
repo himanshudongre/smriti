@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.0
+smriti_skill_pack_version: 1.1
 title: Smriti — how to use it well
 target: Codex
 ---
@@ -69,6 +69,43 @@ decisions you will see a `## Divergence signal` section.
 Say out loud to the user: **"Reading current state from Smriti."**
 before you call state. This gives the human watching a visible audit
 trail.
+
+### 3.1 After reading state: cross-agent continuation
+
+After you read state, look at the most recent checkpoint(s). Ask:
+
+1. **Was the most recent checkpoint written by a different agent?**
+   Check the `author_agent` field. If another agent wrote the latest
+   checkpoint, they are handing context to you. Read their checkpoint
+   carefully — don't skim past it because you didn't write it.
+
+2. **Does it contain tasks, recommendations, or clear next actions?**
+   If the `## In progress` or `## Tasks` section names specific work,
+   treat that as your default continuation path unless you have a
+   concrete reason not to. Another agent's task list is not a
+   suggestion — it is the most informed view of what should happen
+   next, written by the agent that just finished working.
+
+3. **Is the most recent checkpoint a review?** If another agent left
+   a review checkpoint (e.g. after reviewing your work), read it in
+   full before acting:
+   `smriti checkpoint show <id>`
+   Reviews often contain specific follow-up tasks. Do those first.
+
+4. **Does the latest checkpoint belong to a different branch?** If
+   the `## Active branches` section shows the most recent activity
+   on a non-main branch, be explicit about your intent. Either
+   continue that branch (fork or write into its session) or stay on
+   main — but say which you are doing and why. Do not silently
+   ignore another agent's branch.
+
+**If you disagree with another agent's recommendation:** do not
+silently override it. Either run
+`smriti compare`
+to understand the divergence, or fork a branch with your alternative
+and let the human decide. Quietly doing the opposite of what the
+last agent recommended — without checkpointing the disagreement —
+is the multi-agent equivalent of overwriting `HANDOFF.md`.
 
 ---
 
@@ -350,6 +387,15 @@ Section 5.
   crisply. The extract path saves you from hand-rolling JSON; it is
   not a license to be verbose.
 
+- **Do not silently override another agent's recommendations.** If
+  the most recent checkpoint was written by another agent and contains
+  tasks or decisions you disagree with, do not just do something
+  different without recording the disagreement. Fork, compare, or
+  surface the disagreement to the human. The other agent's
+  recommendations are the most informed view of what should happen
+  next — overriding them silently is equivalent to deleting someone
+  else's work.
+
 - **Do not use `smriti_install_skill` to overwrite an in-project
   skill pack that you did not write.** If the project already has
   a skill pack of an older version, the install tool will tell you.
@@ -424,7 +470,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version cli-1.0 — this file is
+*Smriti skill pack version cli-1.1 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

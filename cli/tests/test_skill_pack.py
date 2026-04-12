@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.0"
+    assert version == "1.1"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -125,6 +125,10 @@ _REQUIRED_PHRASES = [
     # Section 10 — drift detection
     "divergence",
     "scope divergence",
+    # Section 3.1 — cross-agent continuation
+    "cross-agent continuation",
+    "written by a different agent",
+    "silently override",
     # Section 14 — two-sentence summary
     "session start",
 ]
@@ -230,7 +234,7 @@ def test_install_refuses_same_version_without_force(tmp_path: Path):
 
     result = install("claude-code", destination=dest)  # second attempt
     assert result.action == "skipped"
-    assert result.previous_version == "1.0"
+    assert result.previous_version == get_version()
     # File on disk is unchanged.
     assert "Claude Code" in dest.read_text(encoding="utf-8")
 
@@ -240,14 +244,15 @@ def test_install_force_overwrites_same_version(tmp_path: Path):
     install("claude-code", destination=dest)  # first install
 
     # Tamper with the file — a downstream edit the agent made by hand.
+    current_ver = get_version()
     dest.write_text(
-        "---\nsmriti_skill_pack_version: 1.0\n---\n\nTAMPERED\n",
+        f"---\nsmriti_skill_pack_version: {current_ver}\n---\n\nTAMPERED\n",
         encoding="utf-8",
     )
 
     result = install("claude-code", destination=dest, force=True)
     assert result.action == "overwritten"
-    assert result.previous_version == "1.0"
+    assert result.previous_version == current_ver
     # TAMPERED content is gone; fresh rendered content is back.
     assert "TAMPERED" not in dest.read_text(encoding="utf-8")
     assert "Claude Code" in dest.read_text(encoding="utf-8")
