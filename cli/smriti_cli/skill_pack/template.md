@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.3
+smriti_skill_pack_version: 1.4
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -206,6 +206,24 @@ next agent.
 Say out loud: **"Session complete. Branch pushed, checkpoint
 written, working tree clean."** or **"Stopping — checkpointed
 findings, branch is [disposition]."**
+
+### 3.5 Backend reachability
+
+The Smriti backend is a shared service started by the human. You
+are a client of it. You do not own it.
+
+- Your first `{{mcp:smriti_state}}{{cli:smriti state}}` call will
+  fail with a clear connection error if the backend is not running.
+  That is your reachability check — no separate health probe needed.
+- **If the backend is unreachable, stop and tell the human.** Say:
+  "The Smriti backend is not reachable at http://localhost:8000.
+  Please start it with `make dev` and ensure Postgres is running
+  via `docker compose up -d postgres`."
+- **Do not attempt to start, restart, or manage the backend or
+  Docker yourself.** Starting the server from inside an agent's
+  tool loop creates environment-variable inheritance issues that
+  cause silent mock fallback on all LLM-backed endpoints. The
+  human starts the backend; you use it.
 
 ---
 
@@ -605,7 +623,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.3 — this file is
+*Smriti skill pack version {{primary_mode}}-1.4 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

@@ -208,6 +208,8 @@ The CLI wraps the backend API. See `cli/README.md` for the full command list and
 
 If you want Claude Code or Codex to use Smriti as a shared reasoning-state backend, this is the fast path. Assumes the backend is already running (see Quick Start above).
 
+**Runtime model.** Postgres runs in Docker (`docker compose up -d postgres`). The backend runs locally via `make dev`. The human starts both. Agents are clients of `http://localhost:8000` — they do not start, restart, or manage the backend or Docker. If the backend is unreachable, agents should stop and tell the human.
+
 **1. Install the CLI + MCP server** (one command gets both):
 
 ```bash
