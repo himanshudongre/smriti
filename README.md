@@ -204,6 +204,55 @@ The CLI wraps the backend API. See `cli/README.md` for the full command list and
 
 ---
 
+## Quick start for coding agents
+
+If you want Claude Code or Codex to use Smriti as a shared reasoning-state backend, this is the fast path. Assumes the backend is already running (see Quick Start above).
+
+**1. Install the CLI + MCP server** (one command gets both):
+
+```bash
+cd cli && pip install -e . && cd ..
+```
+
+**2. Configure your MCP host** (Claude Code example — check your host's docs for the config file path):
+
+```json
+{
+  "mcpServers": {
+    "smriti": {
+      "command": "smriti-mcp",
+      "env": { "SMRITI_API_URL": "http://localhost:8000" }
+    }
+  }
+}
+```
+
+Restart the host. The `smriti_*` tools appear in the tool picker.
+
+**3. Install the skill pack** so the agent knows *when* and *why* to use Smriti, not just *how*:
+
+```bash
+# For Claude Code — installs to .claude/skills/smriti/SKILL.md
+smriti skills install claude-code
+
+# For Codex — installs to AGENTS.md (commit it so Codex sees it)
+smriti skills install codex
+git add AGENTS.md && git commit -m "Add Smriti skill pack for Codex"
+```
+
+**4. Create a space and start working:**
+
+```bash
+smriti space create my-project --description "What this project is about"
+smriti state my-project                    # your agent's first action, every session
+```
+
+From here, the skill pack teaches the agent to read state first, checkpoint at inflection points (not after every small step), fork before exploring alternatives, and never write `HANDOFF.md`. See `cli/README.md` for the full workflow walkthrough.
+
+**Why this is better than markdown handoffs:** Smriti checkpoints are structured, branchable, comparable, and restorable. When reasoning drifts or an agent goes in the wrong direction, you can restore to a clean checkpoint and the bad context is excluded — not summarized, not hidden, actually excluded at the data layer. Markdown handoff files can't do that, and they fall apart the moment two agents need to work in parallel.
+
+---
+
 ## Docker (if you prefer that)
 
 ```bash
