@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.2"
+    assert version == "1.3"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -133,6 +133,15 @@ _REQUIRED_PHRASES = [
     "repo reconciliation",
     "git log",
     "already done in the repo",
+    # Section 3.3 — clean start
+    "clean start",
+    "git fetch origin",
+    "local residue",
+    "default to freshness",
+    # Section 3.4 — clean finish
+    "clean finish",
+    "branch disposition",
+    "push your branch",
     # Section 14 — two-sentence summary
     "session start",
 ]

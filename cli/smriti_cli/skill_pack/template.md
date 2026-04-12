@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.2
+smriti_skill_pack_version: 1.3
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -137,6 +137,75 @@ is the reasoning-state summary. When they disagree, check the repo.
 
 Say out loud: **"Checking whether the flagged tasks are already
 reflected in the repo before starting."**
+
+**If the repo state and Smriti state cannot be reconciled safely —
+e.g., the repo has changes that contradict the state brief and you
+cannot tell which is correct — stop and ask the human.** Do not
+guess. Irreconcilable state is a signal that a human judgment call
+is needed, not a puzzle for the agent to solve creatively.
+
+### 3.3 Clean start: repo hygiene
+
+Before you do any work — after reading Smriti state but before
+acting on it — make sure your local repo is clean and current.
+
+1. **Sync against the remote.** Run `git fetch origin` and check
+   whether your local branch is behind. If you are on main and
+   main has moved, pull. If you are on a feature branch, decide
+   whether to rebase or continue as-is.
+2. **Check which branch you are on.** Run `git branch` or
+   `git status`. If you are on a stale branch from a previous
+   session that has already been merged, switch to main. Do not
+   accidentally continue on a dead branch.
+3. **Inspect local residue.** Check for:
+   - Modified or untracked files (`git status`)
+   - Stash entries (`git stash list`)
+   - Local-only commits not yet pushed (`git log origin/main..HEAD`)
+   If any of these exist, classify them before starting:
+   - **Stale residue from a previous session:** clean it up (drop
+     the stash, discard the changes, or switch branches).
+   - **Intentional work-in-progress:** continue it, but say so.
+   - **Unknown origin:** do not touch it. Ask the human.
+4. **Default to freshness.** Unless you are intentionally working
+   on a divergent branch, your starting point should be the latest
+   `origin/main` plus the latest Smriti state. Stale local state
+   is the most common source of duplicated work and silent
+   conflicts.
+
+Say out loud: **"Repo is clean and synced against origin."** or
+**"Found local residue — classifying before proceeding."**
+
+### 3.4 Clean finish: handoff hygiene
+
+When you are done working — whether the task is complete, blocked,
+or you are stopping for any reason — leave a clean slate for the
+next agent.
+
+1. **Checkpoint the outcome in Smriti.** This is the primary
+   handoff. The checkpoint should say what was done, what was
+   decided, and what is still open. (Section 4 covers when and
+   how to checkpoint.)
+2. **State the branch disposition.** In your checkpoint or in your
+   final message to the human, say explicitly:
+   - "Branch `X` is ready to merge." or
+   - "Branch `X` needs review before merge." or
+   - "Branch `X` is exploratory / not ready." or
+   - "Work was done directly on main."
+3. **Push your branch.** If your work is on a branch, push it to
+   origin so the next agent (and the human) can see it. A
+   local-only branch is invisible to everyone else.
+4. **Clean up local residue.** Do not leave unexplained modified
+   files, stash entries, or temporary files in the working tree.
+   If you created a stash during reconciliation, either drop it
+   (if the stashed content is no longer needed) or note in your
+   checkpoint that the stash exists and what it contains.
+5. **Do not leave the repo on a dead branch.** If your branch has
+   been merged or is no longer active, switch back to main before
+   ending the session so the next agent starts in a clean state.
+
+Say out loud: **"Session complete. Branch pushed, checkpoint
+written, working tree clean."** or **"Stopping — checkpointed
+findings, branch is [disposition]."**
 
 ---
 
@@ -478,6 +547,8 @@ Use them literally.
 | run review after a drift signal | "Running a consistency review on the current state before I continue." |
 | run compare on a divergence signal | "Comparing main against the divergent branch to see the full diff." |
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
+| verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
+| finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
 
 These are not cosmetic. They are what makes your session legible to
@@ -534,7 +605,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.2 — this file is
+*Smriti skill pack version {{primary_mode}}-1.3 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*
