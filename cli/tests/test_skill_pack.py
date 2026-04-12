@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.1"
+    assert version == "1.2"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -129,6 +129,10 @@ _REQUIRED_PHRASES = [
     "cross-agent continuation",
     "written by a different agent",
     "silently override",
+    # Section 3.2 — repo reconciliation
+    "repo reconciliation",
+    "git log",
+    "already done in the repo",
     # Section 14 — two-sentence summary
     "session start",
 ]

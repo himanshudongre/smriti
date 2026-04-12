@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.1
+smriti_skill_pack_version: 1.2
 title: Smriti — how to use it well
 target: Codex
 ---
@@ -106,6 +106,37 @@ to understand the divergence, or fork a branch with your alternative
 and let the human decide. Quietly doing the opposite of what the
 last agent recommended — without checkpointing the disagreement —
 is the multi-agent equivalent of overwriting `HANDOFF.md`.
+
+### 3.2 Repo reconciliation before acting
+
+The state brief tells you what was decided and what tasks were
+flagged. It does NOT tell you whether those tasks have already been
+completed in the codebase. Another agent may have finished the work
+and committed it after the checkpoint was written. Before you start
+implementing anything from the state brief's tasks, reconcile:
+
+1. **Check recent commits.** Run `git log --oneline -10` (or your
+   host's equivalent). Do any of them address the task you are about
+   to start?
+2. **If the task targets a specific file, check that file.** Read
+   or grep the file to see whether the change already exists.
+3. **If the work is already done:** do NOT redo it. Instead, produce
+   a short confirmation checkpoint: "Verified that <task> was
+   completed in commit <hash>. Closing this task — no further action
+   needed." Then move to the next open item.
+4. **If the work is partially done:** continue from where it left
+   off. Do not restart from scratch.
+5. **If the work is not done:** proceed with implementation.
+
+This step is especially important when the most recent checkpoints
+have low-signal content (e.g. mock or empty fields). The checkpoint
+may have been written with a degraded extractor — the work could
+still have been done and committed even though the checkpoint does
+not describe it well. The repo is the ground truth; the checkpoint
+is the reasoning-state summary. When they disagree, check the repo.
+
+Say out loud: **"Checking whether the flagged tasks are already
+reflected in the repo before starting."**
 
 ---
 
@@ -396,6 +427,14 @@ Section 5.
   next — overriding them silently is equivalent to deleting someone
   else's work.
 
+- **Do not implement a task from the state brief without checking
+  whether it is already done in the repo.** Smriti tracks reasoning
+  state, not repo state. A task listed in a checkpoint may have been
+  completed by another agent and committed to git since the checkpoint
+  was written. Check `git log` and the relevant files before starting.
+  Duplicating completed work wastes a full session and creates noise
+  in the timeline.
+
 - **Do not use `smriti_install_skill` to overwrite an in-project
   skill pack that you did not write.** If the project already has
   a skill pack of an older version, the install tool will tell you.
@@ -416,6 +455,7 @@ Use them literally.
 | restore an earlier checkpoint | "Restoring to an earlier checkpoint." |
 | run review after a drift signal | "Running a consistency review on the current state before I continue." |
 | run compare on a divergence signal | "Comparing main against the divergent branch to see the full diff." |
+| reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
 
 These are not cosmetic. They are what makes your session legible to
@@ -470,7 +510,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version cli-1.1 — this file is
+*Smriti skill pack version cli-1.2 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*
