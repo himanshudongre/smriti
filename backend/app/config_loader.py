@@ -1,12 +1,31 @@
 """
 Provider configuration loader.
 Priority: env vars > config/providers.yaml > built-in defaults.
+
+The .env file (at the project root, one level above backend/) is loaded
+via python-dotenv at import time so that API keys set there are visible
+to os.environ.get() even when the backend is started by a process that
+does not inherit the user's shell profile (e.g. uvicorn launched from
+an IDE, a CI runner, or a subprocess-based tool host).
 """
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env from the project root (smriti/) — one level above
+# backend/. Falls back silently if the file does not exist (e.g. in
+# Docker where env vars are injected by the runtime).
+_PROJECT_ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
+_BACKEND_DIR_ENV = Path(__file__).parent.parent / ".env"
+# Try project root first (where .env.example lives), then backend dir.
+if _PROJECT_ROOT_ENV.is_file():
+    load_dotenv(_PROJECT_ROOT_ENV, override=False)
+elif _BACKEND_DIR_ENV.is_file():
+    load_dotenv(_BACKEND_DIR_ENV, override=False)
 
 try:
     import yaml

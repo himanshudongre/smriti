@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json as _json
+import logging
 
 from app.config_loader import get_provider_config, ProviderNotConfiguredError
 from app.providers.base import ProviderAdapter
+
+logger = logging.getLogger(__name__)
 
 
 # Canned JSON response returned by the mock adapter when the caller asks
@@ -74,6 +77,13 @@ def get_adapter(provider: str, allow_mock: bool = False) -> ProviderAdapter:
         cfg = get_provider_config(p)
     except ProviderNotConfiguredError:
         if allow_mock:
+            logger.warning(
+                "Provider '%s' has no API key configured — falling back to "
+                "MockAdapter. Extraction, drafting, and review endpoints will "
+                "return deterministic mock content instead of real LLM output. "
+                "Set the API key in .env or config/providers.yaml to fix this.",
+                provider,
+            )
             return MockAdapter()
         raise
 
