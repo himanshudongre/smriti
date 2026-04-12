@@ -258,6 +258,8 @@ smriti state my-project                    # your agent's first action, every se
 
 From here, the skill pack teaches the agent to read state first, checkpoint at inflection points (not after every small step), fork before exploring alternatives, and never write `HANDOFF.md`. See `cli/README.md` for the full workflow walkthrough.
 
+**Optional: auto-inject state at session start.** Claude Code supports SessionStart hooks. Add a `.claude/settings.json` with a hook that runs `smriti state <project> --preview` at startup — the state brief is injected into the agent's context before it processes the first prompt. See `CLAUDE.md` for the compact project-level instructions that complement the hook.
+
 **Why this is better than markdown handoffs:** Smriti checkpoints are structured, branchable, comparable, and restorable. When reasoning drifts or an agent goes in the wrong direction, you can restore to a clean checkpoint and the bad context is excluded — not summarized, not hidden, actually excluded at the data layer. Markdown handoff files can't do that, and they fall apart the moment two agents need to work in parallel.
 
 ---
