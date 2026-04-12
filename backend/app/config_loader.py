@@ -14,18 +14,22 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv as _load_dotenv
+except ImportError:
+    _load_dotenv = None
 
 # Load .env from the project root (smriti/) — one level above
 # backend/. Falls back silently if the file does not exist (e.g. in
-# Docker where env vars are injected by the runtime).
-_PROJECT_ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
-_BACKEND_DIR_ENV = Path(__file__).parent.parent / ".env"
-# Try project root first (where .env.example lives), then backend dir.
-if _PROJECT_ROOT_ENV.is_file():
-    load_dotenv(_PROJECT_ROOT_ENV, override=False)
-elif _BACKEND_DIR_ENV.is_file():
-    load_dotenv(_BACKEND_DIR_ENV, override=False)
+# Docker where env vars are injected by the runtime) or if
+# python-dotenv is not installed.
+if _load_dotenv is not None:
+    _PROJECT_ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
+    _BACKEND_DIR_ENV = Path(__file__).parent.parent / ".env"
+    if _PROJECT_ROOT_ENV.is_file():
+        _load_dotenv(_PROJECT_ROOT_ENV, override=False)
+    elif _BACKEND_DIR_ENV.is_file():
+        _load_dotenv(_BACKEND_DIR_ENV, override=False)
 
 try:
     import yaml
@@ -138,7 +142,7 @@ def load_config() -> AppProviderConfig:
     )
 
 
-# Singleton — loaded once at import time
+# Singleton — loaded once on first call to get_config().
 _config: AppProviderConfig | None = None
 
 
@@ -147,6 +151,19 @@ def get_config() -> AppProviderConfig:
     if _config is None:
         _config = load_config()
     return _config
+
+
+def reset_config() -> None:
+    """Clear the cached singleton so the next get_config() call re-reads
+    env vars and providers.yaml.
+
+    Useful during development when editing .env or providers.yaml without
+    restarting the server. Not intended for production use — hot-reloading
+    config in a running server can cause mid-request inconsistency if
+    two requests see different configs.
+    """
+    global _config
+    _config = None
 
 
 def get_provider_config(provider: str) -> ProviderConfig:
@@ -187,13 +204,23 @@ def providers_status() -> dict[str, dict]:
         }
         for name in ("openai", "anthropic", "openrouter")
     }
+    # Background intelligence uses one of the above providers. Report
+    # its ACTUAL key/enabled/configured state instead of hardcoding True,
+    # so startup logs and the /providers endpoint surface mock-fallback
+    # situations honestly.
+    bg_provider_name = cfg.background.provider.lower()
+    bg_pc = getattr(cfg, bg_provider_name, None)
+    bg_has_key = bool(bg_pc.api_key) if bg_pc else False
+    bg_enabled = bg_pc.enabled if bg_pc else False
+    bg_missing_pkg = _check_package(bg_provider_name) if bg_pc else True
+    bg_configured = bg_enabled and bg_has_key and not bg_missing_pkg
     status["background_intelligence"] = {
         "provider": cfg.background.provider,
         "model": cfg.background.model,
-        "enabled": True,
-        "has_key": True,
-        "missing_package": False,
-        "configured": True,
-        "status_label": "Ready",
+        "enabled": bg_enabled,
+        "has_key": bg_has_key,
+        "missing_package": bg_missing_pkg,
+        "configured": bg_configured,
+        "status_label": "Ready" if bg_configured else "Disabled — extraction will use MockAdapter",
     }
     return status

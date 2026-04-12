@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
         from app.config_loader import providers_status
         import logging
         logger = logging.getLogger("smriti.startup")
-        
+
         status = providers_status()
         logger.info("Provider runtime validation:")
         for name, info in status.items():
@@ -68,6 +68,27 @@ def create_app() -> FastAPI:
                 logger.info(f"  - {name}: disabled (explicitly disabled in config)")
             else:
                 logger.info(f"  - {name}: configured and ready")
+
+        # Specific check for the background provider — this is what
+        # powers checkpoint extraction, drafting, and review. If it's
+        # not configured, every LLM-backed endpoint will silently
+        # return mock content, which is the single most confusing
+        # failure mode in local development.
+        bg = status.get("background_intelligence", {})
+        if not bg.get("configured"):
+            bg_provider = bg.get("provider", "openai")
+            logger.warning(
+                "⚠ Background intelligence provider '%s' is NOT configured. "
+                "Checkpoint extraction, drafting, and review will return mock "
+                "content instead of real LLM output. To fix: set %s in .env "
+                "or add the key to config/providers.yaml.",
+                bg_provider,
+                {
+                    "openai": "OPENAI_API_KEY",
+                    "anthropic": "ANTHROPIC_API_KEY",
+                    "openrouter": "OPENROUTER_API_KEY",
+                }.get(bg_provider, f"{bg_provider.upper()}_API_KEY"),
+            )
 
     return app
 
