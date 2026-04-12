@@ -527,7 +527,7 @@ def smriti_claim_done(claim_id: str, abandon: bool = False) -> str:
         claim = client.update_claim(claim_id, status)
     except SmritiError as e:
         _raise_from(e)
-    return f"Claim `{claim['id'][:8]}…` marked {claim['status']}."
+    return f"Claim `{claim['id']}` marked {claim['status']}."
 
 
 @mcp.tool()

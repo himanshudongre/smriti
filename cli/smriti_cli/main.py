@@ -579,7 +579,7 @@ def cmd_claim_create(client: SmritiClient, args: argparse.Namespace) -> None:
         print(
             f"Claimed: [{claim['intent_type']}] \"{claim['scope']}\" "
             f"on `{claim['branch_name']}` by `{claim['agent']}`  "
-            f"(id: {claim['id'][:8]}…, expires in {args.ttl}h)"
+            f"(id: {claim['id']}, expires in {args.ttl}h)"
         )
 
 
@@ -589,7 +589,7 @@ def cmd_claim_done(client: SmritiClient, args: argparse.Namespace) -> None:
     if args.json:
         _print_json(claim)
     else:
-        print(f"Claim `{claim['id'][:8]}…` marked done.")
+        print(f"Claim `{claim['id']}` marked done.")
 
 
 def cmd_claim_abandon(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -598,7 +598,7 @@ def cmd_claim_abandon(client: SmritiClient, args: argparse.Namespace) -> None:
     if args.json:
         _print_json(claim)
     else:
-        print(f"Claim `{claim['id'][:8]}…` marked abandoned.")
+        print(f"Claim `{claim['id']}` marked abandoned.")
 
 
 def cmd_claim_list(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -617,7 +617,7 @@ def cmd_claim_list(client: SmritiClient, args: argparse.Namespace) -> None:
         scope = c.get("scope", "?")
         intent = c.get("intent_type", "implement")
         branch = c.get("branch_name", "main")
-        print(f"  - `{agent}` [{intent}] on `{branch}` — {scope}  (id: {c['id'][:8]}…)")
+        print(f"  - `{agent}` [{intent}] on `{branch}` — {scope}  (id: {c['id']})")
 
 
 def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
