@@ -44,14 +44,14 @@ Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsu
 
 Restart the host and the `smriti_*` tools appear in the tool picker.
 
-**Available tools (13):**
+**Available tools (15):**
 
 | Tool | Purpose |
 |---|---|
 | `smriti_list_spaces` | List all spaces |
 | `smriti_create_space` | Create a new space |
 | `smriti_delete_space` | Delete a space and all its checkpoints |
-| `smriti_state` | Multi-branch continuation brief for the current project state |
+| `smriti_state` | Multi-branch continuation brief (includes active work claims + divergence signal) |
 | `smriti_list_checkpoints` | List checkpoints in a space (optional branch filter) |
 | `smriti_show_checkpoint` | Print a specific checkpoint as markdown |
 | `smriti_create_checkpoint` | Create a checkpoint from freeform markdown (via extractor) |
@@ -60,6 +60,8 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 | `smriti_restore` | Print a specific checkpoint as a continuation brief |
 | `smriti_fork` | Fork a new session from an existing checkpoint |
 | `smriti_compare` | Structured diff between two checkpoints |
+| `smriti_claim` | Declare a work claim before starting work (pre-work intent visibility) |
+| `smriti_claim_done` | Mark a work claim as done or abandoned |
 | `smriti_install_skill` | Return the Smriti agent skill pack for a host (`claude-code` / `codex`) |
 
 **Example.** In a Claude Code session with Smriti MCP connected, ask *"show me the current state of my-project"*. The agent calls `smriti_state(space="my-project")`, the MCP server hits the backend, pipes the result through the same `format_state_brief` formatter the CLI uses, and returns the continuation brief you'd otherwise get from `smriti state my-project` at the terminal — directly inside the chat context.
@@ -78,7 +80,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 mcp dev smriti_cli.mcp_server:mcp
 ```
 
-Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 13 entries, all prefixed `smriti_`) and try each tool interactively.
+Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 15 entries, all prefixed `smriti_`) and try each tool interactively.
 
 ## Installing the Smriti skill pack
 
@@ -129,6 +131,12 @@ smriti state <space>                                     # multi-branch continua
 smriti state <space> --preview                           # truncate artifacts to a short preview
 smriti state <space> --main-only                         # legacy single-HEAD path (pre-V4 behaviour)
 smriti state <space> --json                              # structured output
+
+smriti claim create <space> --agent <name> --scope "..." # declare work intent before starting
+smriti claim create <space> --agent <name> --scope "..." --intent-type review
+smriti claim done <claim-id>                             # mark a claim as done
+smriti claim abandon <claim-id>                          # mark a claim as abandoned
+smriti claim list <space>                                # list active claims
 
 smriti skills list                                       # list skill pack targets and template version
 smriti skills show <target>                              # print rendered skill pack to stdout
