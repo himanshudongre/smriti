@@ -309,6 +309,54 @@ def test_lineage_with_fork_shows_both_sessions(client):
     assert fork_node["branch_name"] == "side-branch"
 
 
+def test_lineage_checkpoint_includes_author_agent(client):
+    """author_agent round-trips through the lineage endpoint.
+
+    Verifies that:
+    - a checkpoint created with an explicit author_agent has that value
+      in the lineage CheckpointNode response
+    - a checkpoint created without author_agent returns null
+
+    Regression guard for the V4 Build 1 change that added author_agent
+    to CheckpointNode in lineage.py (flagged as missing test coverage
+    by Codex review checkpoint b9d2002).
+    """
+    repo_id = _create_repo(client, "Author Agent Lineage")
+    session_id = _create_session(client, repo_id)
+
+    tagged = _commit(
+        client, repo_id, session_id,
+        message="Tagged checkpoint",
+        author_agent="claude-code",
+    )
+    fallback = _commit(
+        client, repo_id, session_id,
+        message="Fallback checkpoint",
+        # No explicit author_agent — backend falls back to
+        # session.active_provider ("openrouter" in test fixtures).
+    )
+
+    r = client.get(f"/api/v5/lineage/spaces/{repo_id}")
+    assert r.status_code == 200, r.text
+    checkpoints = r.json()["checkpoints"]
+    assert len(checkpoints) == 2
+
+    by_id = {c["id"]: c for c in checkpoints}
+
+    # Tagged checkpoint must have the explicit author_agent value.
+    assert by_id[tagged["id"]]["author_agent"] == "claude-code"
+
+    # Checkpoint without explicit author_agent falls back to
+    # session.active_provider. The field is never null once stored —
+    # the fallback happens at commit time in the backend, not at
+    # response time. Verify it is present and non-empty.
+    fallback_agent = by_id[fallback["id"]]["author_agent"]
+    assert fallback_agent is not None and fallback_agent != "", (
+        f"Expected a fallback author_agent from session.active_provider, "
+        f"got: {fallback_agent!r}"
+    )
+
+
 # ── Compare tests ─────────────────────────────────────────────────────────────
 
 def test_compare_same_checkpoint(client):
