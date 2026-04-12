@@ -15,21 +15,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    from dotenv import load_dotenv as _load_dotenv
+    from dotenv import dotenv_values as _dotenv_values
 except ImportError:
-    _load_dotenv = None
+    _dotenv_values = None
+
+import logging
+logger = logging.getLogger(__name__)
 
 # Load .env from the project root (smriti/) — one level above
-# backend/. Falls back silently if the file does not exist (e.g. in
-# Docker where env vars are injected by the runtime) or if
-# python-dotenv is not installed.
-if _load_dotenv is not None:
-    _PROJECT_ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
-    _BACKEND_DIR_ENV = Path(__file__).parent.parent / ".env"
-    if _PROJECT_ROOT_ENV.is_file():
-        _load_dotenv(_PROJECT_ROOT_ENV, override=False)
-    elif _BACKEND_DIR_ENV.is_file():
-        _load_dotenv(_BACKEND_DIR_ENV, override=False)
+# backend/. We track which values came from dotenv so reset_config()
+# can safely refresh them later without clobbering real process env.
+_PROJECT_ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
+_BACKEND_DIR_ENV = Path(__file__).parent.parent / ".env"
+_PROCESS_ENV_KEYS = frozenset(os.environ)
+_DOTENV_MANAGED_VALUES: dict[str, str] = {}
 
 try:
     import yaml
@@ -79,8 +78,54 @@ class ProviderNotConfiguredError(Exception):
 _CONFIG_PATH = Path(__file__).parent.parent / "config" / "providers.yaml"
 
 
-import logging
-logger = logging.getLogger(__name__)
+def _resolve_dotenv_path() -> Path | None:
+    if _PROJECT_ROOT_ENV.is_file():
+        return _PROJECT_ROOT_ENV
+    if _BACKEND_DIR_ENV.is_file():
+        return _BACKEND_DIR_ENV
+    return None
+
+
+def _sync_dotenv_into_environ() -> None:
+    """Refresh dotenv-managed values while preserving real process env.
+
+    Keys that were present before this module loaded are treated as
+    externally managed and are never overwritten. Keys previously
+    sourced from .env are updated in place when the file changes, and
+    removed from os.environ if they disappear from the file.
+    """
+    global _DOTENV_MANAGED_VALUES
+
+    if _dotenv_values is None:
+        return
+
+    env_path = _resolve_dotenv_path()
+    parsed = _dotenv_values(env_path) if env_path is not None else {}
+    parsed_values = {key: value for key, value in parsed.items() if value is not None}
+
+    previous_managed = _DOTENV_MANAGED_VALUES
+
+    for key, old_value in previous_managed.items():
+        if key in parsed_values:
+            continue
+        if os.environ.get(key) == old_value:
+            os.environ.pop(key, None)
+
+    new_managed: dict[str, str] = {}
+    for key, value in parsed_values.items():
+        if key in _PROCESS_ENV_KEYS:
+            continue
+
+        current_value = os.environ.get(key)
+        old_value = previous_managed.get(key)
+        if current_value is None or (old_value is not None and current_value == old_value):
+            os.environ[key] = value
+            new_managed[key] = value
+
+    _DOTENV_MANAGED_VALUES = new_managed
+
+
+_sync_dotenv_into_environ()
 
 def _load_yaml() -> dict:
     if not _YAML_AVAILABLE:
@@ -94,6 +139,7 @@ def _load_yaml() -> dict:
 
 
 def load_config() -> AppProviderConfig:
+    _sync_dotenv_into_environ()
     raw = _load_yaml()
     providers_raw = raw.get("providers", {})
     chat_raw = raw.get("chat", {})
@@ -155,7 +201,7 @@ def get_config() -> AppProviderConfig:
 
 def reset_config() -> None:
     """Clear the cached singleton so the next get_config() call re-reads
-    env vars and providers.yaml.
+    .env-backed env vars, current os.environ, and providers.yaml.
 
     Useful during development when editing .env or providers.yaml without
     restarting the server. Not intended for production use — hot-reloading
