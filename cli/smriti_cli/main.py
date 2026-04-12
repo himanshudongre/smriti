@@ -213,10 +213,11 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
             _print_no_checkpoints(state.get("space") or space, args)
             return
         # Strip the duplicated head/commit so `space_state` only carries
-        # the additive payload the formatter consumes (active_branches +
-        # divergence). Keeps the JSON output sensible too.
+        # the additive payload the formatter consumes (active_branches,
+        # active_claims, divergence). Keeps the JSON output sensible too.
         space_state = {
             "active_branches": state.get("active_branches") or [],
+            "active_claims": state.get("active_claims") or [],
             "divergence": state.get("divergence"),
         }
 
@@ -225,6 +226,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
         payload = {"space": space, "head": head, "commit": commit}
         if space_state is not None:
             payload["active_branches"] = space_state["active_branches"]
+            payload["active_claims"] = space_state["active_claims"]
             payload["divergence"] = space_state["divergence"]
         _print_json(payload)
     else:
@@ -553,6 +555,71 @@ def cmd_skills_install(client: SmritiClient, args: argparse.Namespace) -> None:
     )
 
 
+# ── claim subcommand handlers ───────────────────────────────────────────────
+
+
+def cmd_claim_create(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Create a work claim — declare intent before starting work."""
+    space = client.resolve_space(args.space)
+    head = client.get_head(space["id"])
+    base_commit_id = head.get("commit_id")  # auto-bind to current HEAD
+
+    claim = client.create_claim(
+        space_id=space["id"],
+        agent=args.agent,
+        scope=args.scope,
+        branch_name=args.branch or "main",
+        base_commit_id=base_commit_id,
+        intent_type=args.intent_type,
+        ttl_hours=args.ttl,
+    )
+    if args.json:
+        _print_json(claim)
+    else:
+        print(
+            f"Claimed: [{claim['intent_type']}] \"{claim['scope']}\" "
+            f"on `{claim['branch_name']}` by `{claim['agent']}`  "
+            f"(id: {claim['id'][:8]}…, expires in {args.ttl}h)"
+        )
+
+
+def cmd_claim_done(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Mark a claim as done."""
+    claim = client.update_claim(args.claim_id, "done")
+    if args.json:
+        _print_json(claim)
+    else:
+        print(f"Claim `{claim['id'][:8]}…` marked done.")
+
+
+def cmd_claim_abandon(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Mark a claim as abandoned."""
+    claim = client.update_claim(args.claim_id, "abandoned")
+    if args.json:
+        _print_json(claim)
+    else:
+        print(f"Claim `{claim['id'][:8]}…` marked abandoned.")
+
+
+def cmd_claim_list(client: SmritiClient, args: argparse.Namespace) -> None:
+    """List active claims for a space."""
+    space = client.resolve_space(args.space)
+    claims = client.list_claims(space["id"], include_expired=args.all)
+    if args.json:
+        _print_json(claims)
+        return
+    if not claims:
+        print("No active claims.")
+        return
+    print(f"{len(claims)} active claim(s):")
+    for c in claims:
+        agent = c.get("agent", "?")
+        scope = c.get("scope", "?")
+        intent = c.get("intent_type", "implement")
+        branch = c.get("branch_name", "main")
+        print(f"  - `{agent}` [{intent}] on `{branch}` — {scope}  (id: {c['id'][:8]}…)")
+
+
 def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
     commit = client.get_commit(args.checkpoint_id)
     space = client.get_space(str(commit.get("repo_id", "")))
@@ -783,6 +850,43 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     compare_parser.set_defaults(func=cmd_compare)
+
+    # claim — work claims for pre-work intent visibility
+    claim_parser = subparsers.add_parser(
+        "claim",
+        help="Manage work claims (pre-work intent visibility for multi-agent coordination)",
+    )
+    claim_sub = claim_parser.add_subparsers(dest="subcommand", required=True)
+
+    cl_create = claim_sub.add_parser("create", help="Declare intent before starting work")
+    cl_create.add_argument("space", help="Space name or UUID")
+    cl_create.add_argument("--agent", required=True, help="Your agent identifier (e.g. claude-code)")
+    cl_create.add_argument("--scope", required=True, help="One sentence describing what you are about to work on")
+    cl_create.add_argument("--branch", help="Branch name (default: main)", default=None)
+    cl_create.add_argument(
+        "--intent-type", dest="intent_type", default="implement",
+        choices=["implement", "review", "investigate", "docs", "test"],
+        help="Type of work (default: implement)",
+    )
+    cl_create.add_argument("--ttl", type=float, default=4.0, help="Hours until expiration (default: 4)")
+    cl_create.add_argument("--json", action="store_true")
+    cl_create.set_defaults(func=cmd_claim_create)
+
+    cl_done = claim_sub.add_parser("done", help="Mark a claim as done")
+    cl_done.add_argument("claim_id", help="Claim UUID")
+    cl_done.add_argument("--json", action="store_true")
+    cl_done.set_defaults(func=cmd_claim_done)
+
+    cl_abandon = claim_sub.add_parser("abandon", help="Mark a claim as abandoned")
+    cl_abandon.add_argument("claim_id", help="Claim UUID")
+    cl_abandon.add_argument("--json", action="store_true")
+    cl_abandon.set_defaults(func=cmd_claim_abandon)
+
+    cl_list = claim_sub.add_parser("list", help="List active claims for a space")
+    cl_list.add_argument("space", help="Space name or UUID")
+    cl_list.add_argument("--all", action="store_true", help="Include expired/done/abandoned claims")
+    cl_list.add_argument("--json", action="store_true")
+    cl_list.set_defaults(func=cmd_claim_list)
 
     # skills — install the Smriti agent skill pack into an agent host's
     # project directory. The skill pack teaches agents when and why to

@@ -358,6 +358,20 @@ class DivergenceSummary(BaseModel):
     pairs: list[DivergencePair] = Field(default_factory=list)
 
 
+class ActiveClaimSummary(BaseModel):
+    """One line per active work claim in the `Active work` section."""
+    id: uuid.UUID
+    agent: str
+    branch_name: str
+    scope: str
+    intent_type: str
+    claimed_at: datetime
+    expires_at: datetime
+    base_commit_hash: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class SpaceStateResponse(BaseModel):
     """Composite response for `GET /spaces/{id}/state`.
 
@@ -368,6 +382,7 @@ class SpaceStateResponse(BaseModel):
     head: HeadResponse
     commit: Optional[CommitResponse] = None  # None when space has no checkpoints
     active_branches: list[ActiveBranchSummary] = Field(default_factory=list)
+    active_claims: list[ActiveClaimSummary] = Field(default_factory=list)
     divergence: Optional[DivergenceSummary] = None
 
 
@@ -926,6 +941,38 @@ def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
     if main_head_commit and active_branch_commits:
         divergence = _compute_space_divergence(main_head_commit, active_branch_commits)
 
+    # Active work claims — query-time expiration filter.
+    from app.db.models import WorkClaim
+    now = _utcnow()
+    claims_stmt = (
+        select(WorkClaim)
+        .where(
+            WorkClaim.repo_id == repo_id,
+            WorkClaim.status == "active",
+            WorkClaim.expires_at > now,
+        )
+        .order_by(WorkClaim.claimed_at.desc())
+        .limit(10)
+    )
+    active_claims = []
+    for wc in db.scalars(claims_stmt):
+        base_hash = None
+        if wc.base_commit_id:
+            base_commit = db.get(CommitModel, wc.base_commit_id)
+            base_hash = base_commit.commit_hash[:7] if base_commit else None
+        active_claims.append(
+            ActiveClaimSummary(
+                id=wc.id,
+                agent=wc.agent,
+                branch_name=wc.branch_name,
+                scope=wc.scope,
+                intent_type=wc.intent_type,
+                claimed_at=wc.claimed_at,
+                expires_at=wc.expires_at,
+                base_commit_hash=base_hash,
+            )
+        )
+
     return SpaceStateResponse(
         space=SpaceBrief(
             id=repo.id,
@@ -935,6 +982,7 @@ def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
         head=head_resp,
         commit=commit_resp,
         active_branches=active_branches,
+        active_claims=active_claims,
         divergence=divergence,
     )
 

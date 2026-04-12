@@ -33,7 +33,7 @@ def create_app() -> FastAPI:
     for handler in logging.root.handlers:
         handler.addFilter(SecretGuardFilter())
 
-    from app.api.routes import repos, commits, context_git, chat, checkpoint, lineage
+    from app.api.routes import repos, commits, context_git, chat, checkpoint, lineage, claims
 
     # V2 Routes (Git for memory)
     app.include_router(repos.router, prefix="/api/v2", tags=["repos"])
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     # V5 Routes
     app.include_router(checkpoint.router, prefix="/api/v5/checkpoint", tags=["checkpoint-v5"])
     app.include_router(lineage.router, prefix="/api/v5", tags=["lineage-v5"])
+    app.include_router(claims.router, prefix="/api/v5", tags=["claims-v5"])
 
     @app.get("/health")
     async def health_check():

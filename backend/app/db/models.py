@@ -255,3 +255,53 @@ class TurnEvent(Base):
     # Relationships
     session: Mapped["ChatSession"] = relationship(back_populates="turns")
 
+
+class WorkClaim(Base):
+    """A lightweight, time-bounded declaration that an agent is actively
+    working on something in a space.
+
+    Work claims are advisory, not locks. They make active intent visible
+    to other agents before work produces a checkpoint. The skill pack
+    teaches agents to check for overlapping claims before starting work
+    and to create their own claim after reading state.
+
+    Claims expire at `expires_at`. Expired claims are excluded from the
+    state brief by query-time filtering — no background sweep needed.
+    Agents explicitly mark claims as `done` or `abandoned` when work
+    finishes; if they forget, the claim expires naturally.
+    """
+    __tablename__ = "work_claims"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    repo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("repos.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    agent: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(255), default="main")
+    base_commit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("commits.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    intent_type: Mapped[str] = mapped_column(
+        String(20), default="implement",
+        doc="One of: implement, review, investigate, docs, test",
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="active",
+        doc="One of: active, done, abandoned",
+    )
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+

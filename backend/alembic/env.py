@@ -10,6 +10,7 @@ from app.db.models import (  # noqa: F401 — import to register models
     ExtractionResultModel,
     MessageModel,
     SessionModel,
+    WorkClaim,
 )
 
 # this is the Alembic Config object

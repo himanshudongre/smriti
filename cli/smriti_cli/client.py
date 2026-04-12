@@ -165,6 +165,46 @@ class SmritiClient:
         """
         return self._request("GET", f"/api/v4/chat/spaces/{space_id}/state")
 
+    # ── Work claims ──────────────────────────────────────────────────
+
+    def create_claim(
+        self,
+        space_id: str,
+        agent: str,
+        scope: str,
+        branch_name: str = "main",
+        base_commit_id: str | None = None,
+        intent_type: str = "implement",
+        ttl_hours: float = 4.0,
+    ) -> dict:
+        """POST /api/v5/claims — create a work claim."""
+        payload = {
+            "space_id": space_id,
+            "agent": agent,
+            "scope": scope,
+            "branch_name": branch_name,
+            "intent_type": intent_type,
+            "ttl_hours": ttl_hours,
+        }
+        if base_commit_id:
+            payload["base_commit_id"] = base_commit_id
+        return self._request("POST", "/api/v5/claims", json=payload)
+
+    def update_claim(self, claim_id: str, status: str) -> dict:
+        """PATCH /api/v5/claims/{id} — mark done or abandoned."""
+        return self._request(
+            "PATCH", f"/api/v5/claims/{claim_id}", json={"status": status}
+        )
+
+    def list_claims(self, space_id: str, include_expired: bool = False) -> list[dict]:
+        """GET /api/v5/claims?space_id=... — list active claims."""
+        params = {"space_id": space_id}
+        if include_expired:
+            params["include_expired"] = "true"
+        return self._request("GET", "/api/v5/claims", params=params)
+
+    # ── Checkpoints ──────────────────────────────────────────────────
+
     def create_chat_commit(self, payload: dict) -> dict:
         """Create a checkpoint via the V4 commit endpoint (full schema).
 

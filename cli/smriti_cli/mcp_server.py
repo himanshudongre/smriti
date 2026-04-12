@@ -152,6 +152,7 @@ def smriti_state(space: str, preview: bool = False, main_only: bool = False) -> 
                 return _empty_space_brief(state.get("space") or s)
             space_state = {
                 "active_branches": state.get("active_branches") or [],
+                "active_claims": state.get("active_claims") or [],
                 "divergence": state.get("divergence"),
             }
     except SmritiError as e:
@@ -452,6 +453,81 @@ def smriti_delete_space(space: str) -> str:
     except SmritiError as e:
         _raise_from(e)
     return f"Deleted space '{s['name']}' and its {len(commits)} checkpoint(s).\n"
+
+
+@mcp.tool()
+def smriti_claim(
+    space: str,
+    scope: str,
+    agent: str = "claude-code",
+    branch: str = "main",
+    intent_type: str = "implement",
+    ttl_hours: float = 4.0,
+) -> str:
+    """Declare a work claim before starting substantial work.
+
+    A work claim makes your intent visible to other agents via
+    `smriti_state`. Other agents seeing your active claim will know
+    you are already working on this scope and can avoid collision.
+
+    Create a claim AFTER reading state and reconciling, but BEFORE
+    writing code. Mark it done with `smriti_claim_done` when finished.
+
+    Claims are advisory — not locks. They expire after `ttl_hours`
+    if not explicitly resolved.
+
+    Args:
+        space: Space name or UUID.
+        scope: One sentence describing what you are about to work on.
+        agent: Your agent identifier (default: claude-code).
+        branch: Branch you will work on (default: main).
+        intent_type: One of: implement, review, investigate, docs, test.
+        ttl_hours: Hours until the claim expires (default: 4).
+    """
+    client = _client()
+    try:
+        s = client.resolve_space(space)
+        head = client.get_head(s["id"])
+        base_commit_id = head.get("commit_id")
+        claim = client.create_claim(
+            space_id=s["id"],
+            agent=agent,
+            scope=scope,
+            branch_name=branch,
+            base_commit_id=base_commit_id,
+            intent_type=intent_type,
+            ttl_hours=ttl_hours,
+        )
+    except SmritiError as e:
+        _raise_from(e)
+    return (
+        f"Claimed: [{claim['intent_type']}] \"{claim['scope']}\" "
+        f"on `{claim['branch_name']}` by `{claim['agent']}`\n\n"
+        f"Claim ID: `{claim['id']}`\n"
+        f"Expires in {ttl_hours}h. Mark done with "
+        f"`smriti_claim_done(claim_id=\"{claim['id']}\")`."
+    )
+
+
+@mcp.tool()
+def smriti_claim_done(claim_id: str, abandon: bool = False) -> str:
+    """Mark a work claim as done or abandoned.
+
+    Call this when you finish the work declared in the claim. If the
+    work was not completed (e.g. you were blocked or changed direction),
+    pass `abandon=True` instead.
+
+    Args:
+        claim_id: The claim UUID returned by smriti_claim.
+        abandon: If True, mark as abandoned instead of done.
+    """
+    client = _client()
+    status = "abandoned" if abandon else "done"
+    try:
+        claim = client.update_claim(claim_id, status)
+    except SmritiError as e:
+        _raise_from(e)
+    return f"Claim `{claim['id'][:8]}…` marked {claim['status']}."
 
 
 @mcp.tool()

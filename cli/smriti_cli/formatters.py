@@ -98,6 +98,26 @@ def _format_active_branches_section(active_branches: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_active_claims_section(active_claims: list[dict]) -> str:
+    """One line per active work claim. Shows who is working on what,
+    from which base, on which branch. Elided when empty."""
+    if not active_claims:
+        return ""
+    lines = ["## Active work"]
+    for c in active_claims:
+        agent = c.get("agent") or "unknown"
+        branch = c.get("branch_name") or "main"
+        scope = c.get("scope") or "(no scope)"
+        intent = c.get("intent_type") or "implement"
+        base_hash = c.get("base_commit_hash") or "?"
+        created = _relative_time(c.get("claimed_at") or "")
+        lines.append(
+            f"- `{agent}` [{intent}] on `{branch}` from `{base_hash}` "
+            f"· {created} — {scope}"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _format_divergence_signal_section(divergence: dict | None) -> str:
     """Lightweight divergence signal. Names specific conflicting decisions
     per branch (capped by the backend at 3 per side per pair) and points
@@ -207,6 +227,9 @@ def format_state_brief(
     if space_state is not None:
         parts.append(
             _format_active_branches_section(space_state.get("active_branches") or [])
+        )
+        parts.append(
+            _format_active_claims_section(space_state.get("active_claims") or [])
         )
         parts.append(
             _format_divergence_signal_section(space_state.get("divergence"))
