@@ -313,6 +313,11 @@ function CheckpointCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <code className="text-[10px] text-blue-400 font-mono">{checkpoint.commit_hash.slice(0, 7)}</code>
+            {checkpoint.author_agent && (
+              <span className="text-[10px] text-gray-500 font-mono border border-gray-700 px-1.5 py-px rounded">
+                {checkpoint.author_agent}
+              </span>
+            )}
             <span className="text-[10px] text-gray-600">{fmt(checkpoint.created_at)}</span>
           </div>
           <p className="text-xs text-gray-300 font-medium truncate">{checkpoint.message}</p>

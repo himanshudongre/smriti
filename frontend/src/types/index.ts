@@ -199,6 +199,7 @@ export interface CheckpointNode {
   created_at: string;
   summary: string;
   objective: string;
+  author_agent: string | null;
 }
 
 export interface SessionNode {

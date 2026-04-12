@@ -80,6 +80,7 @@ class CheckpointNode(BaseModel):
     created_at: datetime
     summary: str
     objective: str
+    author_agent: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -365,6 +366,7 @@ def get_lineage(space_id: uuid.UUID, db: Session = Depends(get_db)):
             created_at=c.created_at,
             summary=c.summary or "",
             objective=c.objective or "",
+            author_agent=c.author_agent,
         )
         for c in commits
     ]
