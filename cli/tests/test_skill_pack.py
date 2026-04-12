@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.4"
+    assert version == "1.5"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -145,6 +145,13 @@ _REQUIRED_PHRASES = [
     # Section 3.5 — backend reachability
     "backend reachability",
     "do not attempt to start",
+    # Section 3.6 — work claims
+    "work claims",
+    "declare intent",
+    "intent_type",
+    "not a lock",
+    "not a scheduler",
+    "leave active work claims hanging",
     # Section 14 — two-sentence summary
     "session start",
 ]

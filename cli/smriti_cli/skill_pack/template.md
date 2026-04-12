@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.4
+smriti_skill_pack_version: 1.5
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -224,6 +224,65 @@ are a client of it. You do not own it.
   tool loop creates environment-variable inheritance issues that
   cause silent mock fallback on all LLM-backed endpoints. The
   human starts the backend; you use it.
+
+### 3.6 Work claims: declare intent before working
+
+After reading state, reconciling, and verifying the backend — but
+BEFORE starting substantial work — declare a work claim so other
+agents can see what you are about to do.
+
+**When to create a claim:**
+
+```
+{{mcp:smriti_claim(space="<project>", scope="<one sentence>", agent="<your-agent>", intent_type="implement")}}{{cli:smriti claim create <project> --agent <your-agent> --scope "<one sentence>" --intent-type implement}}
+```
+
+Create the claim after you know what you are going to work on but
+before you write any code. The claim auto-binds to the current HEAD
+so other agents can see your base state.
+
+**What to put in the claim:**
+
+- `scope`: one sentence — "Adding lineage test for author_agent",
+  not a paragraph.
+- `intent_type`: one of `implement`, `review`, `investigate`,
+  `docs`, `test`. Pick the closest match.
+- `branch`: the branch you will work on. Default is `main`.
+
+**What to do when `## Active work` shows existing claims:**
+
+- If the existing claim is clearly unrelated to your work: proceed
+  and create your own claim.
+- If the scopes might overlap: pick different work or ask the human
+  which to prioritize.
+- If the scopes clearly overlap: do not start. Tell the human
+  "Agent X is already working on this."
+- If the existing claim is a `review` of work you `implement`ed
+  (or vice versa): that is a follow-up, not a collision. Proceed,
+  but note the relationship in your own scope.
+
+**When to mark done or abandon:**
+
+- When your work is complete and checkpointed: mark done.
+  {{mcp:`smriti_claim_done(claim_id="<id>")`}}{{cli:`smriti claim done <id>`}}
+- When you stop without completing the work: mark abandoned.
+  {{mcp:`smriti_claim_done(claim_id="<id>", abandon=True)`}}{{cli:`smriti claim abandon <id>`}}
+- Before ending your session: check whether you have any active
+  claims. Do not leave them hanging — mark them done or abandoned
+  as part of your clean finish (Section 3.4).
+
+**What claims are NOT:**
+
+- Not a lock. Another agent CAN work on the same scope. The claim
+  is a signal, not a gate.
+- Not a scheduler. Nobody assigns claims to you. You declare them
+  yourself based on what you decide to work on.
+- Not a task system. Claims expire in 4 hours. They are ephemeral
+  intent markers, not durable work items. Tasks belong in
+  checkpoint fields, not in claims.
+
+Say out loud: **"Claiming: [intent_type] — <scope>."** before
+creating the claim.
 
 ---
 
@@ -520,6 +579,10 @@ Section 5.
   `{{mcp:smriti_create_checkpoint}}{{cli:smriti checkpoint create --extract}}`
   and `{{mcp:smriti_fork}}{{cli:smriti fork}}`.
 
+- **Do not leave active work claims hanging.** When your session
+  ends, mark your claims done or abandoned. Dangling claims mislead
+  the next agent into thinking you are still actively working.
+
 - **Do not treat the extract path as a free pass to dump your
   reasoning.** The extract LLM will pull whatever fields it can, but
   if you pass it 2000 words of stream-of-consciousness it will
@@ -566,6 +629,7 @@ Use them literally.
 | run compare on a divergence signal | "Comparing main against the divergent branch to see the full diff." |
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
+| declare a work claim | "Claiming: [intent_type] — <scope>." |
 | finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
 
@@ -623,7 +687,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.4 — this file is
+*Smriti skill pack version {{primary_mode}}-1.5 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*
