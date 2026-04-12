@@ -214,7 +214,7 @@ If you want Claude Code or Codex to use Smriti as a shared reasoning-state backe
 cd cli && pip install -e . && cd ..
 ```
 
-**2. Configure your MCP host** (Claude Code example — check your host's docs for the config file path):
+**2. Configure your MCP host** if your agent host supports MCP (Claude Code example — check your host's docs for the config file path):
 
 ```json
 {
@@ -228,6 +228,8 @@ cd cli && pip install -e . && cd ..
 ```
 
 Restart the host. The `smriti_*` tools appear in the tool picker.
+
+If you are using Codex in CLI mode, you can skip this step and continue with the CLI + `AGENTS.md` path below.
 
 **3. Install the skill pack** so the agent knows *when* and *why* to use Smriti, not just *how*:
 
