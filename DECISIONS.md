@@ -357,6 +357,53 @@ Nothing else changed: `/head` still exists, `get_head` still returns the
 same shape, `format_state_brief` accepts the new `space_state` kwarg as
 optional so existing callers are unaffected.
 
+### Why work claims are advisory, not locks
+
+When two agents start working on the same scope simultaneously, there are three
+possible responses: block one of them (hard lock), warn both (advisory signal),
+or do nothing and let them collide. Smriti uses the advisory approach.
+
+Hard locks were rejected because:
+
+- Smriti is a reasoning-state system, not a file-locking system. Agents reason
+  in overlapping conceptual spaces, not in files. A lock on "I'm working on the
+  lineage test" has no clear mutex boundary.
+- Lock lifecycle is fragile in agent contexts. If an agent crashes or times out
+  mid-work, a hard lock orphans and blocks everyone until a human intervenes.
+  Advisory claims with a fixed TTL (default 4 hours) expire naturally.
+- The coordination problem is visibility, not serialization. The failure mode in
+  practice — two agents both implementing the same test because neither knew the
+  other was doing it — is solved by making intent visible. It does not require
+  preventing one agent from starting.
+
+The claim primitive is a dedicated `work_claims` table, not session metadata or
+checkpoint metadata. Session metadata is the wrong lifecycle (sessions persist
+long after work ends). Checkpoint metadata is post-work (claims are pre-work).
+A dedicated table is queryable, expirable, and independently evolvable without
+touching the checkpoint or session schemas.
+
+`intent_type` (implement / review / investigate / docs / test) is included
+because bare scope strings are ambiguous. Two claims on "lineage author_agent
+test coverage" could be a collision (both implementing) or a follow-up (one
+reviewing the other's work). The intent type makes this distinction
+machine-readable without requiring scope-matching heuristics.
+
+### Why the shared runtime model is documented, not enforced
+
+The canonical local setup — Postgres in Docker, backend via `make dev`, agents
+as clients of `http://localhost:8000` — is documented in the skill pack, the
+operating contract, and the README, but not enforced in code.
+
+This was deliberate. The failure mode that motivated the documentation was
+agents trying to start the backend themselves from inside their tool loops,
+which caused environment-variable inheritance issues (the extractor silently
+fell back to MockAdapter because the uvicorn subprocess didn't inherit the
+shell profile's API keys). Documenting the rule ("agents are clients, the
+human starts the backend") solved the problem without code changes. Adding
+enforcement (e.g., refusing to serve requests from non-local origins or
+checking process parentage) would add complexity for a problem that behavioral
+guidance already handles.
+
 ---
 
 ## Open questions and deferred decisions
@@ -370,3 +417,7 @@ optional so existing callers are unaffected.
   location once the use case is validated.
 - **Streaming** — the adapter interface does not yet support streaming. All provider
   calls are synchronous request/response.
+- **Branch lifecycle** — Smriti branches (non-main checkpoint chains) have no
+  explicit lifecycle. A branch whose work has been integrated into main still
+  appears as "active" in the state brief. The next primitive is an explicit
+  branch disposition signal, not a git-merge heuristic.

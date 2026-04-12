@@ -441,6 +441,41 @@ These are always in sync with the actual context being sent to the backend.
 
 ---
 
+## Work Claims — Pre-Work Intent Visibility
+
+Work claims are the first concurrency primitive in Smriti. A claim is a lightweight,
+time-bounded, advisory declaration that an agent is actively working on something
+in a space. It makes pre-work intent visible before work produces a checkpoint.
+
+Claims are stored in a dedicated `work_claims` table with 11 columns: `id`,
+`repo_id`, `session_id`, `agent`, `branch_name`, `base_commit_id`, `scope`,
+`intent_type`, `status`, `claimed_at`, `expires_at`. They are not session
+metadata or checkpoint metadata — a dedicated table makes them queryable,
+expirable, and independently evolvable.
+
+`intent_type` is one of: `implement`, `review`, `investigate`, `docs`, `test`.
+This helps distinguish collision (two agents implementing the same thing) from
+follow-up (one agent reviewing another's implementation).
+
+Claims surface in `GET /api/v4/chat/spaces/{id}/state` as an `active_claims`
+array, rendered in the CLI/MCP state brief as `## Active work` — one line per
+claim with agent, intent type, branch, base hash, scope, and relative time.
+The section is elided when no active claims exist.
+
+Claims are advisory — not locks. The skill pack teaches agents to check
+`## Active work` before starting and to create their own claim after reading
+state but before writing code. If scopes overlap, the agent picks different
+work or asks the human. Claims expire after a configurable TTL (default 4
+hours). Agents explicitly mark claims `done` or `abandoned` when work
+finishes; expired claims fall out of the state view automatically.
+
+API surface: `POST /api/v5/claims` (create), `PATCH /api/v5/claims/{id}`
+(update status), `GET /api/v5/claims?space_id=...` (list active).
+CLI: `smriti claim create/done/abandon/list`. MCP: `smriti_claim`,
+`smriti_claim_done`.
+
+---
+
 ## What Is Not Yet In the Architecture
 
 **Source Turn range on Checkpoints.** There is no record of which Turn range produced
@@ -459,3 +494,11 @@ are not yet defined.
 **Authentication and multi-user.** All Spaces currently belong to a single demo user
 (`DEMO_USER_ID`). There is no authentication layer, no user registration, and no
 per-user isolation.
+
+**Branch lifecycle management.** Smriti branches (non-main checkpoint chains) have
+no explicit lifecycle. A branch whose work has been integrated into main still
+appears in the `## Active branches` section of the state brief because the
+checkpoint's `branch_name` field persists. The next primitive here is an explicit
+branch disposition signal (`integrated` / `superseded` / `abandoned` / `active`)
+rather than a recency heuristic or a git-merge check — because Smriti branches
+are reasoning branches, not git branches.

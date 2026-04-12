@@ -105,6 +105,10 @@ Capture assistant responses, code snippets, plans, or other outputs directly int
 
 Smriti owns the reasoning state. The model is just a rendering engine. Switch from GPT-4o to Claude to Llama mid-session without re-explaining anything.
 
+### See who is working on what (work claims)
+
+Before starting work, an agent declares a lightweight claim — "I'm about to work on X." Other agents reading the state see the active claims and avoid collision. Claims are advisory, not locks. They expire automatically if an agent forgets to close them. This is Smriti's first concurrency primitive, designed for multi-agent workflows where two coding agents might otherwise start the same task simultaneously.
+
 ---
 
 ## When to use Smriti
@@ -116,6 +120,7 @@ Smriti owns the reasoning state. The model is just a rendering engine. Switch fr
 - your conversation has drifted and you want to recover cleanly
 - you are switching between models and need context continuity
 - you want to preserve specific outputs alongside your reasoning state
+- multiple coding agents (Claude Code, Codex, etc.) are working on the same project and need shared continuity
 
 **Probably not needed when:**
 

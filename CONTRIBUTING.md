@@ -41,6 +41,9 @@ Open `http://localhost:5173`.
 # All backend tests (uses mock provider — no API key required)
 make test
 
+# CLI + MCP tests
+cd cli && pip install -e ".[dev]" && pytest
+
 # TypeScript typecheck
 cd frontend && npx tsc --noEmit
 
@@ -48,8 +51,23 @@ cd frontend && npx tsc --noEmit
 cd frontend && npm run build
 ```
 
-The integration test suite uses the deterministic mock adapter and an in-memory
-SQLite database (via `conftest.py`). No live API keys are needed.
+The backend integration test suite uses the deterministic mock adapter and an
+in-memory SQLite database (via `conftest.py`). No live API keys are needed.
+
+The CLI test suite (`cli/tests/`) covers MCP tool handlers, skill pack
+rendering and installation, multi-branch state formatting, and content-integrity
+guards for the skill pack template. CLI tests use `MagicMock(spec=SmritiClient)`
+fixtures — no running backend required.
+
+**When to run which tests:**
+
+| Changed area | Run |
+|---|---|
+| `backend/app/` | `make test` (177 integration + 97 unit tests) |
+| `cli/smriti_cli/` | `cd cli && pytest` (70 tests) |
+| `cli/smriti_cli/skill_pack/template.md` | `cd cli && pytest tests/test_skill_pack.py` — content-integrity tests catch dropped sections |
+| `frontend/src/` | `cd frontend && npx tsc --noEmit` |
+| Both backend + CLI | Both suites — they share no test infrastructure but both call the same backend API |
 
 ---
 
@@ -106,10 +124,26 @@ EXPECTED_OUTCOMES at minimum.
 
 ---
 
+## Agent-facing surfaces
+
+Smriti has three agent-facing surfaces beyond the chat UI:
+
+- **CLI** (`cli/smriti_cli/main.py`) — `smriti` command, 8 subcommand groups
+- **MCP server** (`cli/smriti_cli/mcp_server.py`) — `smriti-mcp` command, 15 tools
+- **Skill pack** (`cli/smriti_cli/skill_pack/`) — versioned instruction files for Claude Code and Codex
+
+Changes to any of these should include corresponding test coverage in `cli/tests/`.
+Skill pack content changes should pass the content-integrity tests in
+`test_skill_pack.py` — these assert that critical sections (anti-patterns, signal
+test, drift detection, work claims) cannot be silently dropped by template edits.
+
+---
+
 ## What we are not looking for
 
 - Automatic checkpointing logic — Checkpoints are intentionally manual.
 - Authentication / multi-user support — deferred by design.
-- Changes to legacy V1/V2 endpoints — these are retained for compatibility only.
+- Generic orchestration or task management — work claims are advisory and narrow.
+- Changes to legacy V1 endpoints — these are retained for compatibility only.
 
 If you want to work on something that falls outside normal scope, open an issue first.
