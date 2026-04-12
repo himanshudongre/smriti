@@ -273,13 +273,13 @@ GET /api/v2/repos/{repo_id}
 
 **Response:** Space object
 
-#### Get space head state
+#### Get space head state (main-only)
 
 ```
 GET /api/v4/chat/spaces/{repo_id}/head
 ```
 
-Returns the latest Checkpoint and latest Session for a Space.
+Returns the latest main-branch Checkpoint and latest Session for a Space. This is the legacy single-HEAD endpoint — for multi-agent workflows, prefer `/state` below.
 
 **Response:**
 
@@ -294,6 +294,65 @@ Returns the latest Checkpoint and latest Session for a Space.
   "latest_session_title": "Australia Trip Planning"
 }
 ```
+
+---
+
+#### Get space state (multi-branch, default)
+
+```
+GET /api/v4/chat/spaces/{repo_id}/state
+```
+
+The agent-facing default. Returns the main-branch continuation brief plus active non-main branches, active work claims, and a divergence signal when any branch disagrees with main on decisions. One round trip, atomic snapshot.
+
+**Response:**
+
+```json
+{
+  "space": {
+    "id": "uuid",
+    "name": "my-project",
+    "description": "..."
+  },
+  "head": { "...same shape as /head..." },
+  "commit": { "...full main-branch HEAD checkpoint..." },
+  "active_branches": [
+    {
+      "branch_name": "experiment-a",
+      "commit_id": "uuid",
+      "commit_hash": "abc1234...",
+      "message": "Trying alternative approach",
+      "author_agent": "codex-local",
+      "created_at": "...",
+      "summary": "..."
+    }
+  ],
+  "active_claims": [
+    {
+      "id": "uuid",
+      "agent": "claude-code",
+      "branch_name": "main",
+      "scope": "Adding lineage test",
+      "intent_type": "implement",
+      "claimed_at": "...",
+      "expires_at": "...",
+      "base_commit_hash": "abc1234"
+    }
+  ],
+  "divergence": {
+    "pairs": [
+      {
+        "branch_name": "experiment-a",
+        "branch_commit_hash": "def5678",
+        "main_only_decisions": ["Use Pydantic"],
+        "branch_only_decisions": ["Use dataclasses"]
+      }
+    ]
+  }
+}
+```
+
+`active_branches` is capped at 5 (most recent by `created_at`). `divergence.pairs` is capped at 2. Per-branch divergence is capped at 3 decisions per side. `active_claims` shows only active, non-expired claims. All three sections are omitted from the response when empty.
 
 ---
 
@@ -722,6 +781,90 @@ Reachability rules:
 
 ---
 
+## V5 — Work Claims API
+
+Prefix: `/api/v5/claims`
+
+Work claims are lightweight, time-bounded declarations that an agent is actively
+working on something in a space. They make pre-work intent visible to other agents
+before work produces a checkpoint. Claims are advisory — not locks.
+
+---
+
+### Create a work claim
+
+```
+POST /api/v5/claims
+```
+
+**Request body:**
+
+```json
+{
+  "space_id": "<space-uuid>",
+  "agent": "claude-code",
+  "scope": "Adding lineage test for author_agent",
+  "branch_name": "main",
+  "base_commit_id": "<checkpoint-uuid>",
+  "intent_type": "implement",
+  "ttl_hours": 4.0
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `space_id` | UUID string | Yes | The Space to claim work in |
+| `agent` | string | Yes | Agent identifier (e.g. `claude-code`, `codex-local`) |
+| `scope` | string | Yes | One sentence describing the work |
+| `branch_name` | string | No | Branch the work targets. Default `"main"` |
+| `base_commit_id` | UUID string | No | The Checkpoint the agent read as HEAD |
+| `intent_type` | string | No | One of: `implement`, `review`, `investigate`, `docs`, `test`. Default `"implement"` |
+| `ttl_hours` | float | No | Hours until the claim expires. Default `4.0` |
+
+**Response:** Claim object (status `"active"`, `claimed_at` and `expires_at` set)
+
+---
+
+### Update a claim
+
+```
+PATCH /api/v5/claims/{claim_id}
+```
+
+Marks a claim as `done` or `abandoned`. Only active claims can be updated.
+
+**Request body:**
+
+```json
+{
+  "status": "done"
+}
+```
+
+| Value | Meaning |
+|---|---|
+| `done` | Work completed successfully |
+| `abandoned` | Work intentionally stopped |
+
+**Response:** Updated Claim object
+
+Returns `409` if the claim is already `done` or `abandoned`.
+
+---
+
+### List claims
+
+```
+GET /api/v5/claims?space_id=<uuid>
+```
+
+Returns active, non-expired claims for a space. Pass `include_expired=true` to
+include done, abandoned, and expired claims.
+
+**Response:** Array of Claim objects
+
+---
+
 ## Error responses
 
 All endpoints return errors in this format:
@@ -759,5 +902,5 @@ programmatic clients are welcome to use V2 read endpoints; for writes, use V4
 `/api/v4` — Chat sessions, message sending, and the canonical checkpoint write
 path. The chat UI's primary interaction surface and the CLI's write surface.
 
-`/api/v5` — Checkpoint drafting, review, fork, compare, lineage. Used by both
-the chat UI and the CLI.
+`/api/v5` — Checkpoint drafting, review, fork, compare, lineage, and work claims.
+Used by both the chat UI and the CLI/MCP server.
