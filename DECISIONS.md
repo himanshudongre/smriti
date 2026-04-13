@@ -404,6 +404,53 @@ enforcement (e.g., refusing to serve requests from non-local origins or
 checking process parentage) would add complexity for a problem that behavioral
 guidance already handles.
 
+### Why structured tasks instead of a task manager
+
+The autonomy gap after shipping work claims was specific: agents could see who
+was working (claims) and what work existed (checkpoint tasks), but could not
+self-select complementary work because tasks were flat strings with no metadata.
+The founder was the routing layer — telling each agent what to do.
+
+The fix was adding `intent_hint`, `blocked_by`, and `status` to checkpoint tasks
+as optional fields. This was chosen over three alternatives:
+
+1. **A separate task table.** This would make tasks independent of checkpoints,
+   giving them their own lifecycle (create, assign, update, close). But Smriti's
+   identity is version control for reasoning — tasks belong to the checkpoint
+   that identified them, not to a task manager. A separate table would drift
+   toward Jira semantics, which is exactly the wrong direction.
+
+2. **A recommended-action endpoint.** An API that analyzes the current state
+   and returns "you should work on X" would be an orchestrator. Smriti describes
+   state; it does not prescribe action. The selection logic belongs in the skill
+   pack (behavioral guidance), not in the backend (runtime computation).
+
+3. **Richer claim semantics (e.g., claim-to-task linking).** This would couple
+   the live coordination layer (claims) to the durable state layer (tasks),
+   creating two truth sources for in-flight work. `claimed` was explicitly
+   excluded from task status for this reason — claims are ephemeral runtime
+   signals, tasks are durable checkpoint state.
+
+The structured task approach stays on the state-description side of the line:
+`intent_hint` is descriptive metadata, not a routing instruction. `blocked_by`
+is a dependency fact, not a scheduling constraint. `status` is state, not a
+directive. An agent reading the enriched task list can make an autonomous
+selection decision using the skill pack's complementarity logic — without
+Smriti becoming an orchestrator.
+
+### Why task status is open/done only, not open/claimed/done
+
+Active claims already represent in-flight runtime work. Storing `claimed` on
+task objects would create a second truth source: the task says "claimed" but
+the claim may have expired, or the claim says "done" but the task still says
+"claimed." Drift between these two is inevitable in a multi-agent system where
+agents may crash, time out, or forget to clean up.
+
+The clean separation: tasks are durable checkpoint state (open or done), claims
+are live coordination state (active, done, or abandoned with TTL expiry). Agents
+cross-reference at read time via the skill pack's selection logic, not via a
+stored link.
+
 ---
 
 ## Open questions and deferred decisions

@@ -476,6 +476,74 @@ CLI: `smriti claim create/done/abandon/list`. MCP: `smriti_claim`,
 
 ---
 
+## Structured Tasks — Autonomous Work Selection
+
+Structured tasks are the mechanism that bridges work claims (what agents are
+doing) with checkpoint tasks (what work exists). Before structured tasks,
+checkpoint tasks were flat strings — agents could see what work existed but
+had no metadata to decide which task to pick without founder routing.
+
+**Task shape.** Tasks in `CommitModel.tasks` (JSONB) are now objects:
+
+```json
+{
+  "text": "Write integration tests for freshness",
+  "intent_hint": "test",
+  "blocked_by": "freshness-impl",
+  "status": "open"
+}
+```
+
+All fields except `text` are optional. Legacy string tasks are normalized
+at render time — the formatter wraps `"some string"` into `{"text": "some string"}`.
+No database migration was required; JSONB accepts both shapes.
+
+**Intent hints** use the same vocabulary as claim `intent_type`: `implement`,
+`review`, `investigate`, `docs`, `test`. This shared vocabulary is what makes
+autonomous selection work — an agent can filter tasks by intent and pick work
+that is complementary to active claims.
+
+**Status** is `open` or `done`. There is no `claimed` status — claims are live
+coordination state (the `work_claims` table), while task status is durable
+checkpoint state (the `commits` table). Keeping these separate avoids drift
+between two truth sources for in-flight work.
+
+**blocked_by** is a free-text label referencing another task. It is advisory,
+not enforced — the skill pack teaches agents to skip blocked tasks, but nothing
+prevents an agent from working on one.
+
+**Extract prompt.** The checkpoint extractor prompt (both draft and extract paths
+in `checkpoint.py`) asks the LLM to produce structured task objects. A
+`_normalize_tasks()` function validates intent hints against the 5-type
+vocabulary, drops invalid values, deduplicates by text, and normalizes case.
+
+**Rendering.** The CLI formatter's `_task_section()` renders structured tasks
+with inline annotations in the state brief:
+
+```
+## In progress
+- Add freshness endpoint [implement]
+- Write freshness tests [test] → blocked by: freshness-impl
+- Update README [docs] (done)
+```
+
+The frontend renders intent badges (blue), done badges (green), blocked_by
+markers (amber), and strikethrough for done tasks.
+
+**The autonomy mechanism.** An agent reading the state brief applies the
+selection logic taught in skill pack Section 3.8:
+
+1. Read `## In progress` — note task intents and blocked_by
+2. Read `## Active work` — note existing claim intent types
+3. Pick a task whose intent is complementary to active claims
+4. Skip blocked and done tasks
+5. Create a claim and start work
+
+This is descriptive, not prescriptive — tasks describe themselves, agents
+decide. No scheduler, no assignment, no orchestrator.
+
+---
+
 ## What Is Not Yet In the Architecture
 
 **Source Turn range on Checkpoints.** There is no record of which Turn range produced
