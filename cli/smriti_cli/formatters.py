@@ -103,35 +103,47 @@ def _artifact_section(
     return "\n".join(lines) + "\n"
 
 
-def _artifact_compact_stats(artifacts: list[dict]) -> dict | None:
-    """Compute savings from compact mode. Returns None if no artifacts."""
+def _artifact_compact_stats(
+    artifacts: list[dict],
+    checkpoint_id: str = "",
+) -> dict | None:
+    """Compute savings by rendering both full and compact artifact sections
+    and comparing their actual char counts. Returns None only if there are
+    no artifacts at all."""
     if not artifacts:
         return None
-    full_chars = sum(len(a.get("content") or "") for a in artifacts)
-    if full_chars == 0:
-        return None
-    # Compact replaces content with labels (~20 chars each + overhead)
-    compact_chars = sum(len(f"- {a.get('label', 'Untitled')}") + 1 for a in artifacts) + 80
+    full_rendered = _artifact_section(artifacts, full=True)
+    compact_rendered = _artifact_section(
+        artifacts, compact=True, checkpoint_id=checkpoint_id,
+    )
+    full_chars = len(full_rendered)
+    compact_chars = len(compact_rendered)
     saved = full_chars - compact_chars
-    if saved <= 0:
-        return None
-    pct = round(saved * 100 / full_chars)
+    pct = round(saved * 100 / full_chars) if full_chars > 0 else 0
     return {
         "artifacts_omitted": len(artifacts),
-        "chars_saved": saved,
-        "reduction_pct": pct,
+        "full_chars": full_chars,
+        "compact_chars": compact_chars,
+        "chars_saved": max(saved, 0),
+        "reduction_pct": max(pct, 0),
     }
 
 
-def _format_compact_stats_footer(stats: dict | None) -> str:
-    """One-line footer for --stats. Empty string if no stats."""
+def _format_compact_stats_footer(stats: dict | None, compact: bool = True) -> str:
+    """Footer for --stats. Always returns a line when called — either
+    savings data or an explicit 'nothing to report' message."""
+    if not compact:
+        return "\n---\ncompact stats: no artifact savings to report (--compact not used)\n"
     if not stats:
-        return ""
+        return "\n---\ncompact stats: no artifact savings to report (0 artifacts)\n"
+    if stats["chars_saved"] <= 0:
+        return "\n---\ncompact stats: no artifact savings to report (artifacts too small)\n"
     return (
         f"\n---\n"
         f"compact stats: {stats['artifacts_omitted']} artifact(s) omitted "
         f"· {stats['chars_saved']} chars saved "
-        f"· {stats['reduction_pct']}% reduction in artifact section\n"
+        f"· {stats['reduction_pct']}% smaller artifact section "
+        f"(full: {stats['full_chars']} chars → compact: {stats['compact_chars']} chars)\n"
     )
 
 
@@ -302,9 +314,14 @@ def format_state_brief(
 
     result = "\n".join(p for p in parts if p).rstrip() + "\n"
 
-    if stats and compact:
-        compact_stats = _artifact_compact_stats(artifacts)
-        result += _format_compact_stats_footer(compact_stats)
+    if stats:
+        if compact:
+            compact_stats = _artifact_compact_stats(
+                artifacts, checkpoint_id=str(checkpoint_id),
+            )
+            result += _format_compact_stats_footer(compact_stats, compact=True)
+        else:
+            result += _format_compact_stats_footer(None, compact=False)
 
     return result
 

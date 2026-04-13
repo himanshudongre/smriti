@@ -419,8 +419,8 @@ def test_mcp_smriti_state_compact_mode(mock_client):
     assert "compact — content omitted" in out
 
 
-def test_compact_stats_footer():
-    """--compact --stats should append a savings footer."""
+def test_compact_stats_footer_shows_actual_rendered_sizes():
+    """--compact --stats shows full and compact rendered char counts."""
     commit = _commit_with_artifacts()
     out = format_state_brief(
         _base_space(), _base_head(), commit, compact=True, stats=True,
@@ -429,24 +429,30 @@ def test_compact_stats_footer():
     assert "compact stats:" in out
     assert "artifact(s) omitted" in out
     assert "chars saved" in out
-    assert "reduction in artifact section" in out
+    assert "smaller artifact section" in out
+    # Must show actual rendered sizes, not heuristic estimates
+    assert "full:" in out
+    assert "compact:" in out
+    assert "chars)" in out
 
 
-def test_stats_without_compact_produces_no_footer():
-    """Stats without compact should not show a footer."""
+def test_stats_without_compact_shows_explicit_message():
+    """--stats without --compact should say so, not silently produce nothing."""
     commit = _commit_with_artifacts()
     out = format_state_brief(
         _base_space(), _base_head(), commit, stats=True,
     )
 
-    assert "compact stats:" not in out
+    assert "compact stats:" in out
+    assert "--compact not used" in out
 
 
-def test_stats_with_no_artifacts_produces_no_footer():
-    """Compact+stats on a commit with no artifacts: no footer."""
+def test_stats_with_no_artifacts_shows_explicit_message():
+    """Compact+stats on a commit with no artifacts: explicit message."""
     commit = _base_commit()
     out = format_state_brief(
         _base_space(), _base_head(), commit, compact=True, stats=True,
     )
 
-    assert "compact stats:" not in out
+    assert "compact stats:" in out
+    assert "0 artifacts" in out
