@@ -180,6 +180,7 @@ class SmritiClient:
         scope: str,
         branch_name: str = "main",
         base_commit_id: str | None = None,
+        task_id: str | None = None,
         intent_type: str = "implement",
         ttl_hours: float = 4.0,
     ) -> dict:
@@ -194,6 +195,8 @@ class SmritiClient:
         }
         if base_commit_id:
             payload["base_commit_id"] = base_commit_id
+        if task_id:
+            payload["task_id"] = task_id
         return self._request("POST", "/api/v5/claims", json=payload)
 
     def update_claim(self, claim_id: str, status: str) -> dict:

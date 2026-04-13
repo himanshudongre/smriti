@@ -58,6 +58,10 @@ class CreateClaimRequest(BaseModel):
     branch_name: str = "main"
     base_commit_id: Optional[str] = None
     session_id: Optional[str] = None
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Optional reference to a structured task's id from the checkpoint.",
+    )
     intent_type: str = "implement"
     ttl_hours: float = Field(
         default=DEFAULT_TTL_HOURS,
@@ -77,6 +81,7 @@ class ClaimResponse(BaseModel):
     agent: str
     branch_name: str
     base_commit_id: Optional[uuid.UUID] = None
+    task_id: Optional[str] = None
     scope: str
     intent_type: str
     status: str
@@ -135,6 +140,7 @@ def create_claim(payload: CreateClaimRequest, db: Session = Depends(get_db)):
         branch_name=payload.branch_name,
         base_commit_id=base_commit_id,
         scope=payload.scope,
+        task_id=payload.task_id,
         intent_type=payload.intent_type,
         status="active",
         claimed_at=now,

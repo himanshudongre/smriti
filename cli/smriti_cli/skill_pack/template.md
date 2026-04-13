@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.8
+smriti_skill_pack_version: 1.9
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -351,27 +351,50 @@ Each task can have:
 
 **How to self-select work:**
 
-1. Read the `## In progress` section. Note which tasks have intents
-   and which are blocked.
-2. Read the `## Active work` section. Note the `intent_type` of each
-   active claim.
-3. **Pick a task whose intent is complementary to existing claims.**
-   If someone is `implement`ing, look for `test`, `docs`, or `review`
-   tasks. If someone is `test`ing, look for `docs` or `implement`
-   tasks.
-4. **Skip blocked tasks.** If a task says `→ blocked by: X`, check
+1. Read the `## In progress` section. Note which tasks have intents,
+   IDs, and which are blocked.
+2. Read the `## Active work` section. Note existing claims — especially
+   their `task:` references if present.
+3. **Pick a task that is not already referenced by any active claim.**
+   If tasks have IDs (`id: arch-docs`), check whether any claim shows
+   `(task: arch-docs)`. If so, that task is taken — pick a different
+   one. If tasks have no IDs, fall back to scope matching.
+4. **Prefer complementary intents.** If someone is `implement`ing,
+   look for `test`, `docs`, or `review` tasks. Same-intent is fine
+   if the tasks are clearly different (two distinct `[docs]` tasks
+   with different IDs).
+5. **Skip blocked tasks.** If a task says `→ blocked by: X`, check
    whether task X is done. If X is still open or claimed, skip the
    blocked task — pick something unblocked instead.
-5. **Skip done tasks.** Tasks marked `(done)` need no work.
-6. **If no complementary unblocked task exists:** tell the human.
-   Do not pick the same intent as an active claim unless the scopes
-   are clearly disjoint.
+6. **Skip done tasks.** Tasks marked `(done)` need no work.
+7. **If no complementary unblocked task exists:** tell the human.
 
-**When tasks have no intent annotations:** fall back to the scope-
-comparison logic from Section 3.6. Compare each task's text against
-active claim scopes and pick work that does not overlap. This is the
-same behavior as before — intent hints just make it faster and more
-reliable.
+**Claim with task ID when available.** When you create a claim for a
+task that has an ID, reference it:
+{{mcp:`smriti_claim(space="<project>", scope="...", task_id="arch-docs", intent_type="docs")`}}{{cli:`smriti claim create <project> --agent <your-agent> --scope "..." --task-id arch-docs --intent-type docs`}}
+This makes your claim precisely traceable to a task, not just loosely
+matched by scope text.
+
+**Recheck after claiming.** If another agent might be starting at the
+same time (e.g., you were both launched together), re-read the state
+briefly after creating your claim:
+{{mcp:`smriti_state(space="<project>", compact=True)`}}{{cli:`smriti state <project> --compact`}}
+Check `## Active work` for duplicate `task:` references. If another
+agent claimed the same task ID, abandon your claim and pick a
+different task. This catches near-simultaneous collisions within
+seconds.
+
+**When tasks have no IDs:** fall back to the scope-comparison logic
+from Section 3.6. Compare each task's text against active claim
+scopes and pick work that does not overlap. This is the same behavior
+as before — task IDs just make collision detection precise instead
+of fuzzy.
+
+**When writing tasks with IDs:** use short, stable slugs derived from
+the task content: `impl-freshness`, `test-e2e`, `docs-arch`. If a
+task persists across nearby checkpoints, reuse the same ID when
+practical — this makes cross-checkpoint task tracking easier. But do
+not block work when old checkpoints or legacy tasks have no IDs.
 
 **When writing checkpoints with tasks:** include intent hints on
 tasks you create. When you checkpoint your work, the tasks in your
@@ -833,7 +856,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.8 — this file is
+*Smriti skill pack version {{primary_mode}}-1.9 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

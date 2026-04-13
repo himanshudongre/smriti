@@ -579,3 +579,76 @@ def test_state_brief_with_structured_tasks():
     assert "Add freshness endpoint [implement]" in out
     assert "Write freshness tests [test] → blocked by: freshness-endpoint" in out
     assert "- Legacy string task" in out
+
+
+# ── Task ID rendering tests ────────────────────────────────────────────────
+
+
+def test_task_section_with_id():
+    """Task with an id renders (id: ...) annotation."""
+    tasks = [
+        {"id": "impl-1", "text": "Implement endpoint", "intent_hint": "implement"},
+    ]
+    out = _task_section(tasks)
+    assert "- Implement endpoint [implement] (id: impl-1)" in out
+
+
+def test_task_section_without_id():
+    """Task without id renders normally — no (id: ...) annotation."""
+    tasks = [
+        {"text": "Implement endpoint", "intent_hint": "implement"},
+    ]
+    out = _task_section(tasks)
+    assert "(id:" not in out
+    assert "Implement endpoint [implement]" in out
+
+
+def test_task_section_mixed_with_and_without_ids():
+    """Mix of tasks with and without IDs renders correctly."""
+    tasks = [
+        {"id": "docs-arch", "text": "Update ARCHITECTURE.md", "intent_hint": "docs"},
+        {"text": "Legacy task without ID"},
+        {"id": "test-e2e", "text": "Write e2e test", "intent_hint": "test", "blocked_by": "impl-1"},
+    ]
+    out = _task_section(tasks)
+    assert "(id: docs-arch)" in out
+    assert "(id:" not in out.split("Legacy task")[1].split("\n")[0]  # legacy line has no id
+    assert "(id: test-e2e)" in out
+    assert "→ blocked by: impl-1" in out
+
+
+def test_claims_section_with_task_id():
+    """Active claim with task_id renders (task: ...) suffix."""
+    from smriti_cli.formatters import _format_active_claims_section
+    claims = [
+        {
+            "agent": "claude-code",
+            "branch_name": "main",
+            "scope": "Update ARCHITECTURE.md",
+            "task_id": "docs-arch",
+            "intent_type": "docs",
+            "base_commit_hash": "abc1234",
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+    out = _format_active_claims_section(claims)
+    assert "(task: docs-arch)" in out
+    assert "[docs]" in out
+
+
+def test_claims_section_without_task_id():
+    """Active claim without task_id renders normally — no (task: ...) suffix."""
+    from smriti_cli.formatters import _format_active_claims_section
+    claims = [
+        {
+            "agent": "codex-local",
+            "branch_name": "main",
+            "scope": "Some work",
+            "intent_type": "implement",
+            "base_commit_hash": "def5678",
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+    out = _format_active_claims_section(claims)
+    assert "(task:" not in out
+    assert "[implement]" in out

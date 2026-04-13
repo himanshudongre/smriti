@@ -364,6 +364,7 @@ class ActiveClaimSummary(BaseModel):
     agent: str
     branch_name: str
     scope: str
+    task_id: Optional[str] = None
     intent_type: str
     claimed_at: datetime
     expires_at: datetime
@@ -1016,6 +1017,7 @@ def get_space_state(
                 agent=wc.agent,
                 branch_name=wc.branch_name,
                 scope=wc.scope,
+                task_id=wc.task_id,
                 intent_type=wc.intent_type,
                 claimed_at=wc.claimed_at,
                 expires_at=wc.expires_at,

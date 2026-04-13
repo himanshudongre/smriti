@@ -51,6 +51,8 @@ def _create_claim(client, space_id, **kwargs):
     }
     if "base_commit_id" in kwargs:
         payload["base_commit_id"] = kwargs["base_commit_id"]
+    if "task_id" in kwargs:
+        payload["task_id"] = kwargs["task_id"]
     r = client.post("/api/v5/claims", json=payload)
     return r
 
@@ -217,3 +219,51 @@ def test_active_claims_appear_in_state(client):
     assert claim["agent"] == "claude-code"
     assert claim["scope"] == "Building work claims feature"
     assert claim["intent_type"] == "implement"
+
+
+def test_create_claim_with_task_id(client):
+    """Claims can reference a structured task ID."""
+    repo_id = _create_repo(client, "Claim Task ID")
+
+    r = _create_claim(
+        client, repo_id,
+        agent="claude-code",
+        scope="Update ARCHITECTURE.md",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["task_id"] == "docs-arch"
+    assert data["intent_type"] == "docs"
+
+
+def test_create_claim_without_task_id(client):
+    """Claims without task_id have null/None task_id — backward compatible."""
+    repo_id = _create_repo(client, "Claim No Task ID")
+
+    r = _create_claim(client, repo_id, agent="codex-local", scope="Some work")
+    assert r.status_code == 201
+    data = r.json()
+    assert data["task_id"] is None
+
+
+def test_task_id_appears_in_state(client):
+    """task_id on claims surfaces in the /state response."""
+    repo_id = _create_repo(client, "Claim Task State")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "base")
+    _create_claim(
+        client, repo_id,
+        agent="claude-code",
+        scope="Update docs",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    assert r.status_code == 200
+    state = r.json()
+    assert len(state["active_claims"]) == 1
+    claim = state["active_claims"][0]
+    assert claim["task_id"] == "docs-arch"

@@ -95,6 +95,10 @@ def _task_section(tasks: list, heading: str = "In progress") -> str:
         if hint:
             parts.append(f"[{hint}]")
 
+        task_id = t.get("id")
+        if task_id:
+            parts.append(f"(id: {task_id})")
+
         status = t.get("status")
         if status and status != "open":
             parts.append(f"({status})")
@@ -250,9 +254,11 @@ def _format_active_claims_section(active_claims: list[dict]) -> str:
         intent = c.get("intent_type") or "implement"
         base_hash = c.get("base_commit_hash") or "?"
         created = _relative_time(c.get("claimed_at") or "")
+        task_ref = c.get("task_id")
+        task_suffix = f" (task: {task_ref})" if task_ref else ""
         lines.append(
             f"- `{agent}` [{intent}] on `{branch}` from `{base_hash}` "
-            f"· {created} — {scope}"
+            f"· {created} — {scope}{task_suffix}"
         )
     return "\n".join(lines) + "\n"
 

@@ -123,3 +123,62 @@ def test_intent_case_insensitive():
         {"text": "Task", "intent_hint": "IMPLEMENT"},
     ])
     assert result[0]["intent_hint"] == "implement"
+
+
+# ── Task ID tests ──────────────────────────────────────────────────────────
+
+
+def test_task_id_passthrough():
+    """Task id field is preserved when present."""
+    result = _normalize_tasks([
+        {"text": "Implement endpoint", "id": "impl-1", "intent_hint": "implement"},
+    ])
+    assert result[0]["id"] == "impl-1"
+
+
+def test_task_id_stripped():
+    """Task id is stripped of whitespace."""
+    result = _normalize_tasks([
+        {"text": "Task", "id": "  docs-arch  "},
+    ])
+    assert result[0]["id"] == "docs-arch"
+
+
+def test_task_id_empty_dropped():
+    """Empty task id is not included."""
+    result = _normalize_tasks([
+        {"text": "Task", "id": ""},
+    ])
+    assert "id" not in result[0]
+
+
+def test_task_id_null_dropped():
+    """None task id is not included."""
+    result = _normalize_tasks([
+        {"text": "Task", "id": None},
+    ])
+    assert "id" not in result[0]
+
+
+def test_task_id_with_all_fields():
+    """Task with id, intent_hint, and blocked_by preserves all."""
+    result = _normalize_tasks([
+        {
+            "text": "Write tests",
+            "id": "test-e2e",
+            "intent_hint": "test",
+            "blocked_by": "impl-1",
+        },
+    ])
+    assert result[0] == {
+        "text": "Write tests",
+        "id": "test-e2e",
+        "intent_hint": "test",
+        "blocked_by": "impl-1",
+    }
+
+
+def test_string_task_has_no_id():
+    """Plain string tasks have no id field."""
+    result = _normalize_tasks(["A string task"])
+    assert "id" not in result[0]

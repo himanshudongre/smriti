@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.8"
+    assert version == "1.9"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -169,6 +169,9 @@ _REQUIRED_PHRASES = [
     "complementary",
     "blocked by",
     "skip done tasks",
+    "claim with task id",
+    "recheck after claiming",
+    "reuse the same id",
     # Section 14 — two-sentence summary
     "session start",
 ]

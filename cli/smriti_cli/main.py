@@ -752,6 +752,7 @@ def cmd_claim_create(client: SmritiClient, args: argparse.Namespace) -> None:
         scope=args.scope,
         branch_name=args.branch or "main",
         base_commit_id=base_commit_id,
+        task_id=getattr(args, "task_id", None),
         intent_type=args.intent_type,
         ttl_hours=args.ttl,
     )
@@ -1114,6 +1115,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["implement", "review", "investigate", "docs", "test"],
         help="Type of work (default: implement)",
     )
+    cl_create.add_argument("--task-id", dest="task_id", default=None, help="Optional structured task ID this claim covers")
     cl_create.add_argument("--ttl", type=float, default=4.0, help="Hours until expiration (default: 4)")
     cl_create.add_argument("--json", action="store_true")
     cl_create.set_defaults(func=cmd_claim_create)

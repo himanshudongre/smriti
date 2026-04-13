@@ -295,6 +295,10 @@ class WorkClaim(Base):
         nullable=True,
     )
     scope: Mapped[str] = mapped_column(Text, nullable=False)
+    task_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True,
+        doc="Optional reference to a structured task's id field in the checkpoint",
+    )
     intent_type: Mapped[str] = mapped_column(
         String(20), default="implement",
         doc="One of: implement, review, investigate, docs, test",

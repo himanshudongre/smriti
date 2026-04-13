@@ -52,6 +52,9 @@ def _normalize_tasks(raw_tasks: list) -> list:
                 continue
             seen.add(text)
             task: dict = {"text": text}
+            task_id = item.get("id")
+            if isinstance(task_id, str) and task_id.strip():
+                task["id"] = task_id.strip()
             hint = item.get("intent_hint")
             if isinstance(hint, str) and hint.strip().lower() in _VALID_TASK_INTENTS:
                 task["intent_hint"] = hint.strip().lower()
@@ -153,6 +156,7 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
   "assumptions": ["Something taken for granted but not explicitly decided"],
   "tasks": [
     {{
+      "id": "short-stable-slug",
       "text": "A concrete action item from the conversation",
       "intent_hint": "implement|review|investigate|docs|test or null",
       "blocked_by": "short label of a dependency, or null"
@@ -165,9 +169,9 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
 Rules:
 - decisions: only include choices explicitly made in the conversation, not hypothetical ones
 - assumptions: things the conversation takes for granted that were NOT explicitly debated or decided (e.g., implicit constraints, assumed technology choices, timeline expectations treated as given)
-- tasks: action items as objects with "text" (required), "intent_hint" (one of
-  "implement", "review", "investigate", "docs", "test", or null), and "blocked_by"
-  (short label of a dependency, or null). A plain string is also accepted.
+- tasks: action items as objects with "id" (short stable slug), "text" (required),
+  "intent_hint" (one of "implement", "review", "investigate", "docs", "test", or null),
+  and "blocked_by" (short label or id of a dependency, or null). A plain string is also accepted.
 - entities: proper nouns and key technical/domain terms only
 - All arrays may be empty if nothing relevant was discussed
 - Output ONLY valid JSON. No markdown, no explanation.
@@ -360,6 +364,7 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
   "assumptions": ["Something taken for granted but not explicitly debated"],
   "tasks": [
     {{
+      "id": "short-stable-slug like impl-1 or docs-arch",
       "text": "A concrete action item or next step",
       "intent_hint": "implement|review|investigate|docs|test or null",
       "blocked_by": "short label of another task this depends on, or null"
@@ -381,12 +386,14 @@ Rules:
 - decisions: only explicit choices from the document, not hypothetical ones
 - assumptions: things the document takes for granted that were NOT explicitly debated
 - tasks: concrete next steps as objects. Each task has:
+  - "id": a short stable slug (e.g. "impl-1", "docs-arch", "test-freshness"). Use
+    lowercase alphanumeric with hyphens. Derive from the task's content naturally.
   - "text": the action item (required)
   - "intent_hint": classify as "implement", "review", "investigate", "docs", or "test".
     Use null if the intent is unclear. This helps agents pick complementary work.
   - "blocked_by": if this task depends on another task being done first, set to that
-    task's short label (e.g. "freshness-impl"). Use null if unblocked.
-  - A plain string is also accepted and treated as {{text: string, intent_hint: null, blocked_by: null}}
+    task's short label or id (e.g. "impl-1"). Use null if unblocked.
+  - A plain string is also accepted and treated as {{text: string}}
 - entities: proper nouns and technical terms only
 - artifacts: fenced code blocks, JSON blocks, or other structured content that should
   be preserved verbatim. The "type" field should match the code fence language when
