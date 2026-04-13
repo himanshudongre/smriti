@@ -781,6 +781,30 @@ export function LineagePage() {
                     </span>
                   )}
                 </div>
+
+                {/* Needs attention signal */}
+                {(() => {
+                  const reasons: string[] = [];
+                  if (spaceState.divergence && (spaceState.divergence.pairs?.length ?? 0) > 0)
+                    reasons.push('Branch divergence needs resolution');
+                  if (activeClaims.length > 0)
+                    reasons.push(`${activeClaims.length} agent${activeClaims.length !== 1 ? 's' : ''} working — check before starting new work`);
+                  if ((spaceState.commit?.open_questions?.length ?? 0) > 0)
+                    reasons.push(`${spaceState.commit.open_questions.length} open question${spaceState.commit.open_questions.length !== 1 ? 's' : ''} from latest checkpoint`);
+                  if (reasons.length === 0) return null;
+                  return (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-900/10 px-3 py-2">
+                      <div className="flex items-center gap-2 text-[11px] text-amber-400 font-medium mb-1">
+                        <span>⚡ Needs attention</span>
+                      </div>
+                      <ul className="text-[11px] text-amber-300/80 space-y-0.5">
+                        {reasons.map((r, i) => (
+                          <li key={i}>• {r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </section>
             )}
 
