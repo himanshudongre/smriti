@@ -182,23 +182,34 @@ The multi-agent coordination layer grew from this foundation. Agents have the sa
 
 ## What it looks like
 
-### Project timeline (LineagePage dashboard)
+**Project timeline (LineagePage dashboard)** — the UI shows 56 checkpoints across 2 agents with milestone markers, author badges, and note indicators. Active claims and needs-attention signals are visible in the summary panel.
 
-![Smriti LineagePage dashboard](docs/assets/lineage-dashboard.png)
+**Agent-facing state (CLI)** — what every agent reads at session start:
 
-*Real project timeline from building Smriti with Smriti: 56 checkpoints across 2 agents, milestone markers, author badges, note indicators.*
+```
+$ smriti state smriti-dev --compact
 
-### Agent-facing state and metrics (CLI)
+# smriti-dev
+Latest checkpoint: `a333bc7` · by `claude-code`
+## In progress
+- Add task_id to capabilities manifest [implement] (id: cap-task-id)
+- Write collision detection test [test] (id: test-collision)
+- Update ARCHITECTURE.md [docs] (id: docs-arch-ids)
+## Active work
+- `claude-code` [test] on `main` — collision detection test (task: test-collision)
+- `codex-local` [implement] on `main` — capabilities manifest (task: cap-task-id)
+```
 
-![CLI state and metrics](docs/assets/cli-state-and-metrics.png)
+**Project metrics** — coordination KPIs computed on demand:
 
-*What every agent reads at session start (`smriti state --compact`) and the project health KPIs (`smriti metrics`).*
+```
+$ smriti metrics smriti-dev
 
-### Structured checkpoint detail
-
-![Checkpoint detail with structured tasks](docs/assets/checkpoint-detail.png)
-
-*A checkpoint with structured tasks (intent badges, task IDs, blocked_by markers) and founder milestone notes.*
+## Coordination
+56 checkpoints · 2 agents (claude-code: 35, codex-local: 21)
+30 cross-agent continuations
+37 claims · 100% completion · 3 with task IDs
+```
 
 ---
 
