@@ -555,6 +555,151 @@ def cmd_skills_install(client: SmritiClient, args: argparse.Namespace) -> None:
     )
 
 
+# ── init command handler ─────────────────────────────────────────────────────
+
+
+def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
+    """One-step agent onboarding: create space, install skill packs,
+    configure SessionStart hook. Idempotent — safe to run twice."""
+    import json as _json
+    from pathlib import Path
+
+    from .skill_pack import get_version, install as install_skill, renderer
+
+    space_name = args.space
+    results: list[str] = []
+    next_steps: list[str] = []
+
+    # 1. Verify backend reachability.
+    try:
+        client.list_spaces()
+        results.append("Backend reachable at " + client.base_url)
+    except Exception:
+        _fail(
+            f"error: Cannot reach Smriti backend at {client.base_url}.\n"
+            "Start the backend with `make dev` and ensure Postgres is running "
+            "via `docker compose up -d postgres`."
+        )
+        return
+
+    # 2. Create or connect space.
+    try:
+        space = client.resolve_space(space_name)
+        results.append(f'Space "{space_name}" exists (id: {space["id"][:8]}…)')
+    except Exception:
+        space = client.create_space(
+            name=space_name,
+            description=args.description or "",
+        )
+        results.append(f'Space "{space_name}" created (id: {space["id"][:8]}…)')
+
+    # 3. Install Claude Code skill pack.
+    claude_result = install_skill("claude-code")
+    if claude_result.action == "created":
+        results.append(f"Skill pack installed for Claude Code → {claude_result.destination}")
+    elif claude_result.action == "overwritten":
+        results.append(f"Skill pack upgraded for Claude Code → {claude_result.destination}")
+    elif claude_result.action == "skipped":
+        results.append(f"Skill pack for Claude Code is current (v{claude_result.version})")
+
+    # 4. Install Codex skill pack — with safety check.
+    agents_path = Path("AGENTS.md")
+    codex_safe = True
+    if agents_path.exists():
+        content = agents_path.read_text(encoding="utf-8")
+        if "smriti_skill_pack_version" not in content and content.strip():
+            # Non-Smriti content exists — do not overwrite.
+            codex_safe = False
+            results.append(
+                f"Skipped Codex skill pack — AGENTS.md has existing non-Smriti content"
+            )
+            next_steps.append(
+                "Install Codex skill pack manually (will overwrite AGENTS.md):\n"
+                "    smriti skills install codex --force\n"
+                "    git add AGENTS.md && git commit -m \"Add Smriti skill pack for Codex\""
+            )
+    if codex_safe:
+        codex_result = install_skill("codex", destination=agents_path)
+        if codex_result.action == "created":
+            results.append(f"Skill pack installed for Codex → {codex_result.destination}")
+            next_steps.append(
+                "Commit AGENTS.md so Codex can see it:\n"
+                "    git add AGENTS.md && git commit -m \"Add Smriti skill pack for Codex\""
+            )
+        elif codex_result.action == "overwritten":
+            results.append(f"Skill pack upgraded for Codex → {codex_result.destination}")
+            next_steps.append(
+                "Commit the updated AGENTS.md:\n"
+                "    git add AGENTS.md && git commit"
+            )
+        elif codex_result.action == "skipped":
+            results.append(f"Skill pack for Codex is current (v{codex_result.version})")
+
+    # 5. Generate SessionStart hook.
+    settings_path = Path(".claude/settings.json")
+    hook_command = (
+        f"backend/.venv/bin/smriti state {space_name} --preview 2>/dev/null "
+        f"|| echo 'Smriti backend not reachable. Start with: make dev'"
+    )
+    hook_entry = {
+        "type": "command",
+        "command": hook_command,
+    }
+    target_hooks = {
+        "SessionStart": [
+            {"matcher": "startup", "hooks": [hook_entry]},
+            {"matcher": "compact", "hooks": [hook_entry]},
+            {"matcher": "resume", "hooks": [hook_entry]},
+        ]
+    }
+
+    if settings_path.exists():
+        try:
+            existing = _json.loads(settings_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            existing = {}
+    else:
+        existing = {}
+
+    if "hooks" in existing and "SessionStart" in existing.get("hooks", {}):
+        results.append("SessionStart hook already configured → .claude/settings.json")
+    else:
+        existing.setdefault("hooks", {})
+        existing["hooks"]["SessionStart"] = target_hooks["SessionStart"]
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(
+            _json.dumps(existing, indent=2) + "\n", encoding="utf-8"
+        )
+        results.append("SessionStart hook configured → .claude/settings.json")
+
+    # 6. MCP config reminder.
+    next_steps.append(
+        "Configure MCP in your host (if using Claude Code / Cursor / Windsurf):\n"
+        '    {"mcpServers": {"smriti": {"command": "smriti-mcp", '
+        '"env": {"SMRITI_API_URL": "http://localhost:8000"}}}}'
+    )
+    next_steps.append(f"Start working:\n    smriti state {space_name}")
+
+    # 7. Output.
+    if args.json:
+        _print_json({
+            "space": space_name,
+            "results": results,
+            "next_steps": next_steps,
+        })
+        return
+
+    print()
+    for r in results:
+        print(f"  ✓ {r}")
+    if next_steps:
+        print()
+        print("  Next steps:")
+        for i, step in enumerate(next_steps, 1):
+            print(f"    {i}. {step}")
+    print()
+
+
 # ── branch subcommand handlers ──────────────────────────────────────────────
 
 
@@ -666,6 +811,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # init — one-step agent onboarding
+    init_parser = subparsers.add_parser(
+        "init",
+        help="One-step agent onboarding: create space, install skill packs, configure hook",
+    )
+    init_parser.add_argument("space", help="Space name for this project")
+    init_parser.add_argument("--description", help="Space description", default="")
+    init_parser.add_argument("--json", action="store_true")
+    init_parser.set_defaults(func=cmd_init)
 
     # space
     space_parser = subparsers.add_parser("space", help="Manage Smriti spaces (projects)")

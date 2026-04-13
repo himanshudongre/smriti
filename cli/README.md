@@ -123,6 +123,8 @@ The installer is version-aware: it refuses to overwrite a destination whose inst
 ## Commands
 
 ```
+smriti init <space> [--description "..."]             # one-step agent onboarding
+
 smriti space list
 smriti space create <name> [--description "..."]
 smriti space delete <space> [-y]

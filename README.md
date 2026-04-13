@@ -206,6 +206,17 @@ make dev-frontend     # frontend on http://localhost:5173 (separate terminal)
 
 ### 3. For coding agents, continue here
 
+**Quick path:** if you just want everything set up in one command:
+
+```bash
+source backend/.venv/bin/activate
+smriti init my-project
+```
+
+This creates the space, installs skill packs for Claude Code and Codex, and configures the SessionStart hook. Follow the printed next steps for MCP config and committing `AGENTS.md`. Skip to step 4 if you used `smriti init`.
+
+**Manual path (or if you want to understand each step):**
+
 **Runtime model.** Postgres runs in Docker. The backend runs locally via `make dev`. The human starts both. Agents are clients of `http://localhost:8000` — they do not start, restart, or manage the backend or Docker.
 
 **3a. Configure your MCP host** (Claude Code, Cursor, Windsurf — skip for Codex):
