@@ -267,3 +267,145 @@ def test_task_id_appears_in_state(client):
     assert len(state["active_claims"]) == 1
     claim = state["active_claims"][0]
     assert claim["task_id"] == "docs-arch"
+
+
+# ── Collision detection tests ───────────────────────────────────────────────
+
+
+def test_duplicate_task_id_claims_both_visible(client):
+    """Two claims referencing the same task_id are both visible in state.
+
+    This is the foundation of the recheck pattern: after creating a claim,
+    the agent re-reads state. If another agent also claimed the same task_id,
+    both claims appear in ## Active work, and the agent can detect the
+    collision and pivot to a different task.
+
+    Claims are advisory — the backend does NOT reject duplicates.
+    """
+    repo_id = _create_repo(client, "Collision Detect")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "base")
+
+    # Agent A claims docs-arch
+    r1 = _create_claim(
+        client, repo_id,
+        agent="claude-code",
+        scope="Update ARCHITECTURE.md",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+    assert r1.status_code == 201
+
+    # Agent B also claims docs-arch (near-simultaneous start)
+    r2 = _create_claim(
+        client, repo_id,
+        agent="codex-local",
+        scope="Document task IDs in ARCHITECTURE.md",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+    assert r2.status_code == 201  # advisory — not rejected
+
+    # Both claims visible in state
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    assert r.status_code == 200
+    state = r.json()
+    claims = state["active_claims"]
+    assert len(claims) == 2
+
+    # Both reference the same task_id
+    task_ids = [c["task_id"] for c in claims]
+    assert task_ids.count("docs-arch") == 2
+
+    # Different agents
+    agents = {c["agent"] for c in claims}
+    assert agents == {"claude-code", "codex-local"}
+
+
+def test_different_task_id_claims_no_collision(client):
+    """Two claims on different task_ids — no collision, both visible."""
+    repo_id = _create_repo(client, "No Collision")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "base")
+
+    _create_claim(
+        client, repo_id,
+        agent="claude-code",
+        scope="Task A",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+    _create_claim(
+        client, repo_id,
+        agent="codex-local",
+        scope="Task B",
+        intent_type="test",
+        task_id="test-e2e",
+    )
+
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    state = r.json()
+    claims = state["active_claims"]
+    assert len(claims) == 2
+    task_ids = {c["task_id"] for c in claims}
+    assert task_ids == {"docs-arch", "test-e2e"}
+
+
+def test_collision_then_abandon_and_pivot(client):
+    """Simulates the full recheck pattern: detect collision, abandon, re-claim.
+
+    Agent A claims docs-arch. Agent B also claims docs-arch. Agent B detects
+    the collision on recheck, abandons its claim, and re-claims on test-e2e.
+    After the pivot, the state shows two claims on different task_ids.
+    """
+    repo_id = _create_repo(client, "Pivot Test")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "base")
+
+    # Agent A claims docs-arch
+    _create_claim(
+        client, repo_id,
+        agent="claude-code",
+        scope="Update ARCHITECTURE.md",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+
+    # Agent B also claims docs-arch
+    r2 = _create_claim(
+        client, repo_id,
+        agent="codex-local",
+        scope="Document task IDs",
+        intent_type="docs",
+        task_id="docs-arch",
+    )
+    b_claim_id = r2.json()["id"]
+
+    # Agent B rechecks: sees collision (2 claims on docs-arch)
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    colliding = [
+        c for c in r.json()["active_claims"]
+        if c["task_id"] == "docs-arch"
+    ]
+    assert len(colliding) == 2  # collision detected
+
+    # Agent B abandons
+    client.patch(f"/api/v5/claims/{b_claim_id}", json={"status": "abandoned"})
+
+    # Agent B re-claims on a different task
+    _create_claim(
+        client, repo_id,
+        agent="codex-local",
+        scope="Write collision test",
+        intent_type="test",
+        task_id="test-e2e",
+    )
+
+    # Final state: two claims on different task_ids
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    claims = r.json()["active_claims"]
+    assert len(claims) == 2
+    task_ids = {c["task_id"] for c in claims}
+    assert task_ids == {"docs-arch", "test-e2e"}
+    agents = {c["agent"] for c in claims}
+    assert agents == {"claude-code", "codex-local"}
