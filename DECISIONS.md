@@ -404,6 +404,30 @@ enforcement (e.g., refusing to serve requests from non-local origins or
 checking process parentage) would add complexity for a problem that behavioral
 guidance already handles.
 
+### Why structured tasks reuse the claim intent vocabulary
+
+Structured checkpoint tasks now support the same intent labels as claims:
+`implement`, `review`, `investigate`, `docs`, and `test`. This is deliberate.
+
+The goal is not to make tasks act like miniature claims. Tasks are still
+checkpoint-local recommendations about what should happen next, while claims are
+live declarations of what an agent is doing right now. But using the same
+intent vocabulary creates a cheap bridge between the two:
+
+- A future agent reading `## In progress` can quickly see the shape of the
+  remaining work without inferring it from prose.
+- That same agent can compare task intent against `## Active work` and choose
+  complementary work ("someone is implementing, so I should test or document")
+  instead of starting from scratch.
+- The system stays backward compatible because plain string tasks are still
+  valid; the intent hint is optional metadata, not a new required schema.
+
+Reusing the claim taxonomy is preferable to inventing a second set of task-only
+labels because the important distinction is lifecycle, not category. Claims and
+tasks answer different questions ("what is someone doing now?" vs. "what work
+remains?"), but they should describe work in the same coarse-grained language
+so agents can line them up reliably.
+
 ### Why structured tasks instead of a task manager
 
 The autonomy gap after shipping work claims was specific: agents could see who
