@@ -280,6 +280,18 @@ smriti restore <fork-checkpoint-id>
 
 MCP equivalents: `smriti_fork(checkpoint_id="<C1>", branch="alternative-design")`, `smriti_create_checkpoint(..., session="<fork-session-id>")`, `smriti_compare(checkpoint_a="<A>", checkpoint_b="<B>")`, `smriti_restore(checkpoint_id="<id>")`. The same four tools, the same four operations, no host-specific glue.
 
+## Checking freshness before checkpointing
+
+If you have been working for more than a few minutes, check whether the project state has moved since you started — before you checkpoint:
+
+```bash
+smriti state my-project --since <your-base-checkpoint-id> --compact
+```
+
+Your base checkpoint ID is the HEAD you read at session start. If state is unchanged, proceed. If state has changed, the output lists the new checkpoints so you can decide whether to reconcile, fork, or continue.
+
+MCP equivalent: `smriti_state(space="my-project", since="<base-id>", compact=True)`.
+
 ## Checkpoint payload schema
 
 Only `message` is required. Every other field defaults to empty.
