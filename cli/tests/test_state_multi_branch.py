@@ -316,3 +316,104 @@ def test_mcp_smriti_state_no_checkpoints_short_circuit(mock_client):
     out = mcp_server.smriti_state(space="my-project")
 
     assert "No checkpoints yet" in out
+
+
+# ── Compact mode tests ──────────────────────────────────────────────────────
+
+
+def _commit_with_artifacts():
+    """Commit with realistic artifacts for compact mode testing."""
+    base = _base_commit()
+    base["id"] = "abc12345-6789-0abc-def0-123456789abc"
+    base["artifacts"] = [
+        {
+            "id": "a1",
+            "type": "python",
+            "label": "Draft implementation",
+            "content": "def hello():\n    return 'world'\n" * 50,
+        },
+        {
+            "id": "a2",
+            "type": "markdown",
+            "label": "Test plan",
+            "content": "# Test Plan\n\n- Unit tests for X\n- Integration tests for Y\n" * 30,
+        },
+    ]
+    return base
+
+
+def test_compact_omits_artifact_content():
+    """Compact mode shows artifact labels but not content."""
+    commit = _commit_with_artifacts()
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True,
+    )
+
+    # Labels present
+    assert "Draft implementation" in out
+    assert "Test plan" in out
+    # Content absent
+    assert "def hello():" not in out
+    assert "Unit tests for X" not in out
+    # Recovery instruction present
+    assert "compact — content omitted" in out
+    assert "smriti checkpoint show" in out
+    assert "abc12345-6789-0abc-def0-123456789abc" in out
+
+
+def test_compact_is_smaller_than_full():
+    """Compact output must be materially smaller than full output."""
+    commit = _commit_with_artifacts()
+    full = format_state_brief(
+        _base_space(), _base_head(), commit, full_artifacts=True,
+    )
+    compact = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True,
+    )
+
+    # Compact should be at least 50% smaller when artifacts dominate
+    assert len(compact) < len(full) * 0.5, (
+        f"Compact ({len(compact)} chars) should be less than 50% of "
+        f"full ({len(full)} chars)"
+    )
+
+
+def test_compact_preserves_decisions_and_tasks():
+    """Compact mode must not touch non-artifact sections."""
+    commit = _commit_with_artifacts()
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True,
+    )
+
+    assert "## Decisions" in out
+    assert "Decision A" in out
+    assert "## Assumptions we are relying on" in out
+    assert "Assumption X" in out
+    assert "## In progress" in out
+    assert "Task 1" in out
+
+
+def test_compact_with_no_artifacts_is_clean():
+    """Compact mode on a commit with no artifacts should not show the section."""
+    commit = _base_commit()  # no artifacts
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True,
+    )
+
+    assert "Attached artifacts" not in out
+    assert "compact" not in out.lower() or "compact" in out.lower()  # no section = no mention
+
+
+def test_mcp_smriti_state_compact_mode(mock_client):
+    """MCP tool with compact=True should pass compact to formatter."""
+    mock_client.resolve_space.return_value = _space_dict()
+    state = _space_state_dict()
+    state["commit"] = _commit_with_artifacts()
+    mock_client.get_space_state.return_value = state
+
+    out = mcp_server.smriti_state(space="my-project", compact=True)
+
+    # Labels present, content absent
+    assert "Draft implementation" in out
+    assert "def hello():" not in out
+    assert "compact — content omitted" in out

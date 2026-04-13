@@ -1,8 +1,11 @@
 # Smriti — project instructions for Claude Code
 
 This project uses Smriti as the shared reasoning-state backend.
-A SessionStart hook injects `smriti state smriti-dev` into your
-context automatically. Read it before doing anything else.
+A SessionStart hook injects `smriti state smriti-dev --compact` into
+your context automatically. Read it before doing anything else.
+Artifact content is omitted in compact mode — if the state brief
+lists artifacts that look relevant, inspect them with
+`smriti checkpoint show <id> --full-artifacts`.
 
 ## Session start checklist
 

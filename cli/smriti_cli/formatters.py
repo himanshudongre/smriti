@@ -62,9 +62,34 @@ def _list_section(heading: str, items: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _artifact_section(artifacts: list[dict], preview_chars: int = 800, full: bool = False) -> str:
+def _artifact_section(
+    artifacts: list[dict],
+    preview_chars: int = 800,
+    full: bool = False,
+    compact: bool = False,
+    checkpoint_id: str = "",
+) -> str:
     if not artifacts:
         return ""
+    if compact:
+        # Labels only — no content. Explicit recovery instruction.
+        lines = [f"## Attached artifacts (compact — content omitted)"]
+        for art in artifacts:
+            label = art.get("label") or "Untitled"
+            lines.append(f"- {label}")
+        lines.append("")
+        if checkpoint_id:
+            lines.append(
+                f"To inspect artifact content: "
+                f"`smriti checkpoint show {checkpoint_id} --full-artifacts`"
+            )
+        else:
+            lines.append(
+                "To inspect artifact content: "
+                "`smriti checkpoint show <checkpoint-id> --full-artifacts`"
+            )
+        return "\n".join(lines) + "\n"
+
     lines = ["## Attached artifacts"]
     for art in artifacts:
         label = art.get("label") or "Untitled"
@@ -159,6 +184,7 @@ def format_state_brief(
     commit: dict,
     *,
     full_artifacts: bool = False,
+    compact: bool = False,
     space_state: dict | None = None,
 ) -> str:
     """A continuation-oriented markdown brief for the current project state.
@@ -215,7 +241,13 @@ def format_state_brief(
     parts.append(_list_section("Assumptions we are relying on", assumptions))
     parts.append(_list_section("Open questions", open_questions))
     parts.append(_list_section("In progress", tasks))
-    parts.append(_artifact_section(artifacts, full=full_artifacts))
+    checkpoint_id = commit.get("id") or head.get("commit_id") or ""
+    parts.append(_artifact_section(
+        artifacts,
+        full=full_artifacts,
+        compact=compact,
+        checkpoint_id=str(checkpoint_id),
+    ))
 
     if entities:
         parts.append(f"## Key entities\n{', '.join(entities)}\n")

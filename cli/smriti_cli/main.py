@@ -221,7 +221,8 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
             "divergence": state.get("divergence"),
         }
 
-    full_artifacts = not args.preview
+    full_artifacts = not args.preview and not args.compact
+    compact = args.compact
     if args.json:
         payload = {"space": space, "head": head, "commit": commit}
         if space_state is not None:
@@ -234,6 +235,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
             format_state_brief(
                 space, head, commit,
                 full_artifacts=full_artifacts,
+                compact=compact,
                 space_state=space_state,
             ),
             end="",
@@ -874,6 +876,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Show only main-branch HEAD (legacy pre-V4 behaviour). "
              "Default: multi-branch state — main brief plus any active "
              "non-main branches and divergence signal.",
+    )
+    state_parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Omit artifact content, show labels only. Saves tokens for "
+             "session-start injection. Full content recoverable via "
+             "smriti checkpoint show <id> --full-artifacts.",
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)

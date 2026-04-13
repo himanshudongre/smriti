@@ -111,7 +111,12 @@ def _empty_space_brief(space: dict) -> str:
 
 
 @mcp.tool()
-def smriti_state(space: str, preview: bool = False, main_only: bool = False) -> str:
+def smriti_state(
+    space: str,
+    preview: bool = False,
+    compact: bool = False,
+    main_only: bool = False,
+) -> str:
     """Print a continuation-oriented brief of a space's current state.
 
     By default the brief is multi-branch aware: it includes the main-branch
@@ -131,6 +136,10 @@ def smriti_state(space: str, preview: bool = False, main_only: bool = False) -> 
         space: Space name or UUID.
         preview: If True, truncate artifact content to a short preview
             instead of showing it in full. Default: full artifacts.
+        compact: If True, omit artifact content entirely — show only
+            artifact labels with a recovery instruction. Saves tokens
+            for session-start injection. Full content recoverable via
+            smriti_show_checkpoint. Default False.
         main_only: If True, fetch only the main-branch HEAD via the
             legacy /head endpoint and skip the Active branches and
             Divergence signal sections entirely. Default False.
@@ -159,7 +168,8 @@ def smriti_state(space: str, preview: bool = False, main_only: bool = False) -> 
         _raise_from(e)
     return format_state_brief(
         s, head, commit,
-        full_artifacts=not preview,
+        full_artifacts=not preview and not compact,
+        compact=compact,
         space_state=space_state,
     )
 
