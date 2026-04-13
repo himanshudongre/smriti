@@ -358,9 +358,7 @@ export async function getLineage(spaceId: string): Promise<import('../types').Li
 }
 
 export async function getSpaceState(spaceId: string): Promise<import('../types').SpaceStateResponse> {
-  const resp = await fetch(`${API_BASE}/api/v4/chat/spaces/${spaceId}/state`);
-  if (!resp.ok) throw new Error(`Failed to fetch space state: ${resp.status}`);
-  return resp.json();
+  return requestV4<import('../types').SpaceStateResponse>(`/chat/spaces/${spaceId}/state`);
 }
 
 export async function compareCheckpoints(

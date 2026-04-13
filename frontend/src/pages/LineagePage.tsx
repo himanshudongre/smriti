@@ -577,6 +577,7 @@ export function LineagePage() {
 
   const [lineage, setLineage] = useState<LineageResponse | null>(null);
   const [activeClaims, setActiveClaims] = useState<ActiveClaimSummary[]>([]);
+  const [spaceState, setSpaceState] = useState<import('../types').SpaceStateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -598,6 +599,7 @@ export function LineagePage() {
     ])
       .then(([lin, state]) => {
         setLineage(lin);
+        setSpaceState(state);
         setActiveClaims(state?.active_claims ?? []);
       })
       .catch(e => setErr(e.message || 'Failed to load lineage'))
@@ -703,6 +705,70 @@ export function LineagePage() {
 
         {lineage && !loading && (
           <div className="space-y-10">
+            {/* Current-state summary panel */}
+            {spaceState && (
+              <section className="rounded-xl border p-5 space-y-4" style={{ borderColor: 'var(--color-border, #27272a)', background: 'var(--color-surface, #18181b)' }}>
+                {/* Project header */}
+                <div>
+                  <h2 className="text-base font-semibold text-white">
+                    {spaceState.space.name}
+                  </h2>
+                  {spaceState.space.description && (
+                    <p className="text-xs text-gray-500 mt-0.5">{spaceState.space.description}</p>
+                  )}
+                </div>
+
+                {/* Current direction */}
+                {spaceState.commit && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-600 uppercase tracking-wider">Current direction</span>
+                    </div>
+                    <p className="text-sm text-gray-200">{spaceState.commit.message}</p>
+                    {spaceState.commit.objective && (
+                      <p className="text-xs text-gray-500">{spaceState.commit.objective}</p>
+                    )}
+                    <div className="flex items-center gap-2 text-[10px] text-gray-600">
+                      {spaceState.commit.author_agent && (
+                        <span className="font-mono border border-gray-700 px-1.5 py-px rounded text-gray-500">
+                          {spaceState.commit.author_agent}
+                        </span>
+                      )}
+                      <span>{fmt(spaceState.commit.created_at)}</span>
+                      <code className="text-blue-400">{spaceState.commit.commit_hash?.slice(0, 7)}</code>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status bar */}
+                <div className="flex items-center gap-4 flex-wrap text-[11px]">
+                  <span className="text-gray-500">
+                    <span className="text-white font-medium">{lineage.checkpoints.length}</span> checkpoint{lineage.checkpoints.length !== 1 ? 's' : ''}
+                  </span>
+                  {(spaceState.active_branches?.length ?? 0) > 0 && (
+                    <span className="text-gray-500">
+                      <span className="text-purple-400 font-medium">{spaceState.active_branches.length}</span> active branch{spaceState.active_branches.length !== 1 ? 'es' : ''}
+                    </span>
+                  )}
+                  {activeClaims.length > 0 && (
+                    <span className="text-gray-500">
+                      <span className="text-amber-400 font-medium">{activeClaims.length}</span> active claim{activeClaims.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {spaceState.divergence && (spaceState.divergence.pairs?.length ?? 0) > 0 && (
+                    <span className="text-red-400 font-medium flex items-center gap-1">
+                      ⚠ Divergence detected
+                    </span>
+                  )}
+                  {(spaceState.commit?.tasks?.length ?? 0) > 0 && (
+                    <span className="text-gray-500">
+                      <span className="text-green-400 font-medium">{spaceState.commit.tasks.length}</span> open task{spaceState.commit.tasks.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
+
             {/* Active work claims */}
             {activeClaims.length > 0 && (
               <section>
