@@ -349,7 +349,7 @@ Surfaces:
   own reasoning in their own context, using their own LLM provider. Smriti is
   their shared memory, not their runtime.
 - **MCP server** (`cli/smriti_cli/mcp_server.py`, entry point `smriti-mcp`) —
-  the same surface wrapped as 15 MCP tools for hosts that speak the Model
+  the same surface wrapped as 16 MCP tools for hosts that speak the Model
   Context Protocol natively (Claude Code, Cursor, Windsurf). Stdio transport.
   Each tool is a thin shim: build a `SmritiClient`, call one or two methods,
   run the result through an existing formatter, return markdown. Feature

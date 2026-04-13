@@ -44,7 +44,7 @@ Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsu
 
 Restart the host and the `smriti_*` tools appear in the tool picker.
 
-**Available tools (15):**
+**Available tools (16):**
 
 | Tool | Purpose |
 |---|---|
@@ -60,6 +60,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 | `smriti_restore` | Print a specific checkpoint as a continuation brief |
 | `smriti_fork` | Fork a new session from an existing checkpoint |
 | `smriti_compare` | Structured diff between two checkpoints |
+| `smriti_close_branch` | Mark a branch as integrated, abandoned, or active |
 | `smriti_claim` | Declare a work claim before starting work (pre-work intent visibility) |
 | `smriti_claim_done` | Mark a work claim as done or abandoned |
 | `smriti_install_skill` | Return the Smriti agent skill pack for a host (`claude-code` / `codex`) |
@@ -80,7 +81,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 mcp dev smriti_cli.mcp_server:mcp
 ```
 
-Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 15 entries, all prefixed `smriti_`) and try each tool interactively.
+Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 16 entries, all prefixed `smriti_`) and try each tool interactively.
 
 ## Installing the Smriti skill pack
 
@@ -252,7 +253,7 @@ Surfaces possible contradictions, hidden assumptions, already-resolved open ques
 
 A second agent (different process, different model family, different session) starts fresh. It runs `smriti state my-project` — or calls `smriti_state` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
 
-This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 15 MCP tools from a host-less Python client. The shape holds.
+This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 16 MCP tools from a host-less Python client. The shape holds.
 
 ## Branching when you want to explore an alternative
 
