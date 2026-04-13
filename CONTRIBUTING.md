@@ -7,22 +7,18 @@ environment running, how to run tests, and how to propose changes.
 
 ## Dev environment
 
-**Prerequisites:** Python 3.11+, Node 18+, PostgreSQL 14+
+**Prerequisites:** Python 3.11+, Node 18+, Docker (for Postgres).
 
 ```bash
-git clone https://github.com/your-org/smriti
+git clone https://github.com/himanshudongre/smriti
 cd smriti
 
-# Copy environment config
 cp .env.example .env
+# Edit .env to add your API keys (OpenAI, Anthropic, or both).
+# Leave keys commented out to use mock mode (no real LLM calls).
 
-# Copy provider config template
-cp backend/config/providers.example.yaml backend/config/providers.yaml
-# Edit providers.yaml to add at least one provider API key,
-# or leave all keys empty and use Mock Mode in the UI.
-
-# Install backend deps + run migrations
-make setup
+docker compose up -d postgres    # start the database
+make setup                       # backend venv + deps + migrations + CLI + frontend
 
 # Start backend (terminal 1)
 make dev
@@ -31,7 +27,8 @@ make dev
 make dev-frontend
 ```
 
-Open `http://localhost:5173`.
+`make setup` installs everything: the backend, the CLI (`smriti` + `smriti-mcp` on
+your PATH), and the frontend. Open `http://localhost:5173` for the chat UI.
 
 ---
 
@@ -41,8 +38,8 @@ Open `http://localhost:5173`.
 # All backend tests (uses mock provider — no API key required)
 make test
 
-# CLI + MCP tests
-cd cli && pip install -e ".[dev]" && pytest
+# CLI + MCP tests (CLI is already installed by make setup)
+cd cli && pytest
 
 # TypeScript typecheck
 cd frontend && npx tsc --noEmit
