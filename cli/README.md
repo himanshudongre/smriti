@@ -82,7 +82,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 mcp dev smriti_cli.mcp_server:mcp
 ```
 
-Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 16 entries, all prefixed `smriti_`) and try each tool interactively.
+Opens a browser-based tool explorer connected over stdio. Click through `tools/list` (expect 17 entries, all prefixed `smriti_`) and try each tool interactively.
 
 ## Installing the Smriti skill pack
 
@@ -138,9 +138,12 @@ smriti state <space> --json                              # structured output
 
 smriti claim create <space> --agent <name> --scope "..." # declare work intent before starting
 smriti claim create <space> --agent <name> --scope "..." --intent-type review
+smriti claim create <space> --agent <name> --scope "..." --task-id impl-1  # reference a specific task ID
 smriti claim done <claim-id>                             # mark a claim as done
 smriti claim abandon <claim-id>                          # mark a claim as abandoned
 smriti claim list <space>                                # list active claims
+
+smriti metrics <space>                                   # project-level KPIs
 
 smriti skills list                                       # list skill pack targets and template version
 smriti skills show <target>                              # print rendered skill pack to stdout

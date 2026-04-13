@@ -460,6 +460,56 @@ def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
 
+def format_metrics(data: dict) -> str:
+    """Readable one-screen project metrics."""
+    parts: list[str] = []
+    name = data.get("space_name", "unknown")
+    parts.append(f"# {name} — project metrics\n")
+
+    # Coordination
+    coord = data.get("coordination", {})
+    total = coord.get("total_checkpoints", 0)
+    agents = coord.get("unique_agents", 0)
+    agent_dist = coord.get("agent_checkpoints", {})
+    dist_str = ", ".join(f"{a}: {n}" for a, n in sorted(agent_dist.items()))
+    parts.append("## Coordination")
+    parts.append(f"{total} checkpoints · {agents} agent{'s' if agents != 1 else ''} ({dist_str})")
+
+    cross = coord.get("cross_agent_continuations", 0)
+    parts.append(f"{cross} cross-agent continuation{'s' if cross != 1 else ''}")
+
+    claims_total = coord.get("total_claims", 0)
+    rate = coord.get("claim_completion_rate")
+    rate_str = f"{int(rate * 100)}% completion" if rate is not None else "no claims resolved"
+    task_id_claims = coord.get("claims_with_task_id", 0)
+    parts.append(f"{claims_total} claims · {rate_str} · {task_id_claims} with task IDs")
+    parts.append("")
+
+    # State quality
+    sq = data.get("state_quality", {})
+    avg_d = sq.get("avg_decisions_per_checkpoint", 0)
+    avg_t = sq.get("avg_tasks_per_checkpoint", 0)
+    structured = sq.get("checkpoints_with_structured_tasks", 0)
+    with_ids = sq.get("checkpoints_with_task_ids", 0)
+    milestones = sq.get("milestone_count", 0)
+    noise = sq.get("noise_count", 0)
+    parts.append("## State quality")
+    parts.append(f"{avg_d} decisions/checkpoint · {avg_t} tasks/checkpoint")
+    parts.append(f"{structured} with structured tasks · {with_ids} with task IDs")
+    parts.append(f"{milestones} milestone{'s' if milestones != 1 else ''} · {noise} noise label{'s' if noise != 1 else ''}")
+    parts.append("")
+
+    # Branches
+    br = data.get("branches", {})
+    active = br.get("active", 0)
+    integrated = br.get("integrated", 0)
+    abandoned = br.get("abandoned", 0)
+    parts.append("## Branches")
+    parts.append(f"{active} active · {integrated} integrated · {abandoned} abandoned")
+
+    return "\n".join(parts).rstrip() + "\n"
+
+
 def format_space_list(spaces: list[dict]) -> str:
     if not spaces:
         return "No spaces yet. Create one with `smriti space create <name>`.\n"

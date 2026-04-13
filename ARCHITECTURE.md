@@ -512,35 +512,62 @@ between two truth sources for in-flight work.
 not enforced — the skill pack teaches agents to skip blocked tasks, but nothing
 prevents an agent from working on one.
 
+**Task IDs.** Tasks can carry an optional `id` field — a short stable slug
+like `impl-1` or `docs-arch`. The extract prompt asks the LLM to generate
+IDs from task content. IDs are checkpoint-local and optional; tasks without
+IDs work exactly as before.
+
+**Task-referenced claims.** `WorkClaim` has an optional `task_id` column
+(VARCHAR(100)) that references a task's `id`. When an agent creates a claim
+with `--task-id impl-1`, the state brief shows `(task: impl-1)` on the claim
+line. This enables precise collision detection: two agents can see exactly
+which task each claim covers, not just the intent category.
+
+**Recheck pattern.** After creating a claim, the skill pack teaches agents
+to re-read state immediately. If another agent claimed the same `task_id` in
+the race window (near-simultaneous start), both claims are visible and the
+second agent can abandon and pivot. Claims remain advisory — the backend
+does not reject duplicate `task_id` claims.
+
 **Extract prompt.** The checkpoint extractor prompt (both draft and extract paths
-in `checkpoint.py`) asks the LLM to produce structured task objects. A
-`_normalize_tasks()` function validates intent hints against the 5-type
-vocabulary, drops invalid values, deduplicates by text, and normalizes case.
+in `checkpoint.py`) asks the LLM to produce structured task objects with `id`,
+`intent_hint`, and `blocked_by`. A `_normalize_tasks()` function validates
+intent hints against the 5-type vocabulary, preserves IDs, drops invalid
+values, deduplicates by text, and normalizes case.
 
 **Rendering.** The CLI formatter's `_task_section()` renders structured tasks
 with inline annotations in the state brief:
 
 ```
 ## In progress
-- Add freshness endpoint [implement]
-- Write freshness tests [test] → blocked by: freshness-impl
+- Add freshness endpoint [implement] (id: impl-1)
+- Write freshness tests [test] (id: test-e2e) → blocked by: impl-1
 - Update README [docs] (done)
 ```
 
 The frontend renders intent badges (blue), done badges (green), blocked_by
-markers (amber), and strikethrough for done tasks.
+markers (amber), task ID annotations, and strikethrough for done tasks.
 
 **The autonomy mechanism.** An agent reading the state brief applies the
 selection logic taught in skill pack Section 3.8:
 
-1. Read `## In progress` — note task intents and blocked_by
-2. Read `## Active work` — note existing claim intent types
-3. Pick a task whose intent is complementary to active claims
-4. Skip blocked and done tasks
-5. Create a claim and start work
+1. Read `## In progress` — note task IDs, intents, and blocked_by
+2. Read `## Active work` — note existing claims and their `task:` references
+3. Pick a task whose ID is not already claimed
+4. Prefer complementary intents to active claims
+5. Skip blocked and done tasks
+6. Create a claim referencing the task ID
+7. Recheck state — if collision detected, abandon and pivot
 
 This is descriptive, not prescriptive — tasks describe themselves, agents
 decide. No scheduler, no assignment, no orchestrator.
+
+**Backend capabilities manifest.** The `/health` endpoint returns `git_sha`
+and a `capabilities` list (`claims`, `structured_tasks`, `task_ids`,
+`checkpoint_notes`, `branch_disposition`, `freshness`, `compact_state`).
+Agents probe this when a 404 or missing section suggests the backend is
+running stale code. The capabilities list is hardcoded in `main.py` and
+updated when new features ship.
 
 ---
 
@@ -563,10 +590,8 @@ are not yet defined.
 (`DEMO_USER_ID`). There is no authentication layer, no user registration, and no
 per-user isolation.
 
-**Branch lifecycle management.** Smriti branches (non-main checkpoint chains) have
-no explicit lifecycle. A branch whose work has been integrated into main still
-appears in the `## Active branches` section of the state brief because the
-checkpoint's `branch_name` field persists. The next primitive here is an explicit
-branch disposition signal (`integrated` / `superseded` / `abandoned` / `active`)
-rather than a recency heuristic or a git-merge check — because Smriti branches
-are reasoning branches, not git branches.
+**Project metrics.** The metrics endpoint (`GET /api/v5/metrics/spaces/{id}`)
+computes coordination, state quality, and branch lifecycle KPIs on demand from
+existing data. There is no persistent metrics storage yet — all aggregates are
+computed at query time. A persistent metrics layer (materialized views, trend
+data) would be the next step if query-time computation becomes too slow.

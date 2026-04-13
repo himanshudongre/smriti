@@ -212,6 +212,12 @@ class SmritiClient:
             params["include_expired"] = "true"
         return self._request("GET", "/api/v5/claims", params=params)
 
+    # ── Metrics ─────────────────────────────────────────────────────
+
+    def get_space_metrics(self, space_id: str) -> dict:
+        """GET /api/v5/metrics/spaces/{space_id} — project-level KPIs."""
+        return self._request("GET", f"/api/v5/metrics/spaces/{space_id}")
+
     # ── Checkpoint notes ──────────────────────────────────────────────
 
     def add_checkpoint_note(

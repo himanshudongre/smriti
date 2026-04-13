@@ -155,6 +155,17 @@ So Smriti now has four surfaces on the same core:
 
 One project, one Smriti Space, multiple agents reading from and writing to the same structured state. Agents don't need to know about each other. They just need to (a) know how to read the current state and write a checkpoint at each inflection point, which is what the skill pack teaches, and (b) see each other's work on that state, which is what multi-branch `smriti state` makes visible.
 
+On top of this, several coordination primitives make multi-agent work reliable:
+
+- **Work claims** — agents declare intent before starting work, making active work visible to others. Claims are advisory (not locks), expire after a TTL, and carry an `intent_type` (implement, review, test, docs, investigate).
+- **Structured tasks with intent hints** — checkpoint tasks carry optional `intent_hint`, `blocked_by`, `status` (open/done), and stable `id` slugs. Agents use these to self-select complementary work: if someone is implementing, pick a test or docs task.
+- **Task-referenced claims** — claims can reference a specific task ID (`--task-id impl-1`), enabling precise collision detection when agents start near-simultaneously.
+- **Freshness checks** (`--since`) — agents detect whether the state has moved since their base before checkpointing, avoiding stale-state commits.
+- **Checkpoint notes** — additive annotations (note, milestone, noise) on existing checkpoints, without modifying the immutable reasoning state.
+- **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends before hitting 404s.
+- **Compact mode** (`--compact`) — artifact content omitted for token efficiency; labels and recovery instructions preserved.
+- **Project metrics** (`smriti metrics <space>`) — computed-on-demand coordination, state quality, and branch lifecycle KPIs from existing data.
+
 See `cli/README.md` for all three agent-facing surfaces (CLI, MCP, skill pack). Quick taste:
 
 ```bash

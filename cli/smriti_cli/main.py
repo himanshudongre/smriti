@@ -53,6 +53,7 @@ from .formatters import (
     format_commit_list,
     format_compare_result,
     format_fork_result,
+    format_metrics,
     format_restore_brief,
     format_review,
     format_space_list,
@@ -819,6 +820,16 @@ def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
         )
 
 
+def cmd_metrics(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Print project-level KPIs for a space."""
+    space = client.resolve_space(args.space)
+    data = client.get_space_metrics(space["id"])
+    if args.json:
+        _print_json(data)
+    else:
+        print(format_metrics(data), end="")
+
+
 # ── argparse wiring ──────────────────────────────────────────────────────
 
 
@@ -1193,6 +1204,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sk_install.add_argument("--json", action="store_true", help="Output structured JSON")
     sk_install.set_defaults(func=cmd_skills_install)
+
+    # ── metrics ────────────────────────────────────────────────────────
+    metrics_parser = subparsers.add_parser("metrics", help="Project-level KPIs for a space")
+    metrics_parser.add_argument("space", help="Space name or UUID")
+    metrics_parser.add_argument("--json", action="store_true", help="Output raw JSON")
+    metrics_parser.set_defaults(func=cmd_metrics)
 
     return parser
 

@@ -107,14 +107,16 @@ smriti/
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
-│   │       ├── template.md     Single source of truth (v1.5, 15 sections)
+│   │       ├── template.md     Single source of truth (v1.9, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (70 tests)
+│   └── tests/                  CLI + MCP tests (107 tests)
+│       ├── test_branch_close.py
+│       ├── test_init.py
 │       ├── test_mcp_server.py
 │       ├── test_skill_pack.py
-│       ├── test_state_multi_branch.py
-│       └── test_smoke.py
+│       ├── test_smoke.py
+│       └── test_state_multi_branch.py
 │
 ├── docs/
 │   └── API.md                  V2, V4, and V5 endpoint reference
@@ -154,11 +156,11 @@ make migration      Create a new migration (usage: make migration msg="...")
 
 ---
 
-## Test counts (as of v1.5 skill pack + work claims)
+## Test counts (as of v1.9 skill pack + task IDs + metrics)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 177 | `backend/tests/integration/` |
-| Backend unit | 97 | `backend/tests/unit/` |
-| CLI + MCP | 70 | `cli/tests/` |
-| **Total** | **344** | |
+| Backend integration | 107 | `backend/tests/integration/` |
+| Backend unit | 117 | `backend/tests/unit/` |
+| CLI + MCP | 107 | `cli/tests/` |
+| **Total** | **331** | |
