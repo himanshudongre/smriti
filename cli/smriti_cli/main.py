@@ -223,6 +223,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
 
     full_artifacts = not args.preview and not args.compact
     compact = args.compact
+    show_stats = getattr(args, "stats", False)
     if args.json:
         payload = {"space": space, "head": head, "commit": commit}
         if space_state is not None:
@@ -236,6 +237,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
                 space, head, commit,
                 full_artifacts=full_artifacts,
                 compact=compact,
+                stats=show_stats,
                 space_state=space_state,
             ),
             end="",
@@ -883,6 +885,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Omit artifact content, show labels only. Saves tokens for "
              "session-start injection. Full content recoverable via "
              "smriti checkpoint show <id> --full-artifacts.",
+    )
+    state_parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Show compact-mode savings (artifact chars saved, percent reduction). "
+             "Only meaningful with --compact.",
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)

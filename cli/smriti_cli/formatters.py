@@ -103,6 +103,38 @@ def _artifact_section(
     return "\n".join(lines) + "\n"
 
 
+def _artifact_compact_stats(artifacts: list[dict]) -> dict | None:
+    """Compute savings from compact mode. Returns None if no artifacts."""
+    if not artifacts:
+        return None
+    full_chars = sum(len(a.get("content") or "") for a in artifacts)
+    if full_chars == 0:
+        return None
+    # Compact replaces content with labels (~20 chars each + overhead)
+    compact_chars = sum(len(f"- {a.get('label', 'Untitled')}") + 1 for a in artifacts) + 80
+    saved = full_chars - compact_chars
+    if saved <= 0:
+        return None
+    pct = round(saved * 100 / full_chars)
+    return {
+        "artifacts_omitted": len(artifacts),
+        "chars_saved": saved,
+        "reduction_pct": pct,
+    }
+
+
+def _format_compact_stats_footer(stats: dict | None) -> str:
+    """One-line footer for --stats. Empty string if no stats."""
+    if not stats:
+        return ""
+    return (
+        f"\n---\n"
+        f"compact stats: {stats['artifacts_omitted']} artifact(s) omitted "
+        f"· {stats['chars_saved']} chars saved "
+        f"· {stats['reduction_pct']}% reduction in artifact section\n"
+    )
+
+
 def _format_active_branches_section(active_branches: list[dict]) -> str:
     """One line per non-main branch. Pointer, not a brief.
 
@@ -185,6 +217,7 @@ def format_state_brief(
     *,
     full_artifacts: bool = False,
     compact: bool = False,
+    stats: bool = False,
     space_state: dict | None = None,
 ) -> str:
     """A continuation-oriented markdown brief for the current project state.
@@ -267,7 +300,13 @@ def format_state_brief(
             _format_divergence_signal_section(space_state.get("divergence"))
         )
 
-    return "\n".join(p for p in parts if p).rstrip() + "\n"
+    result = "\n".join(p for p in parts if p).rstrip() + "\n"
+
+    if stats and compact:
+        compact_stats = _artifact_compact_stats(artifacts)
+        result += _format_compact_stats_footer(compact_stats)
+
+    return result
 
 
 def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:

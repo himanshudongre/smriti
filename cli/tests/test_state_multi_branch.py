@@ -417,3 +417,36 @@ def test_mcp_smriti_state_compact_mode(mock_client):
     assert "Draft implementation" in out
     assert "def hello():" not in out
     assert "compact — content omitted" in out
+
+
+def test_compact_stats_footer():
+    """--compact --stats should append a savings footer."""
+    commit = _commit_with_artifacts()
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True, stats=True,
+    )
+
+    assert "compact stats:" in out
+    assert "artifact(s) omitted" in out
+    assert "chars saved" in out
+    assert "reduction in artifact section" in out
+
+
+def test_stats_without_compact_produces_no_footer():
+    """Stats without compact should not show a footer."""
+    commit = _commit_with_artifacts()
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, stats=True,
+    )
+
+    assert "compact stats:" not in out
+
+
+def test_stats_with_no_artifacts_produces_no_footer():
+    """Compact+stats on a commit with no artifacts: no footer."""
+    commit = _base_commit()
+    out = format_state_brief(
+        _base_space(), _base_head(), commit, compact=True, stats=True,
+    )
+
+    assert "compact stats:" not in out
