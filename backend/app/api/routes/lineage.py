@@ -91,6 +91,7 @@ class SessionNode(BaseModel):
     branch_name: str
     forked_from_checkpoint_id: Optional[uuid.UUID]
     seeded_commit_id: Optional[uuid.UUID]
+    branch_disposition: str = "active"
     created_at: datetime
 
     model_config = {"from_attributes": True}

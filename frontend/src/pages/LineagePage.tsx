@@ -17,14 +17,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { getLineage, compareCheckpoints, forkSession } from '../api/client';
+import { getLineage, getSpaceState, compareCheckpoints, forkSession } from '../api/client';
 import type {
+  ActiveClaimSummary,
   CheckpointNode,
   SessionNode,
   LineageResponse,
   CompareResponse,
 } from '../types';
-import { GitBranch, GitCommit, Loader2, X, ArrowLeft } from 'lucide-react';
+import { GitBranch, GitCommit, Loader2, X, ArrowLeft, Zap } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -407,6 +408,7 @@ function BranchSection({
   onNavigate,
   sessionRef,
   isMain,
+  disposition,
 }: {
   branchName: string;
   checkpoints: CheckpointNode[];
@@ -418,6 +420,7 @@ function BranchSection({
   onNavigate: (sessionId: string) => void;
   sessionRef: React.RefObject<HTMLDivElement | null>;
   isMain: boolean;
+  disposition?: string;
 }) {
   const mostRecentCheckpoint = checkpoints[checkpoints.length - 1];
   const activeSession = sessions.find(s => s.id === currentSessionId) ?? sessions[0] ?? null;
@@ -439,6 +442,17 @@ function BranchSection({
         {!isMain && forkSourceId && (
           <span className="text-[10px] text-gray-600">
             forked from <code className="text-blue-400 font-mono">{forkSourceId.slice(0, 7)}</code>
+          </span>
+        )}
+        {!isMain && disposition && disposition !== 'active' && (
+          <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full border ${
+            disposition === 'integrated'
+              ? 'text-green-400 border-green-500/30 bg-green-900/20'
+              : disposition === 'abandoned'
+                ? 'text-red-400 border-red-500/30 bg-red-900/20'
+                : 'text-gray-400 border-gray-600 bg-gray-800/30'
+          }`}>
+            {disposition}
           </span>
         )}
       </div>
@@ -562,6 +576,7 @@ export function LineagePage() {
   const currentSessionId = searchParams.get('session');
 
   const [lineage, setLineage] = useState<LineageResponse | null>(null);
+  const [activeClaims, setActiveClaims] = useState<ActiveClaimSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -577,8 +592,14 @@ export function LineagePage() {
 
   useEffect(() => {
     if (!spaceId) return;
-    getLineage(spaceId)
-      .then(setLineage)
+    Promise.all([
+      getLineage(spaceId),
+      getSpaceState(spaceId).catch(() => null),
+    ])
+      .then(([lin, state]) => {
+        setLineage(lin);
+        setActiveClaims(state?.active_claims ?? []);
+      })
       .catch(e => setErr(e.message || 'Failed to load lineage'))
       .finally(() => setLoading(false));
   }, [spaceId]);
@@ -682,6 +703,41 @@ export function LineagePage() {
 
         {lineage && !loading && (
           <div className="space-y-10">
+            {/* Active work claims */}
+            {activeClaims.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-sm font-semibold text-white">Active work</h2>
+                  <span className="text-[10px] text-gray-600">{activeClaims.length} claim{activeClaims.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="space-y-2">
+                  {activeClaims.map(claim => (
+                    <div
+                      key={claim.id}
+                      className="rounded-lg border border-amber-500/30 bg-amber-900/10 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] text-amber-400 font-mono border border-amber-500/30 px-1.5 py-px rounded">
+                          {claim.agent}
+                        </span>
+                        <span className="text-[10px] text-gray-500 border border-gray-700 px-1.5 py-px rounded">
+                          {claim.intent_type}
+                        </span>
+                        <span className="text-[10px] text-gray-600">
+                          on <code className="text-gray-500">{claim.branch_name}</code>
+                          {claim.base_commit_hash && (
+                            <> from <code className="text-blue-400">{claim.base_commit_hash}</code></>
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-300">{claim.scope}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Main branch */}
             <BranchSection
               branchName="main"
@@ -697,21 +753,33 @@ export function LineagePage() {
             />
 
             {/* Fork branches */}
-            {forkBranches.map(branch => (
-              <BranchSection
-                key={branch}
-                branchName={branch}
-                checkpoints={checkpointsByBranch.get(branch) ?? []}
-                sessions={sessionsByBranch.get(branch) ?? []}
-                currentSessionId={currentSessionId}
-                selected={selected}
-                onSelect={handleSelect}
-                onFork={setForkTarget}
-                onNavigate={id => navigate(`/sessions/${id}`)}
-                sessionRef={currentSessionRef}
-                isMain={false}
-              />
-            ))}
+            {forkBranches.map(branch => {
+              // Derive disposition from sessions on this branch.
+              // If any session is "active", the branch is active.
+              // Otherwise use the most recent session's disposition.
+              const branchSessions = sessionsByBranch.get(branch) ?? [];
+              const hasActive = branchSessions.some(s => (s.branch_disposition || 'active') === 'active');
+              const disposition = hasActive
+                ? 'active'
+                : (branchSessions[0]?.branch_disposition || 'active');
+
+              return (
+                <BranchSection
+                  key={branch}
+                  branchName={branch}
+                  checkpoints={checkpointsByBranch.get(branch) ?? []}
+                  sessions={branchSessions}
+                  currentSessionId={currentSessionId}
+                  selected={selected}
+                  onSelect={handleSelect}
+                  onFork={setForkTarget}
+                  onNavigate={id => navigate(`/sessions/${id}`)}
+                  sessionRef={currentSessionRef}
+                  isMain={false}
+                  disposition={disposition}
+                />
+              );
+            })}
           </div>
         )}
       </main>

@@ -208,7 +208,28 @@ export interface SessionNode {
   branch_name: string;
   forked_from_checkpoint_id: string | null;
   seeded_commit_id: string | null;
+  branch_disposition: string;
   created_at: string;
+}
+
+export interface ActiveClaimSummary {
+  id: string;
+  agent: string;
+  branch_name: string;
+  scope: string;
+  intent_type: string;
+  claimed_at: string;
+  expires_at: string;
+  base_commit_hash: string | null;
+}
+
+export interface SpaceStateResponse {
+  space: { id: string; name: string; description: string | null };
+  head: any;
+  commit: any;
+  active_branches: any[];
+  active_claims: ActiveClaimSummary[];
+  divergence: any;
 }
 
 export interface LineageResponse {
