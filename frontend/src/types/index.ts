@@ -200,6 +200,8 @@ export interface CheckpointNode {
   summary: string;
   objective: string;
   author_agent: string | null;
+  note_count: number;
+  note_kinds: string[];
 }
 
 export interface SessionNode {

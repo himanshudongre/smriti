@@ -81,6 +81,8 @@ class CheckpointNode(BaseModel):
     summary: str
     objective: str
     author_agent: Optional[str] = None
+    note_count: int = 0
+    note_kinds: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -438,8 +440,17 @@ def get_lineage(space_id: uuid.UUID, db: Session = Depends(get_db)):
         .order_by(ChatSession.created_at.asc())
     ).all()
 
-    checkpoint_nodes = [
-        CheckpointNode(
+    def _note_info(meta: dict | None) -> tuple[int, list[str]]:
+        notes = (meta or {}).get("notes") or []
+        if not notes:
+            return 0, []
+        kinds = sorted(set(n.get("kind", "note") for n in notes))
+        return len(notes), kinds
+
+    checkpoint_nodes = []
+    for c in commits:
+        nc, nk = _note_info(c.metadata_)
+        checkpoint_nodes.append(CheckpointNode(
             id=c.id,
             commit_hash=c.commit_hash,
             message=c.message,
@@ -449,9 +460,9 @@ def get_lineage(space_id: uuid.UUID, db: Session = Depends(get_db)):
             summary=c.summary or "",
             objective=c.objective or "",
             author_agent=c.author_agent,
-        )
-        for c in commits
-    ]
+            note_count=nc,
+            note_kinds=nk,
+        ))
 
     session_nodes = [
         SessionNode(

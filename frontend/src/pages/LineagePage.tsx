@@ -320,6 +320,21 @@ function CheckpointCard({
               </span>
             )}
             <span className="text-[10px] text-gray-600">{fmt(checkpoint.created_at)}</span>
+            {checkpoint.note_count > 0 && (
+              <span
+                className={`text-[9px] font-medium px-1 py-px rounded ${
+                  checkpoint.note_kinds.includes('milestone')
+                    ? 'text-amber-400 bg-amber-900/20 border border-amber-500/30'
+                    : checkpoint.note_kinds.includes('noise')
+                      ? 'text-gray-500 bg-gray-800/30 border border-gray-700'
+                      : 'text-gray-400 bg-gray-800/30 border border-gray-700'
+                }`}
+                title={`${checkpoint.note_count} note${checkpoint.note_count !== 1 ? 's' : ''}`}
+              >
+                {checkpoint.note_kinds.includes('milestone') ? '★' :
+                 checkpoint.note_kinds.includes('noise') ? '◌' : '●'}
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-300 font-medium truncate">{checkpoint.message}</p>
           {expanded && (
