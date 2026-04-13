@@ -331,6 +331,87 @@ def fork_session(payload: ForkSessionRequest, db: Session = Depends(get_db)):
     )
 
 
+# ── Branch disposition endpoint ────────────────────────────────────────────────
+
+VALID_DISPOSITIONS = {"active", "integrated", "abandoned"}
+
+
+class BranchDispositionRequest(BaseModel):
+    space_id: str
+    branch_name: str
+    disposition: str = Field(
+        description="One of: active, integrated, abandoned",
+    )
+
+
+class BranchDispositionResponse(BaseModel):
+    space_id: uuid.UUID
+    branch_name: str
+    disposition: str
+    sessions_updated: int
+
+
+@router.patch("/branches/disposition", response_model=BranchDispositionResponse)
+def set_branch_disposition(
+    payload: BranchDispositionRequest,
+    db: Session = Depends(get_db),
+):
+    """Set the disposition of a branch (all sessions on that branch).
+
+    Marks a branch as integrated, abandoned, or active. Sessions with
+    matching branch_name in the space have their branch_disposition
+    updated. This controls whether the branch appears in the
+    ## Active branches section of smriti state.
+
+    Branch name is passed in the request body (not the URL) because
+    branch names frequently contain slashes (e.g. codex/config-reload)
+    which conflict with URL path routing.
+
+    Reversible: setting back to 'active' re-shows the branch.
+    """
+    try:
+        space_id = uuid.UUID(payload.space_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid space_id")
+
+    _get_repo(space_id, db)
+
+    if payload.disposition not in VALID_DISPOSITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid disposition '{payload.disposition}'. "
+            f"Must be one of: {', '.join(sorted(VALID_DISPOSITIONS))}",
+        )
+
+    # Find all sessions on this branch in this space.
+    stmt = (
+        select(ChatSession)
+        .where(
+            ChatSession.repo_id == space_id,
+            ChatSession.branch_name == payload.branch_name,
+        )
+    )
+    sessions = list(db.scalars(stmt).all())
+
+    if not sessions:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No sessions found on branch '{payload.branch_name}' in this space.",
+        )
+
+    for session in sessions:
+        session.branch_disposition = payload.disposition
+
+    db.commit()
+
+    return BranchDispositionResponse(
+        space_id=space_id,
+        branch_name=payload.branch_name,
+        disposition=payload.disposition,
+        sessions_updated=len(sessions),
+    )
+
+
 # ── Lineage (branch tree) endpoint ────────────────────────────────────────────
 
 @router.get("/spaces/{space_id}", response_model=LineageResponse)

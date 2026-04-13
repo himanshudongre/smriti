@@ -203,6 +203,20 @@ class SmritiClient:
             params["include_expired"] = "true"
         return self._request("GET", "/api/v5/claims", params=params)
 
+    # ── Branch disposition ────────────────────────────────────────────
+
+    def close_branch(self, space_id: str, branch_name: str, disposition: str) -> dict:
+        """PATCH /api/v5/lineage/branches/disposition"""
+        return self._request(
+            "PATCH",
+            "/api/v5/lineage/branches/disposition",
+            json={
+                "space_id": space_id,
+                "branch_name": branch_name,
+                "disposition": disposition,
+            },
+        )
+
     # ── Checkpoints ──────────────────────────────────────────────────
 
     def create_chat_commit(self, payload: dict) -> dict:

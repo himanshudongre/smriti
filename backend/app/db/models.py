@@ -211,6 +211,11 @@ class ChatSession(Base):
     )
     # Branch identity — "main" for primary sessions, custom name for forks
     branch_name: Mapped[str] = mapped_column(String(255), default="main")
+    # Branch lifecycle — explicit disposition signal so agents and humans
+    # can mark a branch as integrated or abandoned, removing it from the
+    # ## Active branches section of smriti state without deleting history.
+    # Values: "active" (default, shown), "integrated" (hidden), "abandoned" (hidden).
+    branch_disposition: Mapped[str] = mapped_column(String(20), default="active")
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(

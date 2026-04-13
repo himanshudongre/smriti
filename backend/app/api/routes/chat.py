@@ -804,16 +804,34 @@ def get_head(repo_id: uuid.UUID, db: Session = Depends(get_db)):
 def _get_active_branch_heads(
     repo_id: uuid.UUID, db: Session, limit: int = ACTIVE_BRANCHES_CAP
 ) -> list[CommitModel]:
-    """Return the most recent checkpoint on each non-main branch of this space,
-    ordered by `created_at` descending, capped at `limit`.
+    """Return the most recent checkpoint on each non-main branch of this space
+    that has at least one session with branch_disposition == 'active'.
+
+    Branches marked 'integrated' or 'abandoned' are excluded — they no
+    longer appear in ## Active branches or ## Divergence signal. They
+    remain in the lineage tree and in `smriti branch list` for history.
 
     Implemented in two steps so the SQL stays portable across the
     SQLAlchemy dialects we use in tests: first fetch every non-main
-    checkpoint (cheap — there are dozens, not millions, in a real
-    project), then collapse per branch in Python. A Postgres-only
-    `DISTINCT ON (branch_name)` would be marginally faster but would
-    break sqlite-backed unit tests for no real gain.
+    checkpoint, then collapse per branch in Python and filter by
+    session disposition.
     """
+    # Step 1: find which branches have at least one active session.
+    active_branches_stmt = (
+        select(ChatSession.branch_name)
+        .where(
+            ChatSession.repo_id == repo_id,
+            ChatSession.branch_name != "main",
+            ChatSession.branch_disposition == "active",
+        )
+        .distinct()
+    )
+    active_branch_names = set(db.scalars(active_branches_stmt).all())
+
+    if not active_branch_names:
+        return []
+
+    # Step 2: find the latest checkpoint per active branch.
     stmt = (
         select(CommitModel)
         .where(
@@ -826,6 +844,9 @@ def _get_active_branch_heads(
     heads: list[CommitModel] = []
     for commit in db.scalars(stmt):
         if commit.branch_name in seen:
+            continue
+        if commit.branch_name not in active_branch_names:
+            seen.add(commit.branch_name)
             continue
         seen.add(commit.branch_name)
         heads.append(commit)

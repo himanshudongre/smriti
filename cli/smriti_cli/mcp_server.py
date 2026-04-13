@@ -456,6 +456,41 @@ def smriti_delete_space(space: str) -> str:
 
 
 @mcp.tool()
+def smriti_close_branch(
+    space: str,
+    branch: str,
+    disposition: str = "integrated",
+) -> str:
+    """Mark a branch as integrated, abandoned, or active.
+
+    Branches marked integrated or abandoned stop appearing in the
+    ## Active branches and ## Divergence signal sections of
+    smriti_state. Their checkpoints remain in the lineage tree for
+    history — nothing is deleted.
+
+    Setting back to active re-shows the branch. Fully reversible.
+
+    Call this as part of your clean-finish workflow after a branch's
+    work has been merged or intentionally stopped.
+
+    Args:
+        space: Space name or UUID.
+        branch: Branch name to update.
+        disposition: "integrated", "abandoned", or "active".
+    """
+    client = _client()
+    try:
+        s = client.resolve_space(space)
+        result = client.close_branch(s["id"], branch, disposition)
+    except SmritiError as e:
+        _raise_from(e)
+    return (
+        f"Branch `{result['branch_name']}` marked `{result['disposition']}` "
+        f"({result['sessions_updated']} session(s) updated)."
+    )
+
+
+@mcp.tool()
 def smriti_claim(
     space: str,
     scope: str,

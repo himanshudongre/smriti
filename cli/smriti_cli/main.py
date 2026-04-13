@@ -555,6 +555,22 @@ def cmd_skills_install(client: SmritiClient, args: argparse.Namespace) -> None:
     )
 
 
+# ── branch subcommand handlers ──────────────────────────────────────────────
+
+
+def cmd_branch_close(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Set the disposition of a branch (integrated, abandoned, or active)."""
+    space = client.resolve_space(args.space)
+    result = client.close_branch(space["id"], args.branch_name, args.disposition)
+    if args.json:
+        _print_json(result)
+    else:
+        print(
+            f"Branch `{result['branch_name']}` marked `{result['disposition']}` "
+            f"({result['sessions_updated']} session(s) updated)."
+        )
+
+
 # ── claim subcommand handlers ───────────────────────────────────────────────
 
 
@@ -850,6 +866,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     compare_parser.set_defaults(func=cmd_compare)
+
+    # branch — branch lifecycle / disposition
+    branch_parser = subparsers.add_parser(
+        "branch",
+        help="Manage branch lifecycle (mark branches as integrated or abandoned)",
+    )
+    branch_sub = branch_parser.add_subparsers(dest="subcommand", required=True)
+
+    br_close = branch_sub.add_parser(
+        "close",
+        help="Set the disposition of a branch (integrated, abandoned, or active)",
+    )
+    br_close.add_argument("space", help="Space name or UUID")
+    br_close.add_argument("branch_name", help="Branch name to update")
+    br_close.add_argument(
+        "--disposition", required=True,
+        choices=["integrated", "abandoned", "active"],
+        help="New disposition for the branch",
+    )
+    br_close.add_argument("--json", action="store_true")
+    br_close.set_defaults(func=cmd_branch_close)
 
     # claim — work claims for pre-work intent visibility
     claim_parser = subparsers.add_parser(
