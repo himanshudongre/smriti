@@ -268,7 +268,7 @@ class ManualCommitRequest(BaseModel):
     objective: str = ""
     decisions: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
-    tasks: list[str] = Field(default_factory=list)
+    tasks: list = Field(default_factory=list)  # str or structured task objects
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
     artifacts: list[dict] = Field(default_factory=list)
