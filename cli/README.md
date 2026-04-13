@@ -250,7 +250,7 @@ Surfaces possible contradictions, hidden assumptions, already-resolved open ques
 
 A second agent (different process, different model family, different session) starts fresh. It runs `smriti state my-project` — or calls `smriti_state` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
 
-This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 12 MCP tools from a host-less Python client. The shape holds.
+This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 15 MCP tools from a host-less Python client. The shape holds.
 
 ## Branching when you want to explore an alternative
 
