@@ -29,6 +29,7 @@ def test_health_includes_required_capabilities(client):
     required = [
         "claims",
         "structured_tasks",
+        "task_ids",
         "checkpoint_notes",
         "branch_disposition",
         "freshness",
