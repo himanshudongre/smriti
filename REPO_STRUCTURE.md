@@ -102,7 +102,7 @@ smriti/
 │   │   ├── main.py             argparse dispatcher: init, space, state,
 │   │   │                         checkpoint, fork, restore, compare,
 │   │   │                         branch, claim, skills
-│   │   ├── mcp_server.py       FastMCP server (16 tools, stdio transport)
+│   │   ├── mcp_server.py       FastMCP server (17 tools, stdio transport)
 │   │   ├── client.py           SmritiClient HTTP wrapper (includes claims)
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)

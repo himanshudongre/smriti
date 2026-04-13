@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.5
+smriti_skill_pack_version: 1.6
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -389,6 +389,45 @@ Always tag `author_agent` with a stable identifier for your agent
 agents know who wrote what on the shared timeline. Inconsistent or
 missing `author_agent` makes divergence unattributable.
 
+### 4.1 Checkpoint notes: annotating without checkpointing
+
+Sometimes you need to add context to an existing checkpoint without
+creating a new one. Checkpoint notes are additive annotations —
+founder commentary, milestone markers, or noise labels — that attach
+to a checkpoint without modifying its immutable fields.
+
+```
+{{mcp:smriti_checkpoint_note(checkpoint_id="<id>", text="<note text>", kind="note")}}{{cli:smriti checkpoint note <id> --text "<note text>" --kind note}}
+```
+
+**Three kinds:**
+
+- `note` (default): General commentary. "This decision held up well
+  during implementation."
+- `milestone`: Marks a checkpoint as a significant project moment.
+  "This was the turning point — everything after built on this."
+- `noise`: Marks a checkpoint as low-signal or superseded. "Extractor
+  was degraded when this was written; decisions are unreliable."
+
+**When to use notes instead of a new checkpoint:**
+
+- You want to annotate a past checkpoint after the fact — adding
+  hindsight without rewriting history.
+- The human wants to mark a checkpoint as a milestone or as noise
+  for timeline legibility.
+- You are reviewing another agent's checkpoint and want to leave
+  commentary without creating a full review checkpoint.
+
+**When NOT to use notes:**
+
+- Do not use notes to record new decisions. That is a checkpoint.
+- Do not use notes as a running commentary on every checkpoint in
+  the lineage. Notes are sparse annotations, not a comment thread.
+
+Notes appear in the LineagePage timeline as indicators (★ for
+milestones, ◌ for noise, ● for plain notes) and in checkpoint detail
+views. They are visible to all agents reading the state.
+
 ---
 
 ## 5. When NOT to checkpoint
@@ -675,6 +714,7 @@ Use them literally.
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
 | declare a work claim | "Claiming: [intent_type] — <scope>." |
+| add a note to a checkpoint | "Adding a [kind] note to checkpoint X." |
 | check freshness before checkpoint | "Checking freshness before checkpointing." |
 | finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
@@ -733,7 +773,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.5 — this file is
+*Smriti skill pack version {{primary_mode}}-1.6 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

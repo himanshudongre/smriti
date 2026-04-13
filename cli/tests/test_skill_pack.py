@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.5"
+    assert version == "1.6"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -156,6 +156,11 @@ _REQUIRED_PHRASES = [
     "check freshness",
     "since",
     "stale-state",
+    # Section 4.1 — checkpoint notes
+    "checkpoint notes",
+    "milestone",
+    "noise",
+    "annotating without checkpointing",
     # Section 14 — two-sentence summary
     "session start",
 ]

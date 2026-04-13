@@ -286,7 +286,7 @@ agent surface narrow and composable.
 
 After shipping the CLI and the MCP server, the next friction item from real
 agent sessions was not about the tools — it was about agents not reaching for
-them. An agent dropped into a Smriti-enabled project with 16 MCP tools
+them. An agent dropped into a Smriti-enabled project with 17 MCP tools
 available would call a few of them reactively, miss the reflex of reading
 state at session start, and quietly fall back to writing `HANDOFF.md` under
 context pressure because markdown handoff files are what the training data

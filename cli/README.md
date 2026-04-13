@@ -44,7 +44,7 @@ Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsu
 
 Restart the host and the `smriti_*` tools appear in the tool picker.
 
-**Available tools (16):**
+**Available tools (17):**
 
 | Tool | Purpose |
 |---|---|
@@ -57,6 +57,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 | `smriti_create_checkpoint` | Create a checkpoint from freeform markdown (via extractor) |
 | `smriti_review_checkpoint` | Run consistency review on a checkpoint |
 | `smriti_delete_checkpoint` | Delete a checkpoint (refuses with dependents unless `cascade=true`) |
+| `smriti_checkpoint_note` | Add a note to a checkpoint (kinds: note, milestone, noise) |
 | `smriti_restore` | Print a specific checkpoint as a continuation brief |
 | `smriti_fork` | Fork a new session from an existing checkpoint |
 | `smriti_compare` | Structured diff between two checkpoints |
@@ -253,7 +254,7 @@ Surfaces possible contradictions, hidden assumptions, already-resolved open ques
 
 A second agent (different process, different model family, different session) starts fresh. It runs `smriti state my-project` — or calls `smriti_state` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
 
-This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 16 MCP tools from a host-less Python client. The shape holds.
+This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove all 17 MCP tools from a host-less Python client. The shape holds.
 
 ## Branching when you want to explore an alternative
 
