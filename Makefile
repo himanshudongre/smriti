@@ -75,4 +75,7 @@ setup:  ## Full local setup (venv + deps + migrations)
 	cp -n .env.example .env || true
 	$(MAKE) install
 	$(MAKE) migrate
-	@echo "\n✅ Setup complete! Run: make dev (backend) / make dev-frontend (frontend)"
+	@echo "\n✅ Setup complete!"
+	@echo "    Activate the CLI:  source backend/.venv/bin/activate"
+	@echo "    Start backend:     make dev"
+	@echo "    Start frontend:    make dev-frontend"

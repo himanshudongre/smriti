@@ -182,6 +182,8 @@ cd smriti
 cp .env.example .env
 # Edit .env to add your API keys (OpenAI, Anthropic, or both).
 # Leave keys commented out to use mock mode (no real LLM calls).
+# .env is the primary config path. config/providers.yaml is optional
+# and gitignored — you do not need it for a standard setup.
 
 docker compose up -d postgres    # start the database
 make setup                       # backend venv + deps + migrations + CLI + frontend
