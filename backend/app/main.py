@@ -1,9 +1,28 @@
 import logging
+import pathlib
 import re
+import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+
+
+def _resolve_git_sha() -> str:
+    """Return the short git SHA of the backend directory, or 'unknown'."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
 
 class SecretGuardFilter(logging.Filter):
     def filter(self, record):
@@ -48,9 +67,29 @@ def create_app() -> FastAPI:
     app.include_router(lineage.router, prefix="/api/v5", tags=["lineage-v5"])
     app.include_router(claims.router, prefix="/api/v5", tags=["claims-v5"])
 
+    # ── Capabilities manifest ────────────────────────────────────────
+    # Computed once at startup so /health is zero-cost at request time.
+    _git_sha = _resolve_git_sha()
+
+    # Hardcoded feature flags matching the route modules included above.
+    # When a new feature ships (new route module, new query param, new
+    # schema shape), add it here so agents can detect stale backends.
+    _capabilities = [
+        "claims",             # /api/v5/claims
+        "structured_tasks",   # task objects with intent_hint/blocked_by/status
+        "checkpoint_notes",   # /api/v5/checkpoint/{id}/notes
+        "branch_disposition", # PATCH /api/v5/lineage/branches/disposition
+        "freshness",          # since_commit_id on state endpoint
+        "compact_state",      # --compact mode on state brief
+    ]
+
     @app.get("/health")
     async def health_check():
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "git_sha": _git_sha,
+            "capabilities": _capabilities,
+        }
 
     @app.on_event("startup")
     async def startup_event():

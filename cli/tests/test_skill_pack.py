@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.7"
+    assert version == "1.8"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -142,8 +142,11 @@ _REQUIRED_PHRASES = [
     "clean finish",
     "branch disposition",
     "push your branch",
-    # Section 3.5 — backend reachability
+    # Section 3.5 — backend reachability and capabilities
     "backend reachability",
+    "capabilities",
+    "git_sha",
+    "stale code",
     "do not attempt to start",
     # Section 3.6 — work claims
     "work claims",

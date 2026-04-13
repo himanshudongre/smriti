@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.7
+smriti_skill_pack_version: 1.8
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -214,7 +214,7 @@ Say out loud: **"Session complete. Branch pushed, checkpoint
 written, working tree clean."** or **"Stopping — checkpointed
 findings, branch is [disposition]."**
 
-### 3.5 Backend reachability
+### 3.5 Backend reachability and capabilities
 
 The Smriti backend is a shared service started by the human. You
 are a client of it. You do not own it.
@@ -231,14 +231,22 @@ are a client of it. You do not own it.
   tool loop creates environment-variable inheritance issues that
   cause silent mock fallback on all LLM-backed endpoints. The
   human starts the backend; you use it.
-- **Runtime freshness after code changes.** If backend code has
-  been merged to main since the backend was last started (e.g.,
-  new API routes, schema changes, config fixes), the backend
-  must be restarted before agents can rely on the new endpoints.
-  Check `git log --oneline -5` against the running server's
-  behavior. If a new endpoint returns 404 or the behavior does
-  not match the merged code, tell the human: "The backend may
-  need a restart to pick up recent changes on main."
+- **Check capabilities before using advanced features.** After
+  reading state, before creating claims or using features like
+  structured tasks, probe the backend:
+  {{mcp:`curl -s http://localhost:8000/health`}}{{cli:`curl -s http://localhost:8000/health`}}
+  The response includes `git_sha` and a `capabilities` list. If
+  you need `claims` but the capabilities list does not include it,
+  the backend is running stale code. Tell the human: "The backend
+  at localhost:8000 does not support [feature]. Its git_sha is
+  [sha] but the current repo is at [repo sha]. Please restart
+  the backend with `make dev` to pick up recent changes."
+- **When to check capabilities:** You do NOT need to check on every
+  session. Check when:
+  - A Smriti API call returns 404 on a route you expect to exist
+  - The state brief is missing sections you expect (e.g., no
+    `## Active work` when you know claims were recently merged)
+  - You are about to use a feature for the first time in a session
 
 ### 3.6 Work claims: declare intent before working
 
@@ -825,7 +833,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.7 — this file is
+*Smriti skill pack version {{primary_mode}}-1.8 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*
