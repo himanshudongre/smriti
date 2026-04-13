@@ -263,7 +263,22 @@ Claude Code supports SessionStart hooks that run a command before the agent proc
 
 With this hook, the state brief is injected into Claude's context automatically at session start — the agent doesn't need to remember to call `smriti_state`. See `CLAUDE.md` for the compact project-level instructions that complement the hook.
 
-Codex does not support session hooks. Its equivalent is `AGENTS.md` (installed in step 3b), which Codex reads at session start as project-level instructions.
+### 4b. Codex equivalent (optional, local-only)
+
+Codex does not support session hooks. Its closest equivalent is:
+
+- repo-local `AGENTS.md` for the shared project contract
+- an optional user-local `developer_instructions` entry in `~/.codex/config.toml`
+
+Example:
+
+```toml
+developer_instructions = """
+When the current working directory is /path/to/your/project, begin by saying "Reading current state from Smriti." and run `smriti state my-project --preview` before reading files or taking substantive action. Then follow AGENTS.md exactly. Outside this repo, ignore this instruction.
+"""
+```
+
+This is local-only configuration. Do not commit `~/.codex/config.toml`.
 
 ### Why this is better than markdown handoffs
 
