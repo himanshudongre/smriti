@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     _capabilities = [
         "claims",             # /api/v5/claims
         "structured_tasks",   # task objects with intent_hint/blocked_by/status
+        "task_ids",           # structured task ids + claim.task_id support
         "checkpoint_notes",   # /api/v5/checkpoint/{id}/notes
         "branch_disposition", # PATCH /api/v5/lineage/branches/disposition
         "freshness",          # since_commit_id on state endpoint
