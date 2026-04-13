@@ -66,6 +66,13 @@ on different branches, you will see them in the `## Active branches`
 section with an author tag, and if any of them disagree with main on
 decisions you will see a `## Divergence signal` section.
 
+For session start, prefer `--compact` mode:
+`smriti state <project> --compact`
+This omits artifact content to save tokens — artifact labels and a
+recovery command are still shown. If the state brief lists artifacts
+relevant to your task, retrieve them with
+`smriti checkpoint show <id> --full-artifacts`
+
 Say out loud to the user: **"Reading current state from Smriti."**
 before you call state. This gives the human watching a visible audit
 trail.

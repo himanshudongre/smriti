@@ -265,7 +265,7 @@ Claude Code supports SessionStart hooks that run a command before the agent proc
         "hooks": [
           {
             "type": "command",
-            "command": "smriti state my-project --preview 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev'"
+            "command": "smriti state my-project --compact 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev'"
           }
         ]
       }
@@ -274,7 +274,7 @@ Claude Code supports SessionStart hooks that run a command before the agent proc
 }
 ```
 
-With this hook, the state brief is injected into Claude's context automatically at session start — the agent doesn't need to remember to call `smriti_state`. See `CLAUDE.md` for the compact project-level instructions that complement the hook.
+With this hook, the state brief is injected in compact mode — artifact content is omitted to save tokens, but artifact labels and a recovery command are included. The agent doesn't need to remember to call `smriti_state`. See `CLAUDE.md` for the project-level instructions that complement the hook.
 
 ### 4b. Codex equivalent (optional, local-only)
 
@@ -287,7 +287,7 @@ Example:
 
 ```toml
 developer_instructions = """
-When the current working directory is /path/to/your/project, begin by saying "Reading current state from Smriti." and run `smriti state my-project --preview` before reading files or taking substantive action. Then follow AGENTS.md exactly. Outside this repo, ignore this instruction.
+When the current working directory is /path/to/your/project, begin by saying "Reading current state from Smriti." and run `smriti state my-project --compact` before reading files or taking substantive action. Then follow AGENTS.md exactly. Outside this repo, ignore this instruction.
 """
 ```
 
