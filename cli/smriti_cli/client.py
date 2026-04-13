@@ -144,7 +144,7 @@ class SmritiClient:
     def get_head(self, space_id: str) -> dict:
         return self._request("GET", f"/api/v4/chat/spaces/{space_id}/head")
 
-    def get_space_state(self, space_id: str) -> dict:
+    def get_space_state(self, space_id: str, since: str = "") -> dict:
         """GET /api/v4/chat/spaces/{id}/state
 
         Returns the multi-branch composite state: space header, main HEAD
@@ -163,7 +163,13 @@ class SmritiClient:
             active_branches: list of ActiveBranchSummary
             divergence: DivergenceSummary or None
         """
-        return self._request("GET", f"/api/v4/chat/spaces/{space_id}/state")
+        params = {}
+        if since:
+            params["since_commit_id"] = since
+        return self._request(
+            "GET", f"/api/v4/chat/spaces/{space_id}/state",
+            params=params if params else None,
+        )
 
     # ── Work claims ──────────────────────────────────────────────────
 

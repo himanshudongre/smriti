@@ -147,6 +147,31 @@ def _format_compact_stats_footer(stats: dict | None, compact: bool = True) -> st
     )
 
 
+def _format_freshness_section(freshness: dict | None) -> str:
+    """Render the freshness check result. Empty string when no freshness
+    data (no --since provided). Compact and actionable."""
+    if not freshness:
+        return ""
+    since_hash = freshness.get("since_commit_hash", "?")
+    if not freshness.get("changed"):
+        return f"## State: unchanged since `{since_hash}`\n"
+
+    count = freshness.get("new_checkpoints_count", 0)
+    lines = [f"## State: changed since `{since_hash}`", ""]
+    lines.append(f"{count} new checkpoint(s) on main:")
+    for c in freshness.get("new_checkpoints", []):
+        h = c.get("commit_hash", "?")
+        author = c.get("author_agent") or "unknown"
+        msg = c.get("message", "")
+        created = _relative_time(c.get("created_at") or "")
+        lines.append(f"- `{h}` · `{author}` · {created} — {msg}")
+    if count > len(freshness.get("new_checkpoints", [])):
+        lines.append(f"  ... and {count - len(freshness['new_checkpoints'])} more")
+    lines.append("")
+    lines.append("Review the current state below before continuing.")
+    return "\n".join(lines) + "\n"
+
+
 def _format_active_branches_section(active_branches: list[dict]) -> str:
     """One line per non-main branch. Pointer, not a brief.
 
@@ -252,6 +277,11 @@ def format_state_brief(
     the multi-branch extensions are additive pointers, not a replacement.
     """
     parts: list[str] = []
+
+    # Freshness signal — rendered at the very top so the agent sees it first.
+    if space_state is not None:
+        parts.append(_format_freshness_section(space_state.get("freshness")))
+
     parts.append(f"# {space.get('name', 'Untitled space')}\n")
     if space.get("description"):
         parts.append(space["description"].rstrip() + "\n")

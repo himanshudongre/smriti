@@ -262,7 +262,7 @@ def test_mcp_smriti_state_default_calls_get_space_state(mock_client):
 
     out = mcp_server.smriti_state(space="my-project")
 
-    mock_client.get_space_state.assert_called_once_with("space-uuid")
+    mock_client.get_space_state.assert_called_once_with("space-uuid", since="")
     mock_client.get_head.assert_not_called()
     mock_client.get_commit.assert_not_called()
     assert "# my-project" in out

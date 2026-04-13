@@ -206,7 +206,8 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
         space_state: dict | None = None
     else:
         # New default path — one round trip, multi-branch aware.
-        state = client.get_space_state(space["id"])
+        since = getattr(args, "since", None) or ""
+        state = client.get_space_state(space["id"], since=since)
         head = state.get("head") or {}
         commit = state.get("commit") or {}
         if not head.get("commit_id"):
@@ -219,6 +220,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
             "active_branches": state.get("active_branches") or [],
             "active_claims": state.get("active_claims") or [],
             "divergence": state.get("divergence"),
+            "freshness": state.get("freshness"),
         }
 
     full_artifacts = not args.preview and not args.compact
@@ -891,6 +893,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show compact-mode savings (artifact chars saved, percent reduction). "
              "Only meaningful with --compact.",
+    )
+    state_parser.add_argument(
+        "--since",
+        help="Checkpoint ID to check freshness against. Shows whether HEAD "
+             "has moved since that checkpoint and lists new checkpoints.",
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)

@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -372,6 +372,24 @@ class ActiveClaimSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FreshnessCheckpoint(BaseModel):
+    """One entry in the freshness 'new checkpoints' list."""
+    commit_hash: str
+    author_agent: Optional[str] = None
+    message: str
+    created_at: datetime
+
+
+class FreshnessInfo(BaseModel):
+    """Pull-time freshness signal. Included in SpaceStateResponse only
+    when the caller provides since_commit_id."""
+    changed: bool
+    since_commit_hash: str
+    current_head_hash: str
+    new_checkpoints_count: int = 0
+    new_checkpoints: list[FreshnessCheckpoint] = Field(default_factory=list)
+
+
 class SpaceStateResponse(BaseModel):
     """Composite response for `GET /spaces/{id}/state`.
 
@@ -384,6 +402,7 @@ class SpaceStateResponse(BaseModel):
     active_branches: list[ActiveBranchSummary] = Field(default_factory=list)
     active_claims: list[ActiveClaimSummary] = Field(default_factory=list)
     divergence: Optional[DivergenceSummary] = None
+    freshness: Optional[FreshnessInfo] = None
 
 
 # Hard caps for the state response. These are constants on purpose —
@@ -892,8 +911,15 @@ def _compute_space_divergence(
     return DivergenceSummary(pairs=pairs) if pairs else None
 
 
+FRESHNESS_NEW_CHECKPOINTS_CAP = 5
+
+
 @router.get("/spaces/{repo_id}/state", response_model=SpaceStateResponse)
-def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_space_state(
+    repo_id: uuid.UUID,
+    since_commit_id: Optional[uuid.UUID] = Query(None, description="Checkpoint ID to check freshness against"),
+    db: Session = Depends(get_db),
+):
     """Return the richer, multi-branch continuation brief for a space.
 
     Contains:
@@ -904,6 +930,9 @@ def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
       - a divergence summary when any active branch disagrees with main
         on decisions — capped at DIVERGENCE_BRANCHES_CAP branches and
         DIVERGENCE_DECISIONS_CAP decisions per side per pair.
+      - freshness signal (when since_commit_id is provided): whether HEAD
+        has moved past the caller's known checkpoint, and if so, a compact
+        list of new checkpoints.
 
     The divergence section is the lightweight signal an agent or human
     needs to notice cross-branch drift without reading the full compare
@@ -994,6 +1023,52 @@ def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
             )
         )
 
+    # Freshness check: if since_commit_id is provided, determine whether
+    # HEAD has moved and list new checkpoints since the caller's base.
+    freshness = None
+    if since_commit_id and main_head_commit:
+        since_commit = db.get(CommitModel, since_commit_id)
+        since_hash = since_commit.commit_hash[:7] if since_commit else str(since_commit_id)[:7]
+        current_hash = main_head_commit.commit_hash[:7]
+
+        if since_commit_id == main_head_commit.id:
+            freshness = FreshnessInfo(
+                changed=False,
+                since_commit_hash=since_hash,
+                current_head_hash=current_hash,
+            )
+        else:
+            # Walk main checkpoints backward from HEAD to find those newer
+            # than since_commit_id. Stop at since_commit_id or chain end.
+            new_commits: list[FreshnessCheckpoint] = []
+            stmt = (
+                select(CommitModel)
+                .where(
+                    CommitModel.repo_id == repo_id,
+                    CommitModel.branch_name == "main",
+                )
+                .order_by(CommitModel.created_at.desc())
+            )
+            for c in db.scalars(stmt):
+                if c.id == since_commit_id:
+                    break
+                new_commits.append(FreshnessCheckpoint(
+                    commit_hash=c.commit_hash[:7],
+                    author_agent=c.author_agent,
+                    message=c.message or "",
+                    created_at=c.created_at,
+                ))
+                if len(new_commits) >= 50:  # safety cap
+                    break
+
+            freshness = FreshnessInfo(
+                changed=True,
+                since_commit_hash=since_hash,
+                current_head_hash=current_hash,
+                new_checkpoints_count=len(new_commits),
+                new_checkpoints=new_commits[:FRESHNESS_NEW_CHECKPOINTS_CAP],
+            )
+
     return SpaceStateResponse(
         space=SpaceBrief(
             id=repo.id,
@@ -1005,6 +1080,7 @@ def get_space_state(repo_id: uuid.UUID, db: Session = Depends(get_db)):
         active_branches=active_branches,
         active_claims=active_claims,
         divergence=divergence,
+        freshness=freshness,
     )
 
 

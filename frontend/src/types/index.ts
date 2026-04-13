@@ -223,6 +223,19 @@ export interface ActiveClaimSummary {
   base_commit_hash: string | null;
 }
 
+export interface FreshnessInfo {
+  changed: boolean;
+  since_commit_hash: string;
+  current_head_hash: string;
+  new_checkpoints_count: number;
+  new_checkpoints: {
+    commit_hash: string;
+    author_agent: string | null;
+    message: string;
+    created_at: string;
+  }[];
+}
+
 export interface SpaceStateResponse {
   space: { id: string; name: string; description: string | null };
   head: any;
@@ -230,6 +243,7 @@ export interface SpaceStateResponse {
   active_branches: any[];
   active_claims: ActiveClaimSummary[];
   divergence: any;
+  freshness: FreshnessInfo | null;
 }
 
 export interface LineageResponse {

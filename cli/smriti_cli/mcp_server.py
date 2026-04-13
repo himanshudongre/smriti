@@ -116,6 +116,7 @@ def smriti_state(
     preview: bool = False,
     compact: bool = False,
     main_only: bool = False,
+    since: str = "",
 ) -> str:
     """Print a continuation-oriented brief of a space's current state.
 
@@ -143,6 +144,9 @@ def smriti_state(
         main_only: If True, fetch only the main-branch HEAD via the
             legacy /head endpoint and skip the Active branches and
             Divergence signal sections entirely. Default False.
+        since: Checkpoint ID to check freshness against. If provided,
+            the state brief gains a freshness section at the top showing
+            whether HEAD has moved since that checkpoint. Default empty.
     """
     client = _client()
     try:
@@ -154,7 +158,7 @@ def smriti_state(
             commit = client.get_commit(head["commit_id"])
             space_state: dict | None = None
         else:
-            state = client.get_space_state(s["id"])
+            state = client.get_space_state(s["id"], since=since)
             head = state.get("head") or {}
             commit = state.get("commit") or {}
             if not head.get("commit_id"):
@@ -163,6 +167,7 @@ def smriti_state(
                 "active_branches": state.get("active_branches") or [],
                 "active_claims": state.get("active_claims") or [],
                 "divergence": state.get("divergence"),
+                "freshness": state.get("freshness"),
             }
     except SmritiError as e:
         _raise_from(e)
