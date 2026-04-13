@@ -184,6 +184,12 @@ cp .env.example .env
 # Leave keys commented out to use mock mode (no real LLM calls).
 # .env is the primary config path. config/providers.yaml is optional
 # and gitignored — you do not need it for a standard setup.
+#
+# Using Ollama or another local model? Set these instead:
+#   SMRITI_GENERIC_API_URL=http://localhost:11434/v1
+#   SMRITI_GENERIC_MODEL=llama3.1:8b
+# Then set background_intelligence.provider to "generic" in
+# config/providers.yaml. See .env.example for details.
 
 docker compose up -d postgres    # start the database
 make setup                       # backend venv + deps + migrations + CLI + frontend

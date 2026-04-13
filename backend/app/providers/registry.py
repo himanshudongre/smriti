@@ -108,6 +108,22 @@ def get_adapter(provider: str, allow_mock: bool = False) -> ProviderAdapter:
         except ImportError as e:
             raise ProviderNotConfiguredError(str(e))
 
+    if p == "generic":
+        # Generic OpenAI-compatible provider (Ollama, LM Studio, vLLM, etc.).
+        # Reuses OpenAIAdapter with the user-configured base_url. The api_key
+        # may be "not-required" for local servers — OpenAI SDK accepts any
+        # non-empty string.
+        if not cfg.base_url:
+            raise ProviderNotConfiguredError(
+                "Generic provider requires SMRITI_GENERIC_API_URL or "
+                "providers.yaml generic.base_url to be set."
+            )
+        try:
+            from app.providers.openai_adapter import OpenAIAdapter
+            return OpenAIAdapter(api_key=cfg.api_key, base_url=cfg.base_url)
+        except ImportError as e:
+            raise ProviderNotConfiguredError(str(e))
+
     raise ProviderNotConfiguredError(f"Unknown provider: {provider}")
 
 

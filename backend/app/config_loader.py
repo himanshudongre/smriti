@@ -65,6 +65,7 @@ class AppProviderConfig:
     openai: ProviderConfig = field(default_factory=ProviderConfig)
     anthropic: ProviderConfig = field(default_factory=ProviderConfig)
     openrouter: ProviderConfig = field(default_factory=ProviderConfig)
+    generic: ProviderConfig = field(default_factory=ProviderConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
     background: BackgroundConfig = field(default_factory=BackgroundConfig)
 
@@ -166,6 +167,29 @@ def load_config() -> AppProviderConfig:
         base_url_default="https://openrouter.ai/api/v1",
     )
 
+    # Generic OpenAI-compatible provider (Ollama, LM Studio, vLLM, Together,
+    # Groq, etc.). Enabled when base_url is set — api_key is optional because
+    # local servers like Ollama don't require one.
+    g = providers_raw.get("generic", {})
+    generic_base_url = (
+        os.environ.get("SMRITI_GENERIC_API_URL")
+        or g.get("base_url", "")
+    )
+    generic_api_key = (
+        os.environ.get("SMRITI_GENERIC_API_KEY")
+        or g.get("api_key", "")
+    )
+    generic_model = (
+        os.environ.get("SMRITI_GENERIC_MODEL")
+        or g.get("default_model", "")
+    )
+    generic = ProviderConfig(
+        enabled=bool(generic_base_url),
+        api_key=generic_api_key or "not-required",
+        default_model=generic_model,
+        base_url=generic_base_url,
+    )
+
     chat = ChatConfig(
         default_provider=os.environ.get("SMRITI_DEFAULT_PROVIDER")
             or chat_raw.get("default_provider", "openrouter"),
@@ -183,6 +207,7 @@ def load_config() -> AppProviderConfig:
         openai=openai,
         anthropic=anthropic,
         openrouter=openrouter,
+        generic=generic,
         chat=chat,
         background=background,
     )
@@ -248,7 +273,7 @@ def providers_status() -> dict[str, dict]:
             "status_label": "Ready" if getattr(cfg, name).enabled else "Disabled",
             "default_model": getattr(cfg, name).default_model,
         }
-        for name in ("openai", "anthropic", "openrouter")
+        for name in ("openai", "anthropic", "openrouter", "generic")
     }
     # Background intelligence uses one of the above providers. Report
     # its ACTUAL key/enabled/configured state instead of hardcoding True,
