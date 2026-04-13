@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCommit, getCommitDelta, getContextFromCommit } from '../api/client';
-import type { Commit, CommitDelta, TargetTool } from '../types';
+import type { Commit, CommitDelta, TargetTool, StructuredTask } from '../types';
+import { normalizeTask } from '../types';
 import {
   GitCommit,
   ArrowLeft,
@@ -210,8 +211,30 @@ export function CommitDetailPage() {
 
               {commit.tasks.length > 0 && (
                 <FieldBlock label="Tasks">
-                  <ul className="list-disc pl-4 space-y-1 text-gray-400 text-sm">
-                    {commit.tasks.map((t, i) => <li key={i}>{t}</li>)}
+                  <ul className="list-disc pl-4 space-y-1.5 text-gray-400 text-sm">
+                    {commit.tasks.map((raw, i) => {
+                      const t: StructuredTask = normalizeTask(raw);
+                      return (
+                        <li key={i} className={t.status === 'done' ? 'line-through text-gray-600' : ''}>
+                          {t.text}
+                          {t.intent_hint && (
+                            <span className="ml-1.5 text-[10px] text-blue-400 border border-blue-500/30 px-1.5 py-px rounded">
+                              {t.intent_hint}
+                            </span>
+                          )}
+                          {t.status === 'done' && (
+                            <span className="ml-1.5 text-[10px] text-green-500 border border-green-500/30 px-1.5 py-px rounded">
+                              done
+                            </span>
+                          )}
+                          {t.blocked_by && (
+                            <span className="ml-1.5 text-[10px] text-amber-400">
+                              → blocked by: {t.blocked_by}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </FieldBlock>
               )}

@@ -24,7 +24,9 @@ import type {
   SessionNode,
   LineageResponse,
   CompareResponse,
+  StructuredTask,
 } from '../types';
+import { normalizeTask } from '../types';
 import { GitBranch, GitCommit, Loader2, X, ArrowLeft, Zap } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -805,11 +807,19 @@ export function LineagePage() {
                       ⚠ Divergence detected
                     </span>
                   )}
-                  {(spaceState.commit?.tasks?.length ?? 0) > 0 && (
-                    <span className="text-gray-500">
-                      <span className="text-green-400 font-medium">{spaceState.commit.tasks.length}</span> open task{spaceState.commit.tasks.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  {(spaceState.commit?.tasks?.length ?? 0) > 0 && (() => {
+                    const tasks = (spaceState.commit.tasks ?? []).map(normalizeTask);
+                    const openCount = tasks.filter((t: StructuredTask) => !t.status || t.status === 'open').length;
+                    const doneCount = tasks.filter((t: StructuredTask) => t.status === 'done').length;
+                    return (
+                      <span className="text-gray-500">
+                        <span className="text-green-400 font-medium">{openCount}</span> open task{openCount !== 1 ? 's' : ''}
+                        {doneCount > 0 && (
+                          <>, <span className="text-gray-600">{doneCount} done</span></>
+                        )}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Needs attention signal */}

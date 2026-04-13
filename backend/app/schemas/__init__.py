@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -111,7 +111,7 @@ class CheckpointDraftResponse(BaseModel):
     summary: str = ""
     decisions: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
-    tasks: list[str] = Field(default_factory=list)
+    tasks: list[Union[str, dict[str, Any]]] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
 
@@ -154,7 +154,7 @@ class CheckpointExtractResponse(BaseModel):
     summary: str = ""
     decisions: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
-    tasks: list[str] = Field(default_factory=list)
+    tasks: list[Union[str, dict[str, Any]]] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
     artifacts: list[dict] = Field(default_factory=list)

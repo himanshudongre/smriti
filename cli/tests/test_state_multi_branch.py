@@ -23,6 +23,8 @@ from smriti_cli import mcp_server
 from smriti_cli.formatters import (
     _format_active_branches_section,
     _format_divergence_signal_section,
+    _task_section,
+    _normalize_task_item,
     format_state_brief,
 )
 
@@ -456,3 +458,124 @@ def test_stats_with_no_artifacts_shows_explicit_message():
 
     assert "compact stats:" in out
     assert "0 artifacts" in out
+
+
+# ── Structured task rendering tests ────────────────────────────────────────
+
+
+def test_normalize_task_item_string():
+    """Plain string task normalizes to dict with text key."""
+    result = _normalize_task_item("Write tests")
+    assert result == {"text": "Write tests"}
+
+
+def test_normalize_task_item_dict():
+    """Structured task dict passes through unchanged."""
+    task = {"text": "Add endpoint", "intent_hint": "implement", "blocked_by": "schema"}
+    result = _normalize_task_item(task)
+    assert result == task
+
+
+def test_task_section_empty():
+    """Empty task list produces empty string."""
+    assert _task_section([]) == ""
+
+
+def test_task_section_legacy_string_tasks():
+    """Old-style string tasks render as plain bullets."""
+    out = _task_section(["Task A", "Task B"])
+    assert "## In progress" in out
+    assert "- Task A" in out
+    assert "- Task B" in out
+    # No intent or status annotations
+    assert "[" not in out
+    assert "→" not in out
+
+
+def test_task_section_structured_with_intent():
+    """Structured task with intent_hint renders inline tag."""
+    tasks = [
+        {"text": "Add freshness tests", "intent_hint": "test"},
+    ]
+    out = _task_section(tasks)
+    assert "- Add freshness tests [test]" in out
+
+
+def test_task_section_structured_with_blocked_by():
+    """Structured task with blocked_by renders inline marker."""
+    tasks = [
+        {"text": "Write test suite", "blocked_by": "freshness-impl"},
+    ]
+    out = _task_section(tasks)
+    assert "→ blocked by: freshness-impl" in out
+
+
+def test_task_section_structured_with_done_status():
+    """Task with status=done renders inline marker."""
+    tasks = [
+        {"text": "Implement endpoint", "status": "done"},
+    ]
+    out = _task_section(tasks)
+    assert "(done)" in out
+
+
+def test_task_section_open_status_not_rendered():
+    """Task with status=open should NOT show (open) — it's the default."""
+    tasks = [
+        {"text": "Implement endpoint", "status": "open"},
+    ]
+    out = _task_section(tasks)
+    assert "(open)" not in out
+    assert "Implement endpoint" in out
+
+
+def test_task_section_full_structured_task():
+    """Task with all annotations renders them in order."""
+    tasks = [
+        {
+            "text": "Write integration tests",
+            "intent_hint": "test",
+            "status": "open",
+            "blocked_by": "freshness-impl",
+        },
+    ]
+    out = _task_section(tasks)
+    assert "- Write integration tests [test] → blocked by: freshness-impl" in out
+    assert "(open)" not in out  # open is default, not rendered
+
+
+def test_task_section_mixed_string_and_structured():
+    """Mix of legacy string and structured tasks renders correctly."""
+    tasks = [
+        "Legacy task string",
+        {"text": "New structured task", "intent_hint": "implement"},
+        {"text": "Done task", "status": "done"},
+    ]
+    out = _task_section(tasks)
+    assert "- Legacy task string" in out
+    assert "- New structured task [implement]" in out
+    assert "- Done task (done)" in out
+
+
+def test_task_section_custom_heading():
+    """Custom heading parameter is respected."""
+    tasks = [{"text": "Some task"}]
+    out = _task_section(tasks, heading="Tasks")
+    assert "## Tasks" in out
+    assert "## In progress" not in out
+
+
+def test_state_brief_with_structured_tasks():
+    """State brief renders structured tasks from commit data."""
+    commit = _base_commit()
+    commit["tasks"] = [
+        {"text": "Add freshness endpoint", "intent_hint": "implement"},
+        {"text": "Write freshness tests", "intent_hint": "test", "blocked_by": "freshness-endpoint"},
+        "Legacy string task",
+    ]
+    out = format_state_brief(_base_space(), _base_head(), commit)
+
+    assert "## In progress" in out
+    assert "Add freshness endpoint [implement]" in out
+    assert "Write freshness tests [test] → blocked by: freshness-endpoint" in out
+    assert "- Legacy string task" in out

@@ -111,7 +111,7 @@ export interface Commit {
   objective: string;
   decisions: string[];
   assumptions: string[];
-  tasks: string[];
+  tasks: (string | StructuredTask)[];
   open_questions: string[];
   entities: string[];
   artifacts: Artifact[];
@@ -180,6 +180,23 @@ export interface ProviderStatus {
 }
 
 export type ProviderName = 'openai' | 'anthropic' | 'openrouter';
+
+// ── Structured Task Types ────────────────────────────────────────────────────
+
+/** A task item from a checkpoint — either a plain string (legacy) or
+ *  a structured object with optional intent, blocked_by, and status. */
+export interface StructuredTask {
+  text: string;
+  intent_hint?: string | null;
+  blocked_by?: string | null;
+  status?: string;  // "open" | "done"
+}
+
+/** Normalize a raw task (string or object) into a StructuredTask. */
+export function normalizeTask(raw: string | StructuredTask): StructuredTask {
+  if (typeof raw === 'string') return { text: raw };
+  return raw;
+}
 
 // ── V5 Lineage Types ──────────────────────────────────────────────────────────
 
@@ -263,7 +280,7 @@ export interface CheckpointDetail {
   objective: string;
   decisions: string[];
   assumptions: string[];
-  tasks: string[];
+  tasks: (string | StructuredTask)[];
   open_questions: string[];
   artifacts: Artifact[];
 }

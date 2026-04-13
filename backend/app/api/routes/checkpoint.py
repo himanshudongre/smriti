@@ -25,6 +25,42 @@ from app.config_loader import get_config
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_VALID_TASK_INTENTS = {"implement", "review", "investigate", "docs", "test"}
+
+
+def _normalize_tasks(raw_tasks: list) -> list:
+    """Normalize tasks to structured objects.
+
+    Accepts both plain strings and structured objects from the LLM.
+    Strings become {"text": string}. Objects are validated: intent_hint
+    must be one of the 5 valid intents, blocked_by must be a non-empty
+    string. Invalid or empty items are dropped. Deduplicates by text.
+    """
+    seen: set[str] = set()
+    result: list[dict] = []
+    for item in raw_tasks:
+        if not item:
+            continue
+        if isinstance(item, str):
+            text = item.strip()
+            if text and text not in seen:
+                seen.add(text)
+                result.append({"text": text})
+        elif isinstance(item, dict):
+            text = str(item.get("text", "")).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            task: dict = {"text": text}
+            hint = item.get("intent_hint")
+            if isinstance(hint, str) and hint.strip().lower() in _VALID_TASK_INTENTS:
+                task["intent_hint"] = hint.strip().lower()
+            blocked = item.get("blocked_by")
+            if isinstance(blocked, str) and blocked.strip():
+                task["blocked_by"] = blocked.strip()
+            result.append(task)
+    return result
+
 
 def _fetch_turns_for_draft(
     session_id: uuid.UUID,
@@ -115,7 +151,13 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
   "summary": "Concise narrative of what was discussed and figured out (2-4 sentences)",
   "decisions": ["An explicit decision made in the conversation", "Another explicit decision"],
   "assumptions": ["Something taken for granted but not explicitly decided"],
-  "tasks": ["A concrete action item from the conversation", "Another action item"],
+  "tasks": [
+    {{
+      "text": "A concrete action item from the conversation",
+      "intent_hint": "implement|review|investigate|docs|test or null",
+      "blocked_by": "short label of a dependency, or null"
+    }}
+  ],
   "open_questions": ["An unresolved question from the conversation"],
   "entities": ["Key concept, tool, place, or system mentioned"]
 }}
@@ -123,7 +165,9 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
 Rules:
 - decisions: only include choices explicitly made in the conversation, not hypothetical ones
 - assumptions: things the conversation takes for granted that were NOT explicitly debated or decided (e.g., implicit constraints, assumed technology choices, timeline expectations treated as given)
-- tasks: only include things the user said they will do or need to do
+- tasks: action items as objects with "text" (required), "intent_hint" (one of
+  "implement", "review", "investigate", "docs", "test", or null), and "blocked_by"
+  (short label of a dependency, or null). A plain string is also accepted.
 - entities: proper nouns and key technical/domain terms only
 - All arrays may be empty if nothing relevant was discussed
 - Output ONLY valid JSON. No markdown, no explanation.
@@ -155,7 +199,7 @@ Rules:
             summary=str(data.get("summary", "")).strip(),
             decisions=_dedup(data.get("decisions", [])),
             assumptions=_dedup(data.get("assumptions", [])),
-            tasks=_dedup(data.get("tasks", [])),
+            tasks=_normalize_tasks(data.get("tasks", [])),
             open_questions=_dedup(data.get("open_questions", [])),
             entities=_dedup(data.get("entities", [])),
         )
@@ -314,7 +358,13 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
   "summary": "Concise narrative of what the document covers (2-5 sentences)",
   "decisions": ["An explicit choice made in the document"],
   "assumptions": ["Something taken for granted but not explicitly debated"],
-  "tasks": ["A concrete action item or next step"],
+  "tasks": [
+    {{
+      "text": "A concrete action item or next step",
+      "intent_hint": "implement|review|investigate|docs|test or null",
+      "blocked_by": "short label of another task this depends on, or null"
+    }}
+  ],
   "open_questions": ["An unresolved question"],
   "entities": ["Key concept, tool, technology, or place mentioned"],
   "artifacts": [
@@ -330,7 +380,13 @@ Return a STRICT JSON object with exactly this schema — no extra keys, no markd
 Rules:
 - decisions: only explicit choices from the document, not hypothetical ones
 - assumptions: things the document takes for granted that were NOT explicitly debated
-- tasks: concrete next steps, implementation items, or action items
+- tasks: concrete next steps as objects. Each task has:
+  - "text": the action item (required)
+  - "intent_hint": classify as "implement", "review", "investigate", "docs", or "test".
+    Use null if the intent is unclear. This helps agents pick complementary work.
+  - "blocked_by": if this task depends on another task being done first, set to that
+    task's short label (e.g. "freshness-impl"). Use null if unblocked.
+  - A plain string is also accepted and treated as {{text: string, intent_hint: null, blocked_by: null}}
 - entities: proper nouns and technical terms only
 - artifacts: fenced code blocks, JSON blocks, or other structured content that should
   be preserved verbatim. The "type" field should match the code fence language when
@@ -374,7 +430,7 @@ Rules:
             summary=str(data.get("summary", "")).strip(),
             decisions=_dedup(data.get("decisions", [])),
             assumptions=_dedup(data.get("assumptions", [])),
-            tasks=_dedup(data.get("tasks", [])),
+            tasks=_normalize_tasks(data.get("tasks", [])),
             open_questions=_dedup(data.get("open_questions", [])),
             entities=_dedup(data.get("entities", [])),
             artifacts=[a for a in data.get("artifacts", []) if isinstance(a, dict)],

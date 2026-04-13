@@ -41,7 +41,12 @@ def test_extract_happy_path_with_mock(client):
     assert data["summary"].startswith("Mock summary")
     assert "Mock decision from provider" in data["decisions"]
     assert "Mock assumption from provider" in data["assumptions"]
-    assert "Mock task from provider" in data["tasks"]
+    # Tasks are now structured objects; a plain string from the mock
+    # becomes {"text": "Mock task from provider"}.
+    assert any(
+        (t.get("text") if isinstance(t, dict) else t) == "Mock task from provider"
+        for t in data["tasks"]
+    )
     assert "Mock open question from provider" in data["open_questions"]
     assert "MockEntity" in data["entities"]
     assert len(data["artifacts"]) == 1

@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.6
+smriti_skill_pack_version: 1.7
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -328,6 +328,57 @@ checkpoints create decision conflicts that the next agent has to
 untangle.
 
 Say out loud: **"Checking freshness before checkpointing."**
+
+### 3.8 Autonomous work selection from the task list
+
+Tasks in the state brief may carry structured annotations that help
+you pick complementary work without waiting for the human to route you.
+
+Each task can have:
+- **`[intent]`** — one of `implement`, `review`, `investigate`, `docs`,
+  `test`. This tells you the kind of work the task requires.
+- **`→ blocked by: <label>`** — this task depends on another task being
+  done first.
+- **`(done)`** — this task is already completed.
+
+**How to self-select work:**
+
+1. Read the `## In progress` section. Note which tasks have intents
+   and which are blocked.
+2. Read the `## Active work` section. Note the `intent_type` of each
+   active claim.
+3. **Pick a task whose intent is complementary to existing claims.**
+   If someone is `implement`ing, look for `test`, `docs`, or `review`
+   tasks. If someone is `test`ing, look for `docs` or `implement`
+   tasks.
+4. **Skip blocked tasks.** If a task says `→ blocked by: X`, check
+   whether task X is done. If X is still open or claimed, skip the
+   blocked task — pick something unblocked instead.
+5. **Skip done tasks.** Tasks marked `(done)` need no work.
+6. **If no complementary unblocked task exists:** tell the human.
+   Do not pick the same intent as an active claim unless the scopes
+   are clearly disjoint.
+
+**When tasks have no intent annotations:** fall back to the scope-
+comparison logic from Section 3.6. Compare each task's text against
+active claim scopes and pick work that does not overlap. This is the
+same behavior as before — intent hints just make it faster and more
+reliable.
+
+**When writing checkpoints with tasks:** include intent hints on
+tasks you create. When you checkpoint your work, the tasks in your
+freeform markdown should indicate what kind of work each one requires.
+Write naturally — the extractor will classify them:
+
+```
+## Tasks
+- Implement the freshness endpoint (implement)
+- Write integration tests for freshness (test, blocked by freshness endpoint)
+- Update cli/README freshness walkthrough (docs, blocked by freshness endpoint)
+```
+
+Say out loud: **"Selecting complementary work from the task list."**
+when you self-select a task based on intent hints.
 
 ---
 
@@ -715,6 +766,7 @@ Use them literally.
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
 | declare a work claim | "Claiming: [intent_type] — <scope>." |
 | add a note to a checkpoint | "Adding a [kind] note to checkpoint X." |
+| self-select complementary work | "Selecting complementary work from the task list." |
 | check freshness before checkpoint | "Checking freshness before checkpointing." |
 | finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
@@ -773,7 +825,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.6 — this file is
+*Smriti skill pack version {{primary_mode}}-1.7 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

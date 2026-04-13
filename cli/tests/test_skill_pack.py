@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.6"
+    assert version == "1.7"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -161,6 +161,11 @@ _REQUIRED_PHRASES = [
     "milestone",
     "noise",
     "annotating without checkpointing",
+    # Section 3.8 — autonomous work selection
+    "autonomous work selection",
+    "complementary",
+    "blocked by",
+    "skip done tasks",
     # Section 14 — two-sentence summary
     "session start",
 ]

@@ -62,6 +62,51 @@ def _list_section(heading: str, items: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _normalize_task_item(item) -> dict:
+    """Normalize a task to a dict with at least a 'text' key.
+
+    Handles both legacy string tasks and structured task objects.
+    """
+    if isinstance(item, str):
+        return {"text": item}
+    if isinstance(item, dict) and item.get("text"):
+        return item
+    # Fallback: coerce to string
+    return {"text": str(item)}
+
+
+def _task_section(tasks: list, heading: str = "In progress") -> str:
+    """Render tasks with optional intent hints, status, and blocked_by.
+
+    Backward-compatible: plain string tasks render as simple bullets.
+    Structured tasks render with inline annotations:
+      - Add freshness tests [test] → blocked by: freshness-impl
+      - Update cli README [docs] (done)
+    """
+    if not tasks:
+        return ""
+    lines = [f"## {heading}"]
+    for raw in tasks:
+        t = _normalize_task_item(raw)
+        text = t["text"]
+        parts = [text]
+
+        hint = t.get("intent_hint")
+        if hint:
+            parts.append(f"[{hint}]")
+
+        status = t.get("status")
+        if status and status != "open":
+            parts.append(f"({status})")
+
+        blocked = t.get("blocked_by")
+        if blocked:
+            parts.append(f"→ blocked by: {blocked}")
+
+        lines.append(f"- {' '.join(parts)}")
+    return "\n".join(lines) + "\n"
+
+
 def _artifact_section(
     artifacts: list[dict],
     preview_chars: int = 800,
@@ -315,7 +360,7 @@ def format_state_brief(
     parts.append(_list_section("Decisions", decisions))
     parts.append(_list_section("Assumptions we are relying on", assumptions))
     parts.append(_list_section("Open questions", open_questions))
-    parts.append(_list_section("In progress", tasks))
+    parts.append(_task_section(tasks))
     checkpoint_id = commit.get("id") or head.get("commit_id") or ""
     parts.append(_artifact_section(
         artifacts,
@@ -384,7 +429,7 @@ def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:
 
     parts.append(_list_section("Decisions", commit.get("decisions") or []))
     parts.append(_list_section("Assumptions", commit.get("assumptions") or []))
-    parts.append(_list_section("Tasks", commit.get("tasks") or []))
+    parts.append(_task_section(commit.get("tasks") or [], heading="Tasks"))
     parts.append(_list_section("Open questions", commit.get("open_questions") or []))
     parts.append(_artifact_section(commit.get("artifacts") or [], full=full_artifacts))
 
