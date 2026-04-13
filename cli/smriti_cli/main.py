@@ -881,9 +881,9 @@ def _build_parser() -> argparse.ArgumentParser:
     br_close.add_argument("space", help="Space name or UUID")
     br_close.add_argument("branch_name", help="Branch name to update")
     br_close.add_argument(
-        "--disposition", required=True,
+        "--disposition", default="integrated",
         choices=["integrated", "abandoned", "active"],
-        help="New disposition for the branch",
+        help="New disposition for the branch (default: integrated)",
     )
     br_close.add_argument("--json", action="store_true")
     br_close.set_defaults(func=cmd_branch_close)
