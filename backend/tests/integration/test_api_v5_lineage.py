@@ -65,6 +65,16 @@ def _fork(client, space_id, checkpoint_id, branch_name="", provider="", model=""
     return r
 
 
+def _add_note(client, checkpoint_id, text, author="founder", kind="note"):
+    r = client.post(f"/api/v5/checkpoint/{checkpoint_id}/notes", json={
+        "text": text,
+        "author": author,
+        "kind": kind,
+    })
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 # ── Fork tests ────────────────────────────────────────────────────────────────
 
 def test_fork_creates_new_session(client):
@@ -355,6 +365,29 @@ def test_lineage_checkpoint_includes_author_agent(client):
         f"Expected a fallback author_agent from session.active_provider, "
         f"got: {fallback_agent!r}"
     )
+
+
+def test_lineage_checkpoint_includes_note_summary(client):
+    """note_count and note_kinds round-trip through the lineage endpoint."""
+    repo_id = _create_repo(client, "Lineage Note Summary")
+    session_id = _create_session(client, repo_id)
+
+    mixed = _commit(client, repo_id, session_id, message="Checkpoint with mixed notes")
+    plain = _commit(client, repo_id, session_id, message="Checkpoint without notes")
+
+    _add_note(client, mixed["id"], "Milestone note", kind="milestone")
+    _add_note(client, mixed["id"], "Noise note", kind="noise")
+    _add_note(client, mixed["id"], "Plain note", kind="note")
+
+    r = client.get(f"/api/v5/lineage/spaces/{repo_id}")
+    assert r.status_code == 200, r.text
+    checkpoints = r.json()["checkpoints"]
+    by_id = {c["id"]: c for c in checkpoints}
+
+    assert by_id[mixed["id"]]["note_count"] == 3
+    assert by_id[mixed["id"]]["note_kinds"] == ["milestone", "noise", "note"]
+    assert by_id[plain["id"]]["note_count"] == 0
+    assert by_id[plain["id"]]["note_kinds"] == []
 
 
 # ── Compare tests ─────────────────────────────────────────────────────────────

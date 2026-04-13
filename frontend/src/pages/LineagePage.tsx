@@ -38,6 +38,42 @@ function fmt(d: string) {
   });
 }
 
+function getCheckpointNoteBadge(checkpoint: CheckpointNode) {
+  const kinds = checkpoint.note_kinds ?? [];
+  const plural = checkpoint.note_count !== 1 ? 's' : '';
+  const kindSummary = kinds.length > 0 ? kinds.join(' + ') : 'note';
+
+  if (kinds.length > 1) {
+    return {
+      label: 'mix',
+      title: `${checkpoint.note_count} note${plural} · ${kindSummary}`,
+      className: 'text-sky-300 bg-sky-950/30 border border-sky-500/30',
+    };
+  }
+
+  if (kinds.includes('milestone')) {
+    return {
+      label: '★',
+      title: `${checkpoint.note_count} note${plural} · milestone`,
+      className: 'text-amber-400 bg-amber-900/20 border border-amber-500/30',
+    };
+  }
+
+  if (kinds.includes('noise')) {
+    return {
+      label: '◌',
+      title: `${checkpoint.note_count} note${plural} · noise`,
+      className: 'text-gray-500 bg-gray-800/30 border border-gray-700',
+    };
+  }
+
+  return {
+    label: '●',
+    title: `${checkpoint.note_count} note${plural} · note`,
+    className: 'text-gray-400 bg-gray-800/30 border border-gray-700',
+  };
+}
+
 // ── Compare Panel ─────────────────────────────────────────────────────────────
 
 function ComparePanel({
@@ -296,6 +332,7 @@ function CheckpointCard({
   onFork: (c: CheckpointNode) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const noteBadge = checkpoint.note_count > 0 ? getCheckpointNoteBadge(checkpoint) : null;
 
   return (
     <div
@@ -320,19 +357,12 @@ function CheckpointCard({
               </span>
             )}
             <span className="text-[10px] text-gray-600">{fmt(checkpoint.created_at)}</span>
-            {checkpoint.note_count > 0 && (
+            {noteBadge && (
               <span
-                className={`text-[9px] font-medium px-1 py-px rounded ${
-                  checkpoint.note_kinds.includes('milestone')
-                    ? 'text-amber-400 bg-amber-900/20 border border-amber-500/30'
-                    : checkpoint.note_kinds.includes('noise')
-                      ? 'text-gray-500 bg-gray-800/30 border border-gray-700'
-                      : 'text-gray-400 bg-gray-800/30 border border-gray-700'
-                }`}
-                title={`${checkpoint.note_count} note${checkpoint.note_count !== 1 ? 's' : ''}`}
+                className={`text-[9px] font-medium px-1 py-px rounded ${noteBadge.className}`}
+                title={noteBadge.title}
               >
-                {checkpoint.note_kinds.includes('milestone') ? '★' :
-                 checkpoint.note_kinds.includes('noise') ? '◌' : '●'}
+                {noteBadge.label}
               </span>
             )}
           </div>
