@@ -471,6 +471,39 @@ def smriti_delete_space(space: str) -> str:
 
 
 @mcp.tool()
+def smriti_checkpoint_note(
+    checkpoint_id: str,
+    text: str,
+    author: str = "founder",
+    kind: str = "note",
+) -> str:
+    """Add a note to a checkpoint without modifying its immutable fields.
+
+    Notes are additive context — founder commentary, milestone markers,
+    or noise labels — stored alongside the checkpoint. The checkpoint's
+    decisions, summary, artifacts, and all other fields remain untouched.
+
+    Args:
+        checkpoint_id: Checkpoint UUID to annotate.
+        text: Note text (max 2000 chars).
+        author: Author name (default: founder).
+        kind: One of: note (default), milestone, noise.
+    """
+    client = _client()
+    try:
+        result = client.add_checkpoint_note(
+            checkpoint_id=checkpoint_id,
+            text=text,
+            author=author,
+            kind=kind,
+        )
+    except SmritiError as e:
+        _raise_from(e)
+    kind_label = f" [{result['kind']}]" if result['kind'] != 'note' else ""
+    return f"Note added to checkpoint `{result['checkpoint_id'][:8]}…`{kind_label}"
+
+
+@mcp.tool()
 def smriti_close_branch(
     space: str,
     branch: str,

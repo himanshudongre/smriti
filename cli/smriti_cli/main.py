@@ -417,6 +417,21 @@ def cmd_checkpoint_delete(client: SmritiClient, args: argparse.Namespace) -> Non
         print(f"Deleted checkpoint `{commit['commit_hash'][:7]}`{note}.")
 
 
+def cmd_checkpoint_note(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Add a note to a checkpoint."""
+    result = client.add_checkpoint_note(
+        checkpoint_id=args.checkpoint_id,
+        text=args.text,
+        author=args.author,
+        kind=args.kind,
+    )
+    if args.json:
+        _print_json(result)
+    else:
+        kind_label = f" [{result['kind']}]" if result['kind'] != 'note' else ""
+        print(f"Note added to checkpoint `{result['checkpoint_id'][:8]}…`{kind_label}")
+
+
 def cmd_fork(client: SmritiClient, args: argparse.Namespace) -> None:
     # Fetch the checkpoint first to derive space_id. This also gives us the
     # source message for the output line so the user sees what they forked.
@@ -994,6 +1009,21 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     cp_delete.add_argument("--json", action="store_true", help="Output structured JSON")
     cp_delete.set_defaults(func=cmd_checkpoint_delete)
+
+    cp_note = cp_sub.add_parser(
+        "note",
+        help="Add a note to a checkpoint (additive, does not modify checkpoint fields)",
+    )
+    cp_note.add_argument("checkpoint_id", help="Checkpoint UUID to annotate")
+    cp_note.add_argument("--text", required=True, help="Note text (max 2000 chars)")
+    cp_note.add_argument("--author", default="founder", help="Author name (default: founder)")
+    cp_note.add_argument(
+        "--kind", default="note",
+        choices=["note", "milestone", "noise"],
+        help="Note kind (default: note)",
+    )
+    cp_note.add_argument("--json", action="store_true")
+    cp_note.set_defaults(func=cmd_checkpoint_note)
 
     # fork (top-level: crosses checkpoint → session)
     fork_parser = subparsers.add_parser(

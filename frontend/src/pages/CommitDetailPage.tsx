@@ -235,6 +235,35 @@ export function CommitDetailPage() {
               {!commit.objective && !commit.summary && commit.tasks.length === 0 && (
                 <p className="text-gray-600 text-sm italic">No structured state recorded in this commit.</p>
               )}
+
+              {/* Notes — additive founder annotations */}
+              {commit.metadata?.notes && commit.metadata.notes.length > 0 && (
+                <FieldBlock label="Notes">
+                  <div className="space-y-2">
+                    {commit.metadata.notes.map((n: any, i: number) => (
+                      <div key={n.id || i} className="text-sm">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {n.kind && n.kind !== 'note' && (
+                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full border ${
+                              n.kind === 'milestone'
+                                ? 'text-amber-400 border-amber-500/30 bg-amber-900/20'
+                                : n.kind === 'noise'
+                                  ? 'text-gray-500 border-gray-600 bg-gray-800/30'
+                                  : ''
+                            }`}>
+                              {n.kind}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-600">
+                            {n.author} · {new Date(n.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-gray-300">{n.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </FieldBlock>
+              )}
             </div>
 
             {/* Delta (state changes since parent) */}

@@ -392,6 +392,20 @@ def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:
     if entities:
         parts.append(f"## Entities\n{', '.join(entities)}\n")
 
+    # Notes from metadata_ — additive founder/human annotations.
+    metadata = commit.get("metadata") or commit.get("metadata_") or {}
+    notes = metadata.get("notes") or []
+    if notes:
+        lines = ["## Notes"]
+        for n in notes:
+            kind = n.get("kind", "note")
+            kind_prefix = f"[{kind}] " if kind != "note" else ""
+            author = n.get("author", "?")
+            created = _relative_time(n.get("created_at") or "")
+            text = n.get("text", "")
+            lines.append(f"- {kind_prefix}{author} · {created} — {text}")
+        parts.append("\n".join(lines) + "\n")
+
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
 

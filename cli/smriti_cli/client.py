@@ -209,6 +209,22 @@ class SmritiClient:
             params["include_expired"] = "true"
         return self._request("GET", "/api/v5/claims", params=params)
 
+    # ── Checkpoint notes ──────────────────────────────────────────────
+
+    def add_checkpoint_note(
+        self,
+        checkpoint_id: str,
+        text: str,
+        author: str = "founder",
+        kind: str = "note",
+    ) -> dict:
+        """POST /api/v5/checkpoint/{id}/notes — append a note."""
+        return self._request(
+            "POST",
+            f"/api/v5/checkpoint/{checkpoint_id}/notes",
+            json={"text": text, "author": author, "kind": kind},
+        )
+
     # ── Branch disposition ────────────────────────────────────────────
 
     def close_branch(self, space_id: str, branch_name: str, disposition: str) -> dict:

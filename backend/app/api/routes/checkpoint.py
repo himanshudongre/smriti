@@ -388,3 +388,82 @@ Rules:
     except Exception as e:
         logger.error(f"Extract LLM call failed: {e}")
         raise HTTPException(status_code=502, detail=f"Extract failed: {e}")
+
+
+# ── Checkpoint notes ─────────────────────────────────────────────────────────
+
+from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+
+VALID_NOTE_KINDS = {"note", "milestone", "noise"}
+
+
+class AddNoteRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+    author: str = Field(default="founder", max_length=100)
+    kind: str = Field(default="note")
+
+
+class NoteResponse(BaseModel):
+    id: str
+    author: str
+    text: str
+    kind: str
+    created_at: str
+    checkpoint_id: str
+
+
+@router.post("/{checkpoint_id}/notes", response_model=NoteResponse, status_code=201)
+def add_checkpoint_note(
+    checkpoint_id: uuid.UUID,
+    payload: AddNoteRequest,
+    db: Session = Depends(get_db),
+):
+    """Add an additive note to a checkpoint without modifying its immutable fields.
+
+    Notes are stored in the checkpoint's metadata_ JSONB field under the
+    'notes' key. The checkpoint's decisions, summary, artifacts, and all
+    other fields remain untouched. Notes are append-only in v1.
+    """
+    commit = db.get(CommitModel, checkpoint_id)
+    if not commit:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+    if payload.kind not in VALID_NOTE_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid kind '{payload.kind}'. Must be one of: {', '.join(sorted(VALID_NOTE_KINDS))}",
+        )
+
+    note_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    note = {
+        "id": note_id,
+        "author": payload.author,
+        "text": payload.text,
+        "kind": payload.kind,
+        "created_at": now,
+    }
+
+    # Append to existing notes array in metadata_, creating it if absent.
+    meta = dict(commit.metadata_ or {})
+    notes = list(meta.get("notes", []))
+    notes.append(note)
+    meta["notes"] = notes
+    commit.metadata_ = meta
+
+    # Force SQLAlchemy to detect the JSONB mutation.
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(commit, "metadata_")
+
+    db.commit()
+
+    return NoteResponse(
+        id=note_id,
+        author=payload.author,
+        text=payload.text,
+        kind=payload.kind,
+        created_at=now,
+        checkpoint_id=str(checkpoint_id),
+    )
