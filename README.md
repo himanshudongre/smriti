@@ -187,7 +187,13 @@ docker compose up -d postgres    # start the database
 make setup                       # backend venv + deps + migrations + CLI + frontend
 ```
 
-`make setup` installs everything: the backend, the CLI (`smriti` + `smriti-mcp` on your PATH), and the frontend.
+`make setup` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries are installed into the backend venv at `backend/.venv/bin/`. To use them from your shell, activate the venv:
+
+```bash
+source backend/.venv/bin/activate
+```
+
+Or reference them by full path (e.g. `backend/.venv/bin/smriti state ...`). The SessionStart hook in `.claude/settings.json` already uses the full path so it works without activation.
 
 ### 2. Start the backend and frontend
 

@@ -27,8 +27,15 @@ make dev
 make dev-frontend
 ```
 
-`make setup` installs everything: the backend, the CLI (`smriti` + `smriti-mcp` on
-your PATH), and the frontend. Open `http://localhost:5173` for the chat UI.
+`make setup` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the
+frontend. The CLI is installed into the backend venv at `backend/.venv/bin/`.
+Activate the venv to use it from your shell:
+
+```bash
+source backend/.venv/bin/activate
+```
+
+Open `http://localhost:5173` for the chat UI.
 
 ---
 
