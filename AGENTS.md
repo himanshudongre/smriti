@@ -299,6 +299,36 @@ so other agents can see your base state.
 Say out loud: **"Claiming: [intent_type] — <scope>."** before
 creating the claim.
 
+### 3.7 Check freshness before checkpointing
+
+If you have been working for more than a few minutes, check whether
+the project state has moved since you started — before you checkpoint.
+
+```
+smriti state <project> --since <your-base-checkpoint-id> --compact
+```
+
+Your base checkpoint ID is the HEAD you read at session start, or the
+`base_commit_id` from your work claim.
+
+**If "State: unchanged":** proceed with your checkpoint. Your base
+is still current.
+
+**If "State: changed":** read the listed new checkpoints. Then
+decide:
+- If the new checkpoints are unrelated to your work: proceed.
+- If they overlap or conflict: run
+  `smriti compare`
+  on your base vs the new HEAD to understand the divergence, then
+  either reconcile or fork.
+- If you are unsure: ask the human.
+
+Do not checkpoint on top of state you have not reviewed. Stale-state
+checkpoints create decision conflicts that the next agent has to
+untangle.
+
+Say out loud: **"Checking freshness before checkpointing."**
+
 ---
 
 ## 4. When to checkpoint
@@ -623,6 +653,7 @@ Use them literally.
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
 | declare a work claim | "Claiming: [intent_type] — <scope>." |
+| check freshness before checkpoint | "Checking freshness before checkpointing." |
 | finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
 

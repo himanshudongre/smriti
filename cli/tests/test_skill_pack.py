@@ -152,6 +152,10 @@ _REQUIRED_PHRASES = [
     "not a lock",
     "not a scheduler",
     "leave active work claims hanging",
+    # Section 3.7 — freshness check
+    "check freshness",
+    "since",
+    "stale-state",
     # Section 14 — two-sentence summary
     "session start",
 ]
