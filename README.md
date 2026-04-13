@@ -180,14 +180,25 @@ The multi-agent coordination layer grew from this foundation. Agents have the sa
 
 ---
 
-## Demo
+## What it looks like
 
-![Smriti checkpoint diff](docs/assets/checkpoint-diff.png)
+### Project timeline (LineagePage dashboard)
 
-*Structured diff of two checkpoints: decisions, assumptions, and tasks compared side by side.*
+![Smriti LineagePage dashboard](docs/assets/lineage-dashboard.png)
 
-Watch demo (3-4 min):
-https://www.loom.com/share/0531ab1b6f114ceb9996ec5780052158
+*Real project timeline from building Smriti with Smriti: 56 checkpoints across 2 agents, milestone markers, author badges, note indicators.*
+
+### Agent-facing state and metrics (CLI)
+
+![CLI state and metrics](docs/assets/cli-state-and-metrics.png)
+
+*What every agent reads at session start (`smriti state --compact`) and the project health KPIs (`smriti metrics`).*
+
+### Structured checkpoint detail
+
+![Checkpoint detail with structured tasks](docs/assets/checkpoint-detail.png)
+
+*A checkpoint with structured tasks (intent badges, task IDs, blocked_by markers) and founder milestone notes.*
 
 ---
 
@@ -263,4 +274,4 @@ make down     # stop all services
 
 ## Try the demo
 
-There is a full walkthrough in `demos/branching-reasoning-demo/` with exact steps, what to type, and expected outcomes.
+There is a guided walkthrough in `demos/branching-reasoning-demo/` covering the single-user checkpoint/fork/compare workflow. For the multi-agent coordination story, follow the Getting Started section above and run `smriti state` + `smriti metrics` on your own project.
