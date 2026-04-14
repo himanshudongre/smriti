@@ -133,7 +133,11 @@ export function CommitDetailPage() {
 
   // Pre-compute delta values
   const parent = delta?.parent ?? null;
-  const taskDelta      = parent ? diffList(commit!.tasks,           parent.tasks)           : null;
+  // Normalize structured tasks to their text field before diffing so
+  // React can render the diff result as strings (not task objects).
+  const taskTexts = (arr: (string | import('../types').StructuredTask)[] | undefined) =>
+    (arr ?? []).map(t => normalizeTask(t).text);
+  const taskDelta      = parent ? diffList(taskTexts(commit!.tasks), taskTexts(parent.tasks)) : null;
   const decisionDelta  = parent ? diffList(commit!.decisions,       parent.decisions)       : null;
   const questionDelta  = parent ? diffList(commit!.open_questions,  parent.open_questions)  : null;
   const summaryChanged = parent && commit!.summary !== parent.summary;
