@@ -30,7 +30,7 @@ The strongest proof: two agents started near-simultaneously, read the same task 
 ### Four surfaces on the same core
 
 1. **A CLI** (`smriti`) — how a coding agent reads and writes reasoning state from a shell tool loop.
-2. **An MCP server** (`smriti-mcp`) — the same surface wrapped as 17 MCP tools for Claude Code, Cursor, and Windsurf.
+2. **An MCP server** (`smriti-mcp`) — the same surface wrapped as 21 MCP tools for Claude Code, Cursor, and Windsurf.
 3. **An agent skill pack** — a versioned instruction file (`.claude/skills/smriti/SKILL.md` or `AGENTS.md`) that teaches the agent when to checkpoint, when not to, how to detect drift, and how to select complementary work. Install once per project.
 4. **A chat UI** — how a human reads, steers, and debugs the shared state. Dashboard with checkpoint timeline, active claims, milestone markers, and needs-attention signals.
 
@@ -57,6 +57,7 @@ One project, one Smriti Space, multiple agents. Each reads the state, declares i
 - **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends.
 - **Compact mode** (`--compact`) — artifact content omitted for token efficiency; labels and recovery instructions preserved.
 - **Project metrics** (`smriti metrics <space>`) — coordination, state quality, and branch lifecycle KPIs computed on demand from existing data.
+- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. (V1: CRUD primitive only. Claim ↔ worktree binding and state-brief enrichment land in V2.)
 
 ---
 
