@@ -212,6 +212,45 @@ class SmritiClient:
             params["include_expired"] = "true"
         return self._request("GET", "/api/v5/claims", params=params)
 
+    # ── Worktrees ───────────────────────────────────────────────────
+
+    def create_worktree(
+        self,
+        space_id: str,
+        agent: str,
+        branch_name: str | None = None,
+        base_commit_sha: str | None = None,
+        base_path: str | None = None,
+    ) -> dict:
+        """POST /api/v5/worktrees — create a git worktree."""
+        payload = {
+            "space_id": space_id,
+            "agent": agent,
+        }
+        if branch_name:
+            payload["branch_name"] = branch_name
+        if base_commit_sha:
+            payload["base_commit_sha"] = base_commit_sha
+        if base_path:
+            payload["base_path"] = base_path
+        return self._request("POST", "/api/v5/worktrees", json=payload)
+
+    def list_worktrees(self, space_id: str, include_closed: bool = False) -> list[dict]:
+        """GET /api/v5/worktrees?space_id=... — list worktrees."""
+        params = {"space_id": space_id}
+        if include_closed:
+            params["include_closed"] = "true"
+        return self._request("GET", "/api/v5/worktrees", params=params)
+
+    def get_worktree(self, worktree_id: str) -> dict:
+        """GET /api/v5/worktrees/{id} — show one worktree."""
+        return self._request("GET", f"/api/v5/worktrees/{worktree_id}")
+
+    def close_worktree(self, worktree_id: str, force: bool = False) -> dict:
+        """DELETE /api/v5/worktrees/{id} — close/remove a worktree."""
+        params = {"force": "true"} if force else None
+        return self._request("DELETE", f"/api/v5/worktrees/{worktree_id}", params=params)
+
     # ── Metrics ─────────────────────────────────────────────────────
 
     def get_space_metrics(self, space_id: str) -> dict:

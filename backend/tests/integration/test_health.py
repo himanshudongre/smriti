@@ -34,6 +34,7 @@ def test_health_includes_required_capabilities(client):
         "branch_disposition",
         "freshness",
         "compact_state",
+        "worktrees",
     ]
     for cap in required:
         assert cap in caps, f"Missing capability: {cap}"

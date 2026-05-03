@@ -2,6 +2,7 @@ import logging
 import pathlib
 import re
 import subprocess
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -52,7 +53,17 @@ def create_app() -> FastAPI:
     for handler in logging.root.handlers:
         handler.addFilter(SecretGuardFilter())
 
-    from app.api.routes import repos, commits, context_git, chat, checkpoint, lineage, claims, metrics
+    from app.api.routes import (
+        chat,
+        checkpoint,
+        claims,
+        commits,
+        context_git,
+        lineage,
+        metrics,
+        repos,
+        worktrees,
+    )
 
     # V2 Routes (Git for memory)
     app.include_router(repos.router, prefix="/api/v2", tags=["repos"])
@@ -67,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(lineage.router, prefix="/api/v5", tags=["lineage-v5"])
     app.include_router(claims.router, prefix="/api/v5", tags=["claims-v5"])
     app.include_router(metrics.router, prefix="/api/v5", tags=["metrics-v5"])
+    app.include_router(worktrees.router, prefix="/api/v5", tags=["worktrees-v5"])
 
     # ── Capabilities manifest ────────────────────────────────────────
     # Computed once at startup so /health is zero-cost at request time.
@@ -83,6 +95,7 @@ def create_app() -> FastAPI:
         "branch_disposition", # PATCH /api/v5/lineage/branches/disposition
         "freshness",          # since_commit_id on state endpoint
         "compact_state",      # --compact mode on state brief
+        "worktrees",          # /api/v5/worktrees
     ]
 
     @app.get("/health")

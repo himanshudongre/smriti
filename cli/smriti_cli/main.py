@@ -18,6 +18,10 @@ Commands for agent and programmatic use:
     smriti checkpoint list <space>
     smriti checkpoint review <checkpoint-id>
     smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
+    smriti worktree open <space> --agent <id>
+    smriti worktree list <space>
+    smriti worktree show <worktree-id>
+    smriti worktree close <worktree-id>
 
 Multi-branch workflow: use `smriti fork <checkpoint>` to start a new
 session on a new branch, then `smriti checkpoint create <space> --session
@@ -804,6 +808,99 @@ def cmd_claim_list(client: SmritiClient, args: argparse.Namespace) -> None:
         print(f"  - `{agent}` [{intent}] on `{branch}` — {scope}  (id: {c['id']})")
 
 
+# ── worktree subcommand handlers ────────────────────────────────────────────
+
+
+def _short_id(value: str) -> str:
+    return f"{value[:8]}…" if len(value) > 8 else value
+
+
+def _display_path(path: str) -> str:
+    home = os.path.expanduser("~")
+    if path == home:
+        return "~"
+    if path.startswith(home + os.sep):
+        return "~" + path[len(home):]
+    return path
+
+
+def _print_worktree_table(worktrees: list[dict]) -> None:
+    headers = ["ID", "AGENT", "BRANCH", "DIRTY", "AHEAD", "PATH"]
+    rows = [
+        [
+            _short_id(str(w.get("id", ""))),
+            str(w.get("agent", "")),
+            str(w.get("branch_name", "")),
+            "—",
+            "—",
+            _display_path(str(w.get("path", ""))),
+        ]
+        for w in worktrees
+    ]
+    widths = [
+        max(len(headers[i]), *(len(row[i]) for row in rows))
+        for i in range(len(headers))
+    ]
+    print("  ".join(headers[i].ljust(widths[i]) for i in range(len(headers))))
+    for row in rows:
+        print("  ".join(row[i].ljust(widths[i]) for i in range(len(row))))
+
+
+def cmd_worktree_open(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Create a git worktree for an agent and print its path."""
+    space = client.resolve_space(args.space)
+    worktree = client.create_worktree(
+        space_id=space["id"],
+        agent=args.agent,
+        branch_name=args.branch,
+        base_commit_sha=args.base_commit,
+        base_path=args.base_path,
+    )
+    if args.json:
+        _print_json(worktree)
+    else:
+        print(worktree["path"])
+
+
+def cmd_worktree_list(client: SmritiClient, args: argparse.Namespace) -> None:
+    """List worktrees for a space."""
+    space = client.resolve_space(args.space)
+    worktrees = client.list_worktrees(space["id"], include_closed=args.include_closed)
+    if args.json:
+        _print_json(worktrees)
+        return
+    if not worktrees:
+        print("No worktrees." if args.include_closed else "No active worktrees.")
+        return
+    _print_worktree_table(worktrees)
+
+
+def cmd_worktree_show(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Show one worktree."""
+    worktree = client.get_worktree(args.worktree_id)
+    if args.json:
+        _print_json(worktree)
+        return
+    print(f"id: {worktree['id']}")
+    print(f"status: {worktree['status']}")
+    print(f"agent: {worktree['agent']}")
+    print(f"branch: {worktree['branch_name']}")
+    print(f"base_commit: {worktree.get('base_commit_sha') or ''}")
+    print(f"path: {worktree['path']}")
+    print(f"created_at: {worktree['created_at']}")
+    if worktree.get("closed_at"):
+        print(f"closed_at: {worktree['closed_at']}")
+
+
+def cmd_worktree_close(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Close/remove a git worktree."""
+    worktree = client.close_worktree(args.worktree_id, force=args.force)
+    if args.json:
+        _print_json(worktree)
+    else:
+        print(f"Closed worktree `{worktree['id']}` at {worktree['path']}.")
+
+
 def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
     commit = client.get_commit(args.checkpoint_id)
     space = client.get_space(str(commit.get("repo_id", "")))
@@ -1146,6 +1243,39 @@ def _build_parser() -> argparse.ArgumentParser:
     cl_list.add_argument("--all", action="store_true", help="Include expired/done/abandoned claims")
     cl_list.add_argument("--json", action="store_true")
     cl_list.set_defaults(func=cmd_claim_list)
+
+    # worktree — filesystem/index isolation for agent work
+    worktree_parser = subparsers.add_parser(
+        "worktree",
+        help="Manage git worktrees for isolated agent working directories",
+    )
+    worktree_sub = worktree_parser.add_subparsers(dest="subcommand", required=True)
+
+    wt_open = worktree_sub.add_parser("open", help="Create a worktree for an agent")
+    wt_open.add_argument("space", help="Space name or UUID")
+    wt_open.add_argument("--agent", required=True, help="Agent identifier (e.g. claude-code)")
+    wt_open.add_argument("--branch", help="Branch name for the new worktree", default=None)
+    wt_open.add_argument("--base-commit", dest="base_commit", help="Git SHA to base the worktree on", default=None)
+    wt_open.add_argument("--base-path", dest="base_path", help="Absolute target path for the new worktree", default=None)
+    wt_open.add_argument("--json", action="store_true")
+    wt_open.set_defaults(func=cmd_worktree_open)
+
+    wt_list = worktree_sub.add_parser("list", help="List worktrees for a space")
+    wt_list.add_argument("space", help="Space name or UUID")
+    wt_list.add_argument("--include-closed", action="store_true", help="Include closed worktrees")
+    wt_list.add_argument("--json", action="store_true")
+    wt_list.set_defaults(func=cmd_worktree_list)
+
+    wt_show = worktree_sub.add_parser("show", help="Show one worktree")
+    wt_show.add_argument("worktree_id", help="Worktree UUID")
+    wt_show.add_argument("--json", action="store_true")
+    wt_show.set_defaults(func=cmd_worktree_show)
+
+    wt_close = worktree_sub.add_parser("close", help="Close/remove a worktree")
+    wt_close.add_argument("worktree_id", help="Worktree UUID")
+    wt_close.add_argument("--force", action="store_true", help="Force removal even if dirty")
+    wt_close.add_argument("--json", action="store_true")
+    wt_close.set_defaults(func=cmd_worktree_close)
 
     # skills — install the Smriti agent skill pack into an agent host's
     # project directory. The skill pack teaches agents when and why to

@@ -28,7 +28,7 @@ smriti/
 │   │   ├── db/
 │   │   │   ├── database.py     SQLAlchemy engine and session factory
 │   │   │   └── models.py       ORM models: RepoModel, CommitModel, ChatSession,
-│   │   │                         TurnEvent, WorkClaim
+│   │   │                         TurnEvent, WorkClaim, WorkTree
 │   │   ├── domain/
 │   │   │   └── enums.py        SessionStatus, TargetTool, etc.
 │   │   ├── api/
@@ -39,6 +39,7 @@ smriti/
 │   │   │       ├── lineage.py  V5: fork, branch tree, checkpoint compare,
 │   │   │       │                 reachable checkpoints
 │   │   │       ├── claims.py   V5: work claims (create, update, list)
+│   │   │       ├── worktrees.py V5: git worktrees (open, list, show, close)
 │   │   │       ├── repos.py    V2: Space CRUD, Checkpoint CRUD
 │   │   │       ├── commits.py  V2: direct commit creation
 │   │   │       └── context_git.py  V2: context extraction
@@ -60,19 +61,21 @@ smriti/
 │   ├── config/
 │   │   ├── providers.example.yaml  Template — copy to providers.yaml
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
-│   ├── alembic/                Database migrations (10 versions)
+│   ├── alembic/                Database migrations (13 versions)
 │   ├── tests/
-│   │   ├── integration/        API integration tests (177 tests)
+│   │   ├── integration/        API integration tests (116 tests)
 │   │   │   ├── test_api_v4_chat.py
 │   │   │   ├── test_api_v5_lineage.py
 │   │   │   ├── test_multi_branch_state.py
 │   │   │   ├── test_claims.py
+│   │   │   ├── test_worktrees.py
 │   │   │   ├── test_checkpoint_extract.py
 │   │   │   └── test_delete_endpoints.py
-│   │   └── unit/               Unit tests (97 tests)
+│   │   └── unit/               Unit tests (120 tests)
 │   │       ├── test_config_loader.py
 │   │       ├── test_extractor.py
 │   │       ├── test_golden_outputs.py
+│   │       ├── test_worktree_paths.py
 │   │       ├── test_pack_generator.py
 │   │       └── test_parser.py
 │   └── pyproject.toml          Python dependencies (includes python-dotenv)
@@ -101,22 +104,24 @@ smriti/
 │   ├── smriti_cli/
 │   │   ├── main.py             argparse dispatcher: init, space, state,
 │   │   │                         checkpoint, fork, restore, compare,
-│   │   │                         branch, claim, skills
-│   │   ├── mcp_server.py       FastMCP server (17 tools, stdio transport)
-│   │   ├── client.py           SmritiClient HTTP wrapper (includes claims)
+│   │   │                         branch, claim, worktree, skills
+│   │   ├── mcp_server.py       FastMCP server (21 tools, stdio transport)
+│   │   ├── client.py           SmritiClient HTTP wrapper (includes claims/worktrees)
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
 │   │       ├── template.md     Single source of truth (v1.9, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (107 tests)
+│   └── tests/                  CLI + MCP tests (117 tests)
 │       ├── test_branch_close.py
 │       ├── test_init.py
 │       ├── test_mcp_server.py
 │       ├── test_skill_pack.py
 │       ├── test_smoke.py
-│       └── test_state_multi_branch.py
+│       ├── test_state_multi_branch.py
+│       ├── test_worktree_cli.py
+│       └── test_worktree_mcp.py
 │
 ├── docs/
 │   └── API.md                  V2, V4, and V5 endpoint reference
@@ -135,7 +140,7 @@ smriti/
 | `/api/v1` | `sessions.py` | Legacy | Transcript paste ingestion |
 | `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read/list. `CommitResponse` includes `assumptions` and `artifacts`. |
 | `/api/v4` | `chat.py` | Current | Chat sessions, send_message, commit, head, multi-branch state (`/state` with active branches, active claims, and divergence signal). Provider status. |
-| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims. |
+| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py`, `worktrees.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims, git worktrees. |
 
 ---
 
@@ -156,11 +161,11 @@ make migration      Create a new migration (usage: make migration msg="...")
 
 ---
 
-## Test counts (as of v1.9 skill pack + task IDs + metrics)
+## Test counts (as of V1 worktree primitive)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 107 | `backend/tests/integration/` |
-| Backend unit | 117 | `backend/tests/unit/` |
-| CLI + MCP | 107 | `cli/tests/` |
-| **Total** | **331** | |
+| Backend integration | 116 | `backend/tests/integration/` |
+| Backend unit | 120 | `backend/tests/unit/` |
+| CLI + MCP | 117 | `cli/tests/` |
+| **Total** | **353** | |

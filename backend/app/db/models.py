@@ -146,6 +146,9 @@ class RepoModel(Base):
     commits: Mapped[list["CommitModel"]] = relationship(
         back_populates="repo", cascade="all, delete-orphan", order_by="CommitModel.created_at.desc()"
     )
+    worktrees: Mapped[list["WorkTree"]] = relationship(
+        back_populates="repo", cascade="all, delete-orphan"
+    )
 
 class CommitModel(Base):
     __tablename__ = "commits"
@@ -314,3 +317,28 @@ class WorkClaim(Base):
         DateTime(timezone=True), nullable=False,
     )
 
+
+class WorkTree(Base):
+    """A git worktree allocated for an agent working in a space.
+
+    Worktrees provide filesystem-level isolation: separate working
+    directories and git indexes backed by the same repository object store.
+    """
+    __tablename__ = "work_trees"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    repo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("repos.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    agent: Mapped[str] = mapped_column(String(100), nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    repo: Mapped["RepoModel"] = relationship(back_populates="worktrees")

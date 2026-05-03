@@ -1,6 +1,6 @@
 """Smriti MCP server — stdio transport.
 
-Exposes the Smriti CLI surface as 12 MCP tools so agents inside MCP-aware
+Exposes the Smriti CLI surface as 21 MCP tools so agents inside MCP-aware
 hosts (Claude Code, Cursor, Windsurf) can read and write reasoning state
 without shelling out to the `smriti` binary.
 
@@ -614,6 +614,138 @@ def smriti_claim_done(claim_id: str, abandon: bool = False) -> str:
     except SmritiError as e:
         _raise_from(e)
     return f"Claim `{claim['id']}` marked {claim['status']}."
+
+
+def _format_worktree(worktree: dict) -> str:
+    lines = [
+        f"id: {worktree['id']}",
+        f"status: {worktree['status']}",
+        f"agent: {worktree['agent']}",
+        f"branch: {worktree['branch_name']}",
+        f"base_commit: {worktree.get('base_commit_sha') or ''}",
+        f"path: {worktree['path']}",
+        f"created_at: {worktree['created_at']}",
+    ]
+    if worktree.get("closed_at"):
+        lines.append(f"closed_at: {worktree['closed_at']}")
+    return "\n".join(lines)
+
+
+def _format_worktree_list(worktrees: list[dict]) -> str:
+    if not worktrees:
+        return "No worktrees."
+    lines = ["| ID | Agent | Branch | Dirty | Ahead | Path |", "|---|---|---|---|---|---|"]
+    for worktree in worktrees:
+        short_id = str(worktree.get("id", ""))[:8]
+        lines.append(
+            "| "
+            f"{short_id} | "
+            f"{worktree.get('agent', '')} | "
+            f"{worktree.get('branch_name', '')} | "
+            "— | "
+            "— | "
+            f"{worktree.get('path', '')} |"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def smriti_worktree_open(
+    space: str,
+    agent: str = "claude-code",
+    branch: str = "",
+    base_commit: str = "",
+    base_path: str = "",
+) -> str:
+    """Create a git worktree for isolated agent work.
+
+    Use this when an agent is about to work in a repository and needs a
+    separate filesystem path and git index instead of sharing the main
+    checkout. V1 only creates the worktree and records it; it does not
+    bind the worktree to a claim or change the state brief.
+
+    Args:
+        space: Space name or UUID.
+        agent: Agent identifier (default: claude-code).
+        branch: Optional branch name for the new worktree.
+        base_commit: Optional git SHA to base the worktree on. Default:
+            current HEAD of the project repo.
+        base_path: Optional absolute target path. Default:
+            ~/.smriti/worktrees/<space>/<agent>-<suffix>.
+    """
+    client = _client()
+    try:
+        s = client.resolve_space(space)
+        worktree = client.create_worktree(
+            space_id=s["id"],
+            agent=agent,
+            branch_name=branch or None,
+            base_commit_sha=base_commit or None,
+            base_path=base_path or None,
+        )
+    except SmritiError as e:
+        _raise_from(e)
+    return (
+        f"Created worktree `{worktree['id']}` for `{worktree['agent']}`.\n"
+        f"Path: `{worktree['path']}`\n"
+        f"Branch: `{worktree['branch_name']}`\n"
+        f"Base: `{worktree.get('base_commit_sha') or ''}`"
+    )
+
+
+@mcp.tool()
+def smriti_worktree_list(space: str, include_closed: bool = False) -> str:
+    """List worktrees for a Smriti space.
+
+    Use this to see active agent worktree directories. Dirty/ahead columns
+    are placeholders in V1 and always render as unknown until a future git
+    status enrichment pass lands.
+
+    Args:
+        space: Space name or UUID.
+        include_closed: Include closed worktrees. Default False.
+    """
+    client = _client()
+    try:
+        s = client.resolve_space(space)
+        worktrees = client.list_worktrees(s["id"], include_closed=include_closed)
+    except SmritiError as e:
+        _raise_from(e)
+    return _format_worktree_list(worktrees)
+
+
+@mcp.tool()
+def smriti_worktree_show(worktree_id: str) -> str:
+    """Show one worktree row by UUID.
+
+    Args:
+        worktree_id: Worktree UUID returned by smriti_worktree_open or
+            smriti_worktree_list.
+    """
+    try:
+        worktree = _client().get_worktree(worktree_id)
+    except SmritiError as e:
+        _raise_from(e)
+    return _format_worktree(worktree)
+
+
+@mcp.tool()
+def smriti_worktree_close(worktree_id: str, force: bool = False) -> str:
+    """Close and remove a git worktree.
+
+    By default this refuses to remove a dirty worktree. Pass force=True
+    only when the uncommitted contents are intentionally disposable.
+
+    Args:
+        worktree_id: Worktree UUID returned by smriti_worktree_open or
+            smriti_worktree_list.
+        force: Force removal even if the worktree is dirty.
+    """
+    try:
+        worktree = _client().close_worktree(worktree_id, force=force)
+    except SmritiError as e:
+        _raise_from(e)
+    return f"Closed worktree `{worktree['id']}` at `{worktree['path']}`."
 
 
 @mcp.tool()

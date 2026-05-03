@@ -349,7 +349,7 @@ Surfaces:
   own reasoning in their own context, using their own LLM provider. Smriti is
   their shared memory, not their runtime.
 - **MCP server** (`cli/smriti_cli/mcp_server.py`, entry point `smriti-mcp`) —
-  the same surface wrapped as 17 MCP tools for hosts that speak the Model
+  the same surface wrapped as 21 MCP tools for hosts that speak the Model
   Context Protocol natively (Claude Code, Cursor, Windsurf). Stdio transport.
   Each tool is a thin shim: build a `SmritiClient`, call one or two methods,
   run the result through an existing formatter, return markdown. Feature
@@ -564,10 +564,19 @@ decide. No scheduler, no assignment, no orchestrator.
 
 **Backend capabilities manifest.** The `/health` endpoint returns `git_sha`
 and a `capabilities` list (`claims`, `structured_tasks`, `task_ids`,
-`checkpoint_notes`, `branch_disposition`, `freshness`, `compact_state`).
+`checkpoint_notes`, `branch_disposition`, `freshness`, `compact_state`,
+`worktrees`).
 Agents probe this when a 404 or missing section suggests the backend is
 running stale code. The capabilities list is hardcoded in `main.py` and
 updated when new features ship.
+
+**Worktree isolation.** Worktrees are the filesystem/index isolation primitive
+for multi-agent project work. `WorkTree` rows record an agent, absolute path,
+branch name, base git SHA, and lifecycle status while the backend creates and
+removes the corresponding git worktree on disk via `/api/v5/worktrees`. V1 is
+intentionally not claim-bound and does not appear in the state brief yet; a
+future integration pass should connect active claims to worktrees and surface
+that operational state where agents already read `## Active work`.
 
 ---
 
