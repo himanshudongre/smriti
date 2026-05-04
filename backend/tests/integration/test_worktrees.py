@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 
 from app.api.routes import worktrees
+from app.db.models import WorkTree
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -230,6 +231,93 @@ def test_list_show_and_close_clean_worktree(client, tmp_path):
 
     all_r = client.get(f"/api/v5/worktrees?space_id={space_id}&include_closed=true")
     assert len(all_r.json()) == 1
+
+
+def test_short_id_resolution_unique_prefix(client, tmp_path):
+    git_repo = _init_git_repo(tmp_path)
+    space_id = _create_project_with_root(client, git_repo)
+    created = _create_worktree(
+        client,
+        space_id,
+        base_path=str(tmp_path / "short-id-show"),
+    ).json()
+
+    r = client.get(f"/api/v5/worktrees/{created['id'][:8]}")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == created["id"]
+
+
+def test_short_id_resolution_full_uuid_still_works(client, tmp_path):
+    git_repo = _init_git_repo(tmp_path)
+    space_id = _create_project_with_root(client, git_repo)
+    created = _create_worktree(
+        client,
+        space_id,
+        base_path=str(tmp_path / "full-id-show"),
+    ).json()
+
+    r = client.get(f"/api/v5/worktrees/{created['id']}")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == created["id"]
+
+
+def test_short_id_resolution_no_match_returns_404(client):
+    r = client.get("/api/v5/worktrees/deadbeef")
+
+    assert r.status_code == 404
+    assert "No worktree matches prefix" in r.json()["detail"]
+
+
+def test_short_id_resolution_ambiguous_returns_422(client, db_session):
+    repo_id = _create_repo(client)
+    first = WorkTree(
+        id=uuid.UUID("abcd1111-0000-4000-8000-000000000001"),
+        repo_id=uuid.UUID(repo_id),
+        agent="codex-local",
+        path="/tmp/wt-one",
+        branch_name="feature/one",
+        status="active",
+    )
+    second = WorkTree(
+        id=uuid.UUID("abcd2222-0000-4000-8000-000000000002"),
+        repo_id=uuid.UUID(repo_id),
+        agent="claude-code",
+        path="/tmp/wt-two",
+        branch_name="feature/two",
+        status="active",
+    )
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    r = client.get("/api/v5/worktrees/abcd")
+
+    assert r.status_code == 422
+    assert "ambiguous" in r.json()["detail"]
+    assert "abcd1111" in r.json()["detail"]
+    assert "abcd2222" in r.json()["detail"]
+
+
+def test_short_id_resolution_too_short_returns_400(client):
+    r = client.get("/api/v5/worktrees/abc")
+
+    assert r.status_code == 400
+    assert "at least 4 characters" in r.json()["detail"]
+
+
+def test_short_id_resolution_close_path(client, tmp_path):
+    git_repo = _init_git_repo(tmp_path)
+    space_id = _create_project_with_root(client, git_repo)
+    target = tmp_path / "short-id-close"
+    created = _create_worktree(client, space_id, base_path=str(target)).json()
+
+    r = client.delete(f"/api/v5/worktrees/{created['id'][:8]}")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == created["id"]
+    assert r.json()["status"] == "closed"
+    assert not target.exists()
 
 
 def test_list_includes_probe_data_for_active_worktrees(client, tmp_path, monkeypatch):

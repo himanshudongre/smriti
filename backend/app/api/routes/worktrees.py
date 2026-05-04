@@ -23,7 +23,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -89,6 +89,45 @@ def _get_repo(space_id: uuid.UUID, db: Session) -> RepoModel:
     if not repo or repo.user_id != DEMO_USER_ID:
         raise HTTPException(status_code=404, detail="Space not found")
     return repo
+
+
+def _resolve_worktree_id(id_or_prefix: str, db: Session) -> WorkTree:
+    """Resolve a worktree by full UUID or unique short prefix."""
+    value = id_or_prefix.strip()
+    if len(value) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Worktree id must be at least 4 characters",
+        )
+
+    try:
+        worktree_id = uuid.UUID(value)
+    except ValueError:
+        worktree_id = None
+
+    if worktree_id is not None:
+        worktree = db.get(WorkTree, worktree_id)
+        if not worktree:
+            raise HTTPException(status_code=404, detail="Worktree not found")
+        return worktree
+
+    prefix = value.lower()
+    stmt = select(WorkTree).where(
+        func.lower(cast(WorkTree.id, String)).like(f"{prefix}%")
+    )
+    matches = list(db.scalars(stmt).all())
+    if not matches:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No worktree matches prefix '{value}'",
+        )
+    if len(matches) > 1:
+        ids = ", ".join(f"{str(match.id)[:8]}..." for match in matches[:3])
+        raise HTTPException(
+            status_code=422,
+            detail=f"Worktree prefix '{value}' is ambiguous (matches {ids})",
+        )
+    return matches[0]
 
 
 def _validate_project_root(project_root: str) -> Path:
@@ -316,24 +355,19 @@ def list_worktrees(
 
 
 @router.get("/{worktree_id}", response_model=WorkTreeResponse)
-def get_worktree(worktree_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_worktree(worktree_id: str, db: Session = Depends(get_db)):
     """Return one worktree row."""
-    worktree = db.get(WorkTree, worktree_id)
-    if not worktree:
-        raise HTTPException(status_code=404, detail="Worktree not found")
-    return worktree
+    return _resolve_worktree_id(worktree_id, db)
 
 
 @router.delete("/{worktree_id}", response_model=WorkTreeResponse)
 def close_worktree(
-    worktree_id: uuid.UUID,
+    worktree_id: str,
     force: bool = Query(False, description="Force removal even if dirty"),
     db: Session = Depends(get_db),
 ):
     """Remove a git worktree and mark its row closed."""
-    worktree = db.get(WorkTree, worktree_id)
-    if not worktree:
-        raise HTTPException(status_code=404, detail="Worktree not found")
+    worktree = _resolve_worktree_id(worktree_id, db)
     if worktree.status == "closed":
         raise HTTPException(status_code=409, detail="Worktree is already closed")
     if worktree.status not in VALID_STATUSES:
