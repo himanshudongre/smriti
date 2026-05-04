@@ -57,7 +57,7 @@ One project, one Smriti Space, multiple agents. Each reads the state, declares i
 - **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends.
 - **Compact mode** (`--compact`) — artifact content omitted for token efficiency; labels and recovery instructions preserved.
 - **Project metrics** (`smriti metrics <space>`) — coordination, state quality, and branch lifecycle KPIs computed on demand from existing data.
-- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. (V1: CRUD primitive only. Claim ↔ worktree binding and state-brief enrichment land in V2.)
+- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. Claims can be bound to a worktree (`smriti claim create --worktree <id>`); the state brief surfaces per-claim working-tree drift (branch, dirty count, ahead/behind vs origin/main, last commit) so agents can see what other agents are editing without asking. Skill pack v2.0 teaches the reflex.
 
 ---
 
