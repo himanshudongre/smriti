@@ -67,8 +67,8 @@ fixtures — no running backend required.
 
 | Changed area | Run |
 |---|---|
-| `backend/app/` | `make test` (177 integration + 97 unit tests) |
-| `cli/smriti_cli/` | `cd cli && pytest` (70 tests) |
+| `backend/app/` | `make test` (122 integration + 125 unit tests) |
+| `cli/smriti_cli/` | `cd cli && pytest` (122 tests) |
 | `cli/smriti_cli/skill_pack/template.md` | `cd cli && pytest tests/test_skill_pack.py` — content-integrity tests catch dropped sections |
 | `frontend/src/` | `cd frontend && npx tsc --noEmit` |
 | Both backend + CLI | Both suites — they share no test infrastructure but both call the same backend API |
