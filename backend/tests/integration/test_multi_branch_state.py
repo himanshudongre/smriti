@@ -18,8 +18,15 @@ from __future__ import annotations
 # ── Helpers (match the shape used in test_api_v5_lineage.py) ─────────────────
 
 
-def _create_repo(client, name: str = "Multi-Branch State Test"):
-    r = client.post("/api/v2/repos", json={"name": name})
+def _create_repo(
+    client,
+    name: str = "Multi-Branch State Test",
+    project_root: str | None = None,
+):
+    payload = {"name": name}
+    if project_root is not None:
+        payload["project_root"] = project_root
+    r = client.post("/api/v2/repos", json=payload)
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -83,6 +90,18 @@ def test_state_no_checkpoints(client):
     assert state["commit"] is None
     assert state["active_branches"] == []
     assert state["divergence"] is None
+
+
+def test_state_space_header_includes_project_root(client):
+    repo_id = _create_repo(
+        client,
+        "Rooted State",
+        project_root="/tmp/rooted-state",
+    )
+
+    state = _get_state(client, repo_id)
+
+    assert state["space"]["project_root"] == "/tmp/rooted-state"
 
 
 def test_state_main_only(client):

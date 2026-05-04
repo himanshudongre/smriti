@@ -104,6 +104,28 @@ def test_format_state_brief_empty_branches_and_no_divergence_elided():
     assert "## Divergence signal" not in out
 
 
+def test_format_state_brief_shows_canonical_project_root():
+    space = _base_space()
+    space["project_root"] = "/tmp/canonical-project"
+    commit = _base_commit()
+
+    out = format_state_brief(space, _base_head(), commit)
+
+    assert "Project root: /tmp/canonical-project" in out
+    assert "Latest checkpoint:" in out
+    assert "at `/tmp/test-project`" in out
+
+
+def test_format_state_brief_omits_project_root_line_when_null():
+    space = _base_space()
+    space["project_root"] = None
+
+    out = format_state_brief(space, _base_head(), _base_commit())
+
+    assert "Project root:" not in out
+    assert "at `/tmp/test-project`" in out
+
+
 def test_format_state_brief_active_branches_only():
     """Non-empty active_branches → Active branches section appears,
     Divergence signal section absent."""

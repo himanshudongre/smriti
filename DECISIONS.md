@@ -559,6 +559,28 @@ without reducing risk. Making `worktree_id` optional lets Smriti surface
 filesystem isolation when contention risk exists while preserving the
 lightweight claim path for work that does not need a separate git index.
 
+### Why canonical project_root lives on RepoModel, lazily backfilled
+
+`CommitModel.project_root` remains per-checkpoint provenance: it records where
+the agent was standing when a checkpoint was written. That is useful context,
+but it is a poor operational anchor for worktrees because "latest checkpoint
+wins" makes the chosen checkout depend on whichever agent wrote state most
+recently.
+
+The canonical worktree anchor belongs on `RepoModel` because it is a property
+of the space as a project, not of an individual chat session, checkpoint, or
+worktree. Sessions and checkpoints can be created from multiple clones; worktree
+rows represent outputs created from an anchor, not the source of truth for the
+next anchor.
+
+Lazy backfill is deliberately preferred over a one-shot migration. Existing
+spaces already have useful checkpoint-level roots, but the database cannot know
+which clone a human wants as canonical without touching the filesystem and
+making an intent guess. On first worktree open, Smriti resolves the known
+checkpoint root, validates it at the point of use, and writes the resolved path
+back to `repos.project_root`. Spaces therefore self-canonicalize through normal
+use while preserving explicit override via `smriti space set-project-root`.
+
 ---
 
 ## Open questions and deferred decisions

@@ -404,6 +404,9 @@ def format_state_brief(
     parts.append(f"# {space.get('name', 'Untitled space')}\n")
     if space.get("description"):
         parts.append(space["description"].rstrip() + "\n")
+    canonical_project_root = _pretty_path(space.get("project_root"))
+    if canonical_project_root:
+        parts.append(f"Project root: {canonical_project_root}\n")
 
     commit_hash = commit.get("commit_hash")
     created_at = commit.get("created_at") or head.get("commit_hash") or ""

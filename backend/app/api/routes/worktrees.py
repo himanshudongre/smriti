@@ -91,11 +91,30 @@ def _get_repo(space_id: uuid.UUID, db: Session) -> RepoModel:
     return repo
 
 
-def _latest_project_root(space_id: uuid.UUID, db: Session) -> Path:
+def _validate_project_root(project_root: str) -> Path:
+    resolved = Path(project_root).expanduser().resolve()
+    if not resolved.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"project_root does not exist on disk: {resolved}",
+        )
+    return resolved
+
+
+def _resolve_project_root(repo: RepoModel, db: Session) -> Path:
+    """Resolve the worktree anchor path.
+
+    Prefer the space-level canonical root. For existing spaces without one,
+    fall back to the latest checkpoint root and lazily backfill the canonical
+    field so future worktree opens are no longer agent-activity-dependent.
+    """
+    if repo.project_root:
+        return _validate_project_root(repo.project_root)
+
     stmt = (
         select(CommitModel.project_root)
         .where(
-            CommitModel.repo_id == space_id,
+            CommitModel.repo_id == repo.id,
             CommitModel.project_root.is_not(None),
             CommitModel.project_root != "",
         )
@@ -107,17 +126,16 @@ def _latest_project_root(space_id: uuid.UUID, db: Session) -> Path:
         raise HTTPException(
             status_code=400,
             detail=(
-                "No checkpoint with project_root found for this space; "
-                "create a checkpoint from the project checkout first."
+                "No project_root configured for this space. Set it via "
+                "`smriti space set-project-root <space> <path>` or create a "
+                "checkpoint with project_root set."
             ),
         )
 
-    resolved = Path(project_root).expanduser().resolve()
-    if not resolved.is_dir():
-        raise HTTPException(
-            status_code=400,
-            detail=f"project_root does not exist on disk: {resolved}",
-        )
+    resolved = _validate_project_root(project_root)
+    repo.project_root = str(resolved)
+    db.commit()
+    db.refresh(repo)
     return resolved
 
 
@@ -213,7 +231,7 @@ def create_worktree(
     if not agent:
         raise HTTPException(status_code=400, detail="agent must be non-empty")
 
-    project_root = _latest_project_root(space_id, db)
+    project_root = _resolve_project_root(repo, db)
     suffix = uuid.uuid4().hex[:8]
     branch_name = (payload.branch_name or "").strip() or _default_branch_name(agent, suffix)
     target_path = _resolve_target_path(
@@ -324,7 +342,8 @@ def close_worktree(
             detail=f"Worktree has invalid status: {worktree.status}",
         )
 
-    project_root = _latest_project_root(worktree.repo_id, db)
+    repo = _get_repo(worktree.repo_id, db)
+    project_root = _resolve_project_root(repo, db)
     worktree_path = Path(worktree.path).expanduser().resolve()
 
     if not force:

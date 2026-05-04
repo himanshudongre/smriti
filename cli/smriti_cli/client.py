@@ -86,11 +86,26 @@ class SmritiClient:
     def get_space(self, space_id: str) -> dict:
         return self._request("GET", f"/api/v2/repos/{space_id}")
 
-    def create_space(self, name: str, description: str = "") -> dict:
+    def create_space(
+        self,
+        name: str,
+        description: str = "",
+        project_root: str | None = None,
+    ) -> dict:
+        payload = {"name": name, "description": description}
+        if project_root is not None:
+            payload["project_root"] = project_root
         return self._request(
             "POST",
             "/api/v2/repos",
-            json={"name": name, "description": description},
+            json=payload,
+        )
+
+    def set_project_root(self, space_id: str, path: str) -> dict:
+        return self._request(
+            "PATCH",
+            f"/api/v2/repos/{space_id}/project-root",
+            json={"project_root": path},
         )
 
     def delete_space(self, space_id: str) -> None:

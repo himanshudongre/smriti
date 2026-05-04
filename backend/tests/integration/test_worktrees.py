@@ -29,8 +29,11 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
     return result
 
 
-def _create_repo(client, name="Worktree Test Repo"):
-    r = client.post("/api/v2/repos", json={"name": name})
+def _create_repo(client, name="Worktree Test Repo", project_root: str | None = None):
+    payload = {"name": name}
+    if project_root is not None:
+        payload["project_root"] = project_root
+    r = client.post("/api/v2/repos", json=payload)
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -142,6 +145,62 @@ def test_create_worktree_existing_branch_rejected_without_row_or_directory(
     assert "Branch already exists" in r.json()["detail"]
     assert not target.exists()
     assert client.get(f"/api/v5/worktrees?space_id={space_id}").json() == []
+
+
+def test_create_worktree_uses_canonical_project_root(client, tmp_path):
+    canonical_repo = _init_git_repo(tmp_path, name="canonical-project")
+    fallback_repo = _init_git_repo(tmp_path, name="fallback-project")
+    repo_id = _create_repo(
+        client,
+        name="Canonical Root Repo",
+        project_root=str(canonical_repo),
+    )
+    session_id = _create_session(client, repo_id)
+    _commit_with_root(client, repo_id, session_id, fallback_repo)
+    target = tmp_path / "canonical-worktree"
+
+    r = _create_worktree(
+        client,
+        repo_id,
+        branch_name="feature/canonical-root",
+        base_path=str(target),
+    )
+
+    assert r.status_code == 201, r.text
+    assert target.exists()
+    assert (
+        _git(canonical_repo, "show-ref", "--verify", "refs/heads/feature/canonical-root")
+        .returncode
+        == 0
+    )
+    assert (
+        _git(
+            fallback_repo,
+            "show-ref",
+            "--verify",
+            "refs/heads/feature/canonical-root",
+            check=False,
+        ).returncode
+        != 0
+    )
+
+
+def test_create_worktree_lazy_backfills_project_root_from_commit(client, tmp_path):
+    git_repo = _init_git_repo(tmp_path)
+    repo_id = _create_project_with_root(client, git_repo)
+    assert client.get(f"/api/v2/repos/{repo_id}").json()["project_root"] is None
+
+    r = _create_worktree(
+        client,
+        repo_id,
+        branch_name="feature/lazy-backfill",
+        base_path=str(tmp_path / "lazy-backfill-worktree"),
+    )
+
+    assert r.status_code == 201, r.text
+    assert client.get(f"/api/v2/repos/{repo_id}").json()["project_root"] == str(
+        git_repo.resolve()
+    )
 
 
 def test_list_show_and_close_clean_worktree(client, tmp_path):
@@ -284,6 +343,7 @@ def test_create_worktree_requires_project_root(client, tmp_path):
 
     assert r.status_code == 400
     assert "project_root" in r.json()["detail"]
+    assert "set-project-root" in r.json()["detail"]
     assert not target.exists()
 
 
@@ -316,8 +376,8 @@ def test_git_infrastructure_error_does_not_write_row_or_leave_target(
     assert client.get(f"/api/v5/worktrees?space_id={space_id}").json() == []
 
 
-def _init_git_repo(tmp_path: Path) -> Path:
-    repo = tmp_path / "project"
+def _init_git_repo(tmp_path: Path, name: str = "project") -> Path:
+    repo = tmp_path / name
     repo.mkdir()
     _git(repo, "init")
     _git(repo, "config", "user.email", "test@example.com")

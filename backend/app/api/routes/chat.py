@@ -331,6 +331,7 @@ class SpaceBrief(BaseModel):
     id: uuid.UUID
     name: str
     description: Optional[str] = None
+    project_root: Optional[str] = None
 
 
 class ActiveBranchSummary(BaseModel):
@@ -1111,6 +1112,7 @@ def get_space_state(
             id=repo.id,
             name=repo.name,
             description=repo.description,
+            project_root=repo.project_root,
         ),
         head=head_resp,
         commit=commit_resp,

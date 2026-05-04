@@ -133,6 +133,7 @@ class RepoModel(Base):
     repo_slug: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
+    project_root: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, index=True
     )

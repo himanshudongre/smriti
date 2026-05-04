@@ -3,7 +3,8 @@
 Commands for agent and programmatic use:
 
     smriti space list
-    smriti space create <name> [--description]
+    smriti space create <name> [--description] [--project-root <path>] [--no-project-root]
+    smriti space set-project-root <space> <path>
     smriti space delete <space> [-y]
     smriti state <space> [--preview]
     smriti fork <checkpoint-id> [--branch <name>]
@@ -161,11 +162,39 @@ def cmd_space_list(client: SmritiClient, args: argparse.Namespace) -> None:
 
 
 def cmd_space_create(client: SmritiClient, args: argparse.Namespace) -> None:
-    space = client.create_space(name=args.name, description=args.description or "")
+    if args.no_project_root:
+        project_root: str | None = None
+    elif args.project_root:
+        project_root = args.project_root
+    else:
+        project_root = os.getcwd()
+
+    space = client.create_space(
+        name=args.name,
+        description=args.description or "",
+        project_root=project_root,
+    )
     if args.json:
         _print_json(space)
     else:
         print(f"Created space: {space['name']}  `{space['id']}`")
+        if project_root is not None:
+            print(f"Project root: {project_root}")
+
+
+def cmd_space_set_project_root(client: SmritiClient, args: argparse.Namespace) -> None:
+    space = client.resolve_space(args.space)
+    if args.here or args.path in {".", "--here"}:
+        path = os.getcwd()
+    elif args.path:
+        path = args.path
+    else:
+        _fail("error: path is required unless --here is passed")
+    updated = client.set_project_root(space["id"], path)
+    if args.json:
+        _print_json(updated)
+    else:
+        print(f"Set project_root for '{updated['name']}' to {updated['project_root']}")
 
 
 def cmd_space_delete(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -262,6 +291,8 @@ def _print_no_checkpoints(space: dict, args: argparse.Namespace) -> None:
     print(f"# {space.get('name', 'Untitled space')}")
     if space.get("description"):
         print(space["description"])
+    if space.get("project_root"):
+        print(f"Project root: {space['project_root']}")
     print()
     print("No checkpoints yet. Create one with `smriti checkpoint create`.")
 
@@ -966,8 +997,39 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_create = space_sub.add_parser("create", help="Create a new space")
     sp_create.add_argument("name", help="Space name")
     sp_create.add_argument("--description", help="Optional description", default="")
+    root_group = sp_create.add_mutually_exclusive_group()
+    root_group.add_argument(
+        "--project-root",
+        help="Canonical project checkout path for worktree operations "
+        "(default: current working directory)",
+    )
+    root_group.add_argument(
+        "--no-project-root",
+        action="store_true",
+        help="Leave the space without a canonical project_root",
+    )
     sp_create.add_argument("--json", action="store_true", help="Output structured JSON")
     sp_create.set_defaults(func=cmd_space_create)
+
+    sp_set_project_root = space_sub.add_parser(
+        "set-project-root",
+        help="Set a space's canonical project_root",
+    )
+    sp_set_project_root.add_argument("space", help="Space name or UUID")
+    sp_set_project_root.add_argument(
+        "path",
+        nargs="?",
+        help="Project checkout path. Use '.' for the current directory.",
+    )
+    sp_set_project_root.add_argument(
+        "--here",
+        action="store_true",
+        help="Set project_root to the current directory.",
+    )
+    sp_set_project_root.add_argument(
+        "--json", action="store_true", help="Output structured JSON"
+    )
+    sp_set_project_root.set_defaults(func=cmd_space_set_project_root)
 
     sp_delete = space_sub.add_parser(
         "delete",

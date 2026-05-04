@@ -62,14 +62,16 @@ smriti/
 │   ├── config/
 │   │   ├── providers.example.yaml  Template — copy to providers.yaml
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
-│   ├── alembic/                Database migrations (14 versions)
+│   ├── alembic/                Database migrations (15 versions)
 │   ├── tests/
-│   │   ├── integration/        API integration tests (124 tests)
+│   │   ├── integration/        API integration tests (134 tests)
 │   │   │   ├── test_api_v4_chat.py
 │   │   │   ├── test_api_v5_lineage.py
 │   │   │   ├── test_multi_branch_state.py
 │   │   │   ├── test_claims.py
 │   │   │   ├── test_claim_worktree_binding.py
+│   │   │   ├── test_project_root_migration.py
+│   │   │   ├── test_repos_project_root.py
 │   │   │   ├── test_worktrees.py
 │   │   │   ├── test_checkpoint_extract.py
 │   │   │   └── test_delete_endpoints.py
@@ -116,12 +118,13 @@ smriti/
 │   │       ├── template.md     Single source of truth (v2.1, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (129 tests)
+│   └── tests/                  CLI + MCP tests (141 tests)
 │       ├── test_branch_close.py
 │       ├── test_init.py
 │       ├── test_mcp_server.py
 │       ├── test_skill_pack.py
 │       ├── test_smoke.py
+│       ├── test_space_cli.py
 │       ├── test_state_multi_branch.py
 │       ├── test_worktree_cli.py
 │       └── test_worktree_mcp.py
@@ -164,11 +167,11 @@ make migration      Create a new migration (usage: make migration msg="...")
 
 ---
 
-## Test counts (as of V3 dirty paths)
+## Test counts (as of V4 project_root canonicalization)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 124 | `backend/tests/integration/` |
+| Backend integration | 134 | `backend/tests/integration/` |
 | Backend unit | 129 | `backend/tests/unit/` |
-| CLI + MCP | 129 | `cli/tests/` |
-| **Total** | **382** | |
+| CLI + MCP | 141 | `cli/tests/` |
+| **Total** | **404** | |
