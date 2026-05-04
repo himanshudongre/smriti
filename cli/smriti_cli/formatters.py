@@ -260,6 +260,23 @@ def _format_active_claims_section(active_claims: list[dict]) -> str:
             f"- `{agent}` [{intent}] on `{branch}` from `{base_hash}` "
             f"· {created} — {scope}{task_suffix}"
         )
+        worktree_id = c.get("worktree_id")
+        worktree = c.get("worktree")
+        if worktree:
+            path = _pretty_path(worktree.get("path")) or worktree.get("path") or "?"
+            dirty = worktree.get("dirty_files", 0)
+            ahead = worktree.get("ahead", 0)
+            behind = worktree.get("behind", 0)
+            last_sha = worktree.get("last_commit_sha") or "?"
+            last_rel = worktree.get("last_commit_relative") or "?"
+            lines.append(f"   · worktree: {path}")
+            lines.append(
+                f"   · branch: {worktree.get('branch') or '?'} · "
+                f"{dirty} dirty · ahead {ahead} · behind {behind} · "
+                f"last commit `{last_sha}` {last_rel}"
+            )
+        elif worktree_id:
+            lines.append("   · worktree: (probe failed or worktree closed)")
     return "\n".join(lines) + "\n"
 
 

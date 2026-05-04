@@ -148,3 +148,61 @@ def test_cmd_worktree_close_calls_client(capsys: pytest.CaptureFixture[str]):
     out = capsys.readouterr().out
     assert "Closed worktree" in out
     client.close_worktree.assert_called_once_with("wt-uuid", force=True)
+
+
+def test_claim_create_parser_accepts_worktree_flag():
+    parser = cli_main._build_parser()
+
+    args = parser.parse_args(
+        [
+            "claim",
+            "create",
+            "my-project",
+            "--agent",
+            "codex-local",
+            "--scope",
+            "Implement V2",
+            "--worktree",
+            "wt-uuid",
+        ]
+    )
+
+    assert args.worktree == "wt-uuid"
+
+
+def test_cmd_claim_create_passes_worktree_id():
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    client.get_head.return_value = {"commit_id": "checkpoint-uuid"}
+    client.create_claim.return_value = {
+        "id": "claim-uuid",
+        "agent": "codex-local",
+        "scope": "Implement V2",
+        "branch_name": "worktree-v2-binding-and-enrichment",
+        "intent_type": "implement",
+    }
+    args = argparse.Namespace(
+        space="my-project",
+        agent="codex-local",
+        scope="Implement V2",
+        branch="worktree-v2-binding-and-enrichment",
+        task_id="v2-plan",
+        worktree="wt-uuid",
+        intent_type="implement",
+        ttl=4.0,
+        json=False,
+    )
+
+    cli_main.cmd_claim_create(client, args)
+
+    client.create_claim.assert_called_once_with(
+        space_id="space-uuid",
+        agent="codex-local",
+        scope="Implement V2",
+        branch_name="worktree-v2-binding-and-enrichment",
+        base_commit_id="checkpoint-uuid",
+        task_id="v2-plan",
+        worktree_id="wt-uuid",
+        intent_type="implement",
+        ttl_hours=4.0,
+    )

@@ -652,3 +652,60 @@ def test_claims_section_without_task_id():
     out = _format_active_claims_section(claims)
     assert "(task:" not in out
     assert "[implement]" in out
+
+
+def test_claims_section_with_worktree_info():
+    """Bound worktree info renders as continuation lines under the claim."""
+    from smriti_cli.formatters import _format_active_claims_section
+    claims = [
+        {
+            "agent": "codex-local",
+            "branch_name": "worktree-v2-binding-and-enrichment",
+            "scope": "Implement V2",
+            "task_id": "v2-plan",
+            "worktree_id": "worktree-uuid",
+            "worktree": {
+                "id": "worktree-uuid",
+                "path": "/Users/example/.smriti/worktrees/smriti-dev/codex-local-abc12345",
+                "branch": "smriti/codex-local/abc12345",
+                "dirty_files": 3,
+                "ahead": 1,
+                "behind": 0,
+                "last_commit_sha": "def5678",
+                "last_commit_relative": "5 minutes ago",
+            },
+            "intent_type": "implement",
+            "base_commit_hash": "abc1234",
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    out = _format_active_claims_section(claims)
+
+    assert "worktree:" in out
+    assert "smriti/codex-local/abc12345" in out
+    assert "3 dirty" in out
+    assert "ahead 1" in out
+    assert "behind 0" in out
+    assert "last commit `def5678` 5 minutes ago" in out
+
+
+def test_claims_section_with_worktree_probe_failure():
+    """A bound claim with failed probing still renders a useful hint."""
+    from smriti_cli.formatters import _format_active_claims_section
+    claims = [
+        {
+            "agent": "codex-local",
+            "branch_name": "main",
+            "scope": "Implement V2",
+            "worktree_id": "worktree-uuid",
+            "worktree": None,
+            "intent_type": "implement",
+            "base_commit_hash": "abc1234",
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    out = _format_active_claims_section(claims)
+
+    assert "probe failed or worktree closed" in out

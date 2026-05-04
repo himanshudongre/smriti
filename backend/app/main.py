@@ -96,6 +96,7 @@ def create_app() -> FastAPI:
         "freshness",          # since_commit_id on state endpoint
         "compact_state",      # --compact mode on state brief
         "worktrees",          # /api/v5/worktrees
+        "worktree_binding",   # claims can bind to worktrees + state drift summary
     ]
 
     @app.get("/health")

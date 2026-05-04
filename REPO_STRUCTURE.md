@@ -54,6 +54,7 @@ smriti/
 │   │       ├── embedding.py    Embedding generation (pgvector)
 │   │       ├── parser.py       Transcript parsing utilities
 │   │       ├── pack_generator.py  Context pack rendering (V1 legacy)
+│   │       ├── worktree_probe.py  Cached git drift probe for bound claims
 │   │       └── llm/
 │   │           ├── base.py         LLM provider base class
 │   │           ├── mock_provider.py  Deterministic mock for testing
@@ -61,20 +62,22 @@ smriti/
 │   ├── config/
 │   │   ├── providers.example.yaml  Template — copy to providers.yaml
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
-│   ├── alembic/                Database migrations (13 versions)
+│   ├── alembic/                Database migrations (14 versions)
 │   ├── tests/
-│   │   ├── integration/        API integration tests (116 tests)
+│   │   ├── integration/        API integration tests (122 tests)
 │   │   │   ├── test_api_v4_chat.py
 │   │   │   ├── test_api_v5_lineage.py
 │   │   │   ├── test_multi_branch_state.py
 │   │   │   ├── test_claims.py
+│   │   │   ├── test_claim_worktree_binding.py
 │   │   │   ├── test_worktrees.py
 │   │   │   ├── test_checkpoint_extract.py
 │   │   │   └── test_delete_endpoints.py
-│   │   └── unit/               Unit tests (120 tests)
+│   │   └── unit/               Unit tests (125 tests)
 │   │       ├── test_config_loader.py
 │   │       ├── test_extractor.py
 │   │       ├── test_golden_outputs.py
+│   │       ├── test_worktree_probe.py
 │   │       ├── test_worktree_paths.py
 │   │       ├── test_pack_generator.py
 │   │       └── test_parser.py
@@ -110,10 +113,10 @@ smriti/
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
-│   │       ├── template.md     Single source of truth (v1.9, 15 sections)
+│   │       ├── template.md     Single source of truth (v2.0, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (117 tests)
+│   └── tests/                  CLI + MCP tests (122 tests)
 │       ├── test_branch_close.py
 │       ├── test_init.py
 │       ├── test_mcp_server.py
@@ -140,7 +143,7 @@ smriti/
 | `/api/v1` | `sessions.py` | Legacy | Transcript paste ingestion |
 | `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read/list. `CommitResponse` includes `assumptions` and `artifacts`. |
 | `/api/v4` | `chat.py` | Current | Chat sessions, send_message, commit, head, multi-branch state (`/state` with active branches, active claims, and divergence signal). Provider status. |
-| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py`, `worktrees.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims, git worktrees. |
+| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py`, `worktrees.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims with optional worktree binding, git worktrees. |
 
 ---
 
@@ -161,11 +164,11 @@ make migration      Create a new migration (usage: make migration msg="...")
 
 ---
 
-## Test counts (as of V1 worktree primitive)
+## Test counts (as of V2 worktree binding)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 116 | `backend/tests/integration/` |
-| Backend unit | 120 | `backend/tests/unit/` |
-| CLI + MCP | 117 | `cli/tests/` |
-| **Total** | **353** | |
+| Backend integration | 122 | `backend/tests/integration/` |
+| Backend unit | 125 | `backend/tests/unit/` |
+| CLI + MCP | 122 | `cli/tests/` |
+| **Total** | **369** | |

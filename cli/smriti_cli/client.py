@@ -181,6 +181,7 @@ class SmritiClient:
         branch_name: str = "main",
         base_commit_id: str | None = None,
         task_id: str | None = None,
+        worktree_id: str | None = None,
         intent_type: str = "implement",
         ttl_hours: float = 4.0,
     ) -> dict:
@@ -197,6 +198,8 @@ class SmritiClient:
             payload["base_commit_id"] = base_commit_id
         if task_id:
             payload["task_id"] = task_id
+        if worktree_id:
+            payload["worktree_id"] = worktree_id
         return self._request("POST", "/api/v5/claims", json=payload)
 
     def update_claim(self, claim_id: str, status: str) -> dict:

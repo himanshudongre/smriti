@@ -2,7 +2,10 @@
 V4 Chat API integration tests.
 All tests use use_mock=True so they run without any real provider API keys.
 """
-import pytest
+import uuid
+
+from app.api.routes import chat
+from app.db.models import WorkTree
 
 
 def test_provider_status(client):
@@ -16,10 +19,89 @@ def test_provider_status(client):
         assert "has_key" in status
 
 
+def test_state_active_claims_include_bound_worktree_info(client, db_session, monkeypatch):
+    repo_id = _create_repo(client, "State Worktree Binding")
+    session_id = _create_session(client, repo_id)
+    _commit(client, repo_id, session_id, "base")
+    worktree = WorkTree(
+        repo_id=uuid.UUID(repo_id),
+        agent="codex-local",
+        path="/tmp/state-worktree",
+        branch_name="smriti/codex-local/abc12345",
+        base_commit_sha="abc123",
+        status="active",
+    )
+    db_session.add(worktree)
+    db_session.commit()
+    db_session.refresh(worktree)
+
+    claim_r = client.post(
+        "/api/v5/claims",
+        json={
+            "space_id": repo_id,
+            "agent": "codex-local",
+            "scope": "State enrichment test",
+            "branch_name": "worktree-v2-binding-and-enrichment",
+            "intent_type": "implement",
+            "worktree_id": str(worktree.id),
+        },
+    )
+    assert claim_r.status_code == 201, claim_r.text
+
+    def fake_probe(worktree_id, path, branch):
+        assert worktree_id == str(worktree.id)
+        assert path == "/tmp/state-worktree"
+        assert branch == "smriti/codex-local/abc12345"
+        return {
+            "id": worktree_id,
+            "path": path,
+            "branch": branch,
+            "dirty_files": 3,
+            "ahead": 1,
+            "behind": 0,
+            "last_commit_sha": "def5678",
+            "last_commit_relative": "5 minutes ago",
+        }
+
+    monkeypatch.setattr(chat, "_probe_worktree", fake_probe)
+
+    r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+
+    assert r.status_code == 200, r.text
+    claim = r.json()["active_claims"][0]
+    assert claim["worktree_id"] == str(worktree.id)
+    assert claim["worktree"] == {
+        "id": str(worktree.id),
+        "path": "/tmp/state-worktree",
+        "branch": "smriti/codex-local/abc12345",
+        "dirty_files": 3,
+        "ahead": 1,
+        "behind": 0,
+        "last_commit_sha": "def5678",
+        "last_commit_relative": "5 minutes ago",
+    }
+
+
 def _create_repo(client, name="Chat Test Repo"):
     r = client.post("/api/v2/repos", json={"name": name})
     assert r.status_code == 201, r.text
     return r.json()["id"]
+
+
+def _create_session(client, repo_id, title="test"):
+    r = client.post(
+        f"/api/v4/chat/spaces/{repo_id}/sessions",
+        json={"title": title, "provider": "openrouter", "model": "mock"},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def _commit(client, repo_id, session_id, message="checkpoint", **kwargs):
+    payload = {"repo_id": repo_id, "session_id": session_id, "message": message, **kwargs}
+    r = client.post("/api/v4/chat/commit", json=payload)
+    assert r.status_code == 201, r.text
+    return r.json()
 
 
 def test_session_lifecycle(client):

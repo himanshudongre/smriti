@@ -31,9 +31,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import ChatSession, CommitModel, RepoModel, TurnEvent
+from app.db.models import (
+    ChatSession,
+    CommitModel,
+    RepoModel,
+    TurnEvent,
+    WorkClaim,
+    WorkTree,
+)
 from app.config_loader import get_config, providers_status, ProviderNotConfiguredError
 from app.providers.registry import get_adapter, get_mock_adapter
+from app.services.worktree_probe import _probe_worktree
 
 router = APIRouter(prefix="/chat", tags=["chat-v4"])
 
@@ -358,6 +366,18 @@ class DivergenceSummary(BaseModel):
     pairs: list[DivergencePair] = Field(default_factory=list)
 
 
+class ActiveWorktreeSummary(BaseModel):
+    """Git drift information for a worktree bound to an active claim."""
+    id: uuid.UUID
+    path: str
+    branch: str
+    dirty_files: int
+    ahead: int
+    behind: int
+    last_commit_sha: str
+    last_commit_relative: str
+
+
 class ActiveClaimSummary(BaseModel):
     """One line per active work claim in the `Active work` section."""
     id: uuid.UUID
@@ -365,6 +385,8 @@ class ActiveClaimSummary(BaseModel):
     branch_name: str
     scope: str
     task_id: Optional[str] = None
+    worktree_id: Optional[uuid.UUID] = None
+    worktree: Optional[ActiveWorktreeSummary] = None
     intent_type: str
     claimed_at: datetime
     expires_at: datetime
@@ -993,7 +1015,6 @@ def get_space_state(
         divergence = _compute_space_divergence(main_head_commit, active_branch_commits)
 
     # Active work claims — query-time expiration filter.
-    from app.db.models import WorkClaim
     now = _utcnow()
     claims_stmt = (
         select(WorkClaim)
@@ -1011,6 +1032,17 @@ def get_space_state(
         if wc.base_commit_id:
             base_commit = db.get(CommitModel, wc.base_commit_id)
             base_hash = base_commit.commit_hash[:7] if base_commit else None
+        worktree_summary = None
+        if wc.worktree_id:
+            worktree = db.get(WorkTree, wc.worktree_id)
+            if worktree and worktree.status == "active":
+                probed = _probe_worktree(
+                    str(worktree.id),
+                    worktree.path,
+                    worktree.branch_name,
+                )
+                if probed:
+                    worktree_summary = ActiveWorktreeSummary(**probed)
         active_claims.append(
             ActiveClaimSummary(
                 id=wc.id,
@@ -1018,6 +1050,8 @@ def get_space_state(
                 branch_name=wc.branch_name,
                 scope=wc.scope,
                 task_id=wc.task_id,
+                worktree_id=wc.worktree_id,
+                worktree=worktree_summary,
                 intent_type=wc.intent_type,
                 claimed_at=wc.claimed_at,
                 expires_at=wc.expires_at,

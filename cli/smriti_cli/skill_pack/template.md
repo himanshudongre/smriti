@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.9
+smriti_skill_pack_version: 2.0
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -241,6 +241,8 @@ are a client of it. You do not own it.
   at localhost:8000 does not support [feature]. Its git_sha is
   [sha] but the current repo is at [repo sha]. Please restart
   the backend with `make dev` to pick up recent changes."
+  For worktree-aware coordination, the capabilities list should include
+  both `worktrees` and `worktree_binding`.
 - **When to check capabilities:** You do NOT need to check on every
   session. Check when:
   - A Smriti API call returns 404 on a route you expect to exist
@@ -306,6 +308,65 @@ so other agents can see your base state.
 
 Say out loud: **"Claiming: [intent_type] — <scope>."** before
 creating the claim.
+
+### 3.6.1 Worktrees: when and how
+
+If multiple agents are working on the same project on the same machine,
+each agent should work in its own git worktree. Sharing a working tree
+across agents is the single highest-cost failure mode — staged files
+from one agent can land in another agent's commit, and the wrong code
+ships to main. The chaanbeen-web retros documented exactly this incident.
+
+The reflex: when you start substantial work on a project where another
+agent might be active, open a worktree before your first edit.
+
+```
+{{mcp:smriti_worktree_open(space="<project>", agent="<your-id>")}}{{cli:smriti worktree open <project> --agent <your-id>}}
+```
+
+This returns a path. Use that path as your working directory for the
+rest of the session. Your edits, your staging index, your commits all
+live in that worktree. Other agents have their own worktrees; their
+filesystem state is invisible to you and yours to them.
+
+When you create your work claim, bind it to the worktree:
+
+```
+{{mcp:smriti_claim(space="<project>", scope="...", agent="<your-id>", intent_type="implement", task_id="<task-id>", worktree_id="<worktree-id>")}}{{cli:smriti claim create <project> --agent <your-id> \
+    --scope "..." --intent-type implement \
+    --task-id <task-id> --worktree <worktree-id>}}
+```
+
+MCP tools call this field `worktree_id`; the CLI flag is `--worktree`.
+
+The state brief now shows a worktree info line under your claim:
+which path, which branch, how many dirty files, ahead/behind vs main,
+last commit. Other agents seeing your claim know exactly what state
+your tree is in without asking.
+
+When your work is done and merged, close the worktree:
+
+```
+{{mcp:smriti_worktree_close(worktree_id="<worktree-id>")}}{{cli:smriti worktree close <worktree-id>}}
+```
+
+This refuses if you have uncommitted changes (correct default — stop
+and decide before destroying work). Pass `--force` only after you've
+confirmed the dirty changes are intentionally being discarded.
+
+When NOT to open a worktree:
+
+- Solo work on a project with no other active agents.
+- Quick read-only investigations that won't produce commits.
+- Documentation-only work that's clearly disjoint from anyone else's
+  track (e.g. you're writing in `docs/` while another agent is in
+  `backend/`). Worktrees are cheap but not zero cost; the discipline
+  is "open one when there's actual filesystem contention risk,"
+  not "open one for every session."
+
+Say out loud: **"Opening a worktree for this session."** before the
+first worktree open. **"Binding my claim to worktree <id>."** when
+claiming. **"Closing the worktree."** when done.
 
 ### 3.7 Check freshness before checkpointing
 
@@ -773,6 +834,12 @@ Section 5.
   Duplicating completed work wastes a full session and creates noise
   in the timeline.
 
+- **Do not share a working tree between agents on the same project on
+  the same machine.** Open a worktree per agent. The chaanbeen
+  retrospectives documented one cross-agent commit pollution incident
+  that took ~1 hour to recover and degraded prod for ~6 endpoints —
+  this is the failure worktrees were built to prevent.
+
 - **Do not use `smriti_install_skill` to overwrite an in-project
   skill pack that you did not write.** If the project already has
   a skill pack of an older version, the install tool will tell you.
@@ -796,6 +863,9 @@ Use them literally.
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
 | declare a work claim | "Claiming: [intent_type] — <scope>." |
+| open a worktree | "Opening a worktree for this session." |
+| bind a claim to a worktree | "Binding my claim to worktree <id>." |
+| close a worktree | "Closing the worktree." |
 | add a note to a checkpoint | "Adding a [kind] note to checkpoint X." |
 | self-select complementary work | "Selecting complementary work from the task list." |
 | check freshness before checkpoint | "Checking freshness before checkpointing." |
@@ -856,7 +926,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-1.9 — this file is
+*Smriti skill pack version {{primary_mode}}-2.0 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

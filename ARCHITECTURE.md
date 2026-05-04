@@ -565,7 +565,7 @@ decide. No scheduler, no assignment, no orchestrator.
 **Backend capabilities manifest.** The `/health` endpoint returns `git_sha`
 and a `capabilities` list (`claims`, `structured_tasks`, `task_ids`,
 `checkpoint_notes`, `branch_disposition`, `freshness`, `compact_state`,
-`worktrees`).
+`worktrees`, `worktree_binding`).
 Agents probe this when a 404 or missing section suggests the backend is
 running stale code. The capabilities list is hardcoded in `main.py` and
 updated when new features ship.
@@ -573,10 +573,14 @@ updated when new features ship.
 **Worktree isolation.** Worktrees are the filesystem/index isolation primitive
 for multi-agent project work. `WorkTree` rows record an agent, absolute path,
 branch name, base git SHA, and lifecycle status while the backend creates and
-removes the corresponding git worktree on disk via `/api/v5/worktrees`. V1 is
-intentionally not claim-bound and does not appear in the state brief yet; a
-future integration pass should connect active claims to worktrees and surface
-that operational state where agents already read `## Active work`.
+removes the corresponding git worktree on disk via `/api/v5/worktrees`.
+
+V2 adds optional claim binding: `WorkClaim.worktree_id` can point at an active
+worktree, and the state endpoint enriches that active claim with cached git
+drift data (path, branch, dirty file count, ahead/behind vs `origin/main`, and
+last commit). This keeps worktree usage visible exactly where agents already
+look for coordination state — `## Active work` — while preserving solo-agent
+claims that do not need a worktree.
 
 ---
 

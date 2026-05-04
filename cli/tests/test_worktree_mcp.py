@@ -75,3 +75,37 @@ def test_mcp_worktree_close_calls_client(mock_client):
 
     assert "Closed worktree" in result
     mock_client.close_worktree.assert_called_once_with("wt-uuid", force=True)
+
+
+def test_mcp_claim_passes_worktree_id(mock_client):
+    mock_client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    mock_client.get_head.return_value = {"commit_id": "checkpoint-uuid"}
+    mock_client.create_claim.return_value = {
+        "id": "claim-uuid",
+        "agent": "codex-local",
+        "scope": "Implement V2",
+        "branch_name": "worktree-v2-binding-and-enrichment",
+        "intent_type": "implement",
+    }
+
+    result = mcp_server.smriti_claim(
+        space="my-project",
+        scope="Implement V2",
+        agent="codex-local",
+        branch="worktree-v2-binding-and-enrichment",
+        task_id="v2-plan",
+        worktree_id="wt-uuid",
+    )
+
+    assert "Claimed" in result
+    mock_client.create_claim.assert_called_once_with(
+        space_id="space-uuid",
+        agent="codex-local",
+        scope="Implement V2",
+        branch_name="worktree-v2-binding-and-enrichment",
+        base_commit_id="checkpoint-uuid",
+        task_id="v2-plan",
+        worktree_id="wt-uuid",
+        intent_type="implement",
+        ttl_hours=4.0,
+    )

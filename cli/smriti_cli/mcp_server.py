@@ -545,6 +545,7 @@ def smriti_claim(
     agent: str = "claude-code",
     branch: str = "main",
     task_id: str = "",
+    worktree_id: str = "",
     intent_type: str = "implement",
     ttl_hours: float = 4.0,
 ) -> str:
@@ -566,6 +567,7 @@ def smriti_claim(
         agent: Your agent identifier (default: claude-code).
         branch: Branch you will work on (default: main).
         task_id: Optional ID of the structured task this claim covers (from the checkpoint's task list).
+        worktree_id: Optional worktree UUID to bind to this claim.
         intent_type: One of: implement, review, investigate, docs, test.
         ttl_hours: Hours until the claim expires (default: 4).
     """
@@ -581,6 +583,7 @@ def smriti_claim(
             branch_name=branch,
             base_commit_id=base_commit_id,
             task_id=task_id or None,
+            worktree_id=worktree_id or None,
             intent_type=intent_type,
             ttl_hours=ttl_hours,
         )

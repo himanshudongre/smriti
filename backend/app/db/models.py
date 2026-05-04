@@ -297,6 +297,10 @@ class WorkClaim(Base):
         UUID(as_uuid=True), ForeignKey("commits.id", ondelete="SET NULL"),
         nullable=True,
     )
+    worktree_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_trees.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     scope: Mapped[str] = mapped_column(Text, nullable=False)
     task_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True,
@@ -316,6 +320,8 @@ class WorkClaim(Base):
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False,
     )
+
+    worktree: Mapped["WorkTree | None"] = relationship(back_populates="claims")
 
 
 class WorkTree(Base):
@@ -342,3 +348,4 @@ class WorkTree(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     repo: Mapped["RepoModel"] = relationship(back_populates="worktrees")
+    claims: Mapped[list["WorkClaim"]] = relationship(back_populates="worktree")

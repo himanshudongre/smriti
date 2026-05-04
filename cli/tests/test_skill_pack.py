@@ -44,7 +44,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "1.9"
+    assert version == "2.0"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -148,6 +148,7 @@ _REQUIRED_PHRASES = [
     "git_sha",
     "stale code",
     "do not attempt to start",
+    "worktree_binding",
     # Section 3.6 — work claims
     "work claims",
     "declare intent",
@@ -155,6 +156,14 @@ _REQUIRED_PHRASES = [
     "not a lock",
     "not a scheduler",
     "leave active work claims hanging",
+    # Section 3.6.1 — worktree reflex
+    "Worktrees: when and how",
+    "Opening a worktree for this session",
+    "Binding my claim to worktree",
+    "Closing the worktree",
+    "worktree_id",
+    "cross-agent commit pollution",
+    "Open a worktree per agent",
     # Section 3.7 — freshness check
     "check freshness",
     "since",

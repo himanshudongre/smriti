@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import CommitModel, RepoModel, WorkClaim
+from app.db.models import CommitModel, RepoModel, WorkClaim, WorkTree
 
 router = APIRouter(prefix="/claims", tags=["claims-v5"])
 
@@ -62,6 +62,10 @@ class CreateClaimRequest(BaseModel):
         default=None,
         description="Optional reference to a structured task's id from the checkpoint.",
     )
+    worktree_id: Optional[str] = Field(
+        default=None,
+        description="Optional worktree UUID this claim is bound to.",
+    )
     intent_type: str = "implement"
     ttl_hours: float = Field(
         default=DEFAULT_TTL_HOURS,
@@ -82,6 +86,7 @@ class ClaimResponse(BaseModel):
     branch_name: str
     base_commit_id: Optional[uuid.UUID] = None
     task_id: Optional[str] = None
+    worktree_id: Optional[uuid.UUID] = None
     scope: str
     intent_type: str
     status: str
@@ -132,6 +137,23 @@ def create_claim(payload: CreateClaimRequest, db: Session = Depends(get_db)):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid session_id")
 
+    worktree_id = None
+    if payload.worktree_id:
+        try:
+            worktree_id = uuid.UUID(payload.worktree_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid worktree_id")
+        worktree = db.get(WorkTree, worktree_id)
+        if not worktree:
+            raise HTTPException(status_code=404, detail="Worktree not found")
+        if worktree.repo_id != space_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Worktree belongs to a different space",
+            )
+        if worktree.status != "active":
+            raise HTTPException(status_code=400, detail="Worktree is not active")
+
     now = _utcnow()
     claim = WorkClaim(
         repo_id=space_id,
@@ -139,6 +161,7 @@ def create_claim(payload: CreateClaimRequest, db: Session = Depends(get_db)):
         agent=payload.agent,
         branch_name=payload.branch_name,
         base_commit_id=base_commit_id,
+        worktree_id=worktree_id,
         scope=payload.scope,
         task_id=payload.task_id,
         intent_type=payload.intent_type,

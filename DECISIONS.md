@@ -475,6 +475,14 @@ are live coordination state (active, done, or abandoned with TTL expiry). Agents
 cross-reference at read time via the skill pack's selection logic, not via a
 stored link.
 
+### Why claim ↔ worktree binding is optional, not required
+
+Claims still need to work for solo agents, read-only investigations, and small
+non-overlapping work where opening a worktree would add ceremony without
+reducing risk. Making `worktree_id` optional lets Smriti surface filesystem
+isolation when contention risk exists while preserving the lightweight claim
+path for work that does not need a separate git index.
+
 ---
 
 ## Open questions and deferred decisions
