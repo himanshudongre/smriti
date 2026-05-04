@@ -43,7 +43,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "2.1"
+    assert version == "2.2"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -140,6 +140,8 @@ _REQUIRED_PHRASES = [
     # Section 3.4 — clean finish
     "clean finish",
     "branch disposition",
+    "Close any worktrees you opened",
+    "smriti worktree close",
     "push your branch",
     # Section 3.5 — backend reachability and capabilities
     "backend reachability",

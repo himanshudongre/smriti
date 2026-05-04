@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 2.1
+smriti_skill_pack_version: 2.2
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -198,15 +198,32 @@ next agent.
    - "Branch `X` needs review before merge." or
    - "Branch `X` is exploratory / not ready." or
    - "Work was done directly on main."
-3. **Push your branch.** If your work is on a branch, push it to
+3. **Close any worktrees you opened.** If you opened a worktree at the
+   start of this session via `smriti worktree open`, close it before
+   ending:
+
+   ```
+   {{mcp:smriti_worktree_close(worktree_id="<worktree-id>")}}{{cli:smriti worktree close <worktree-id>}}
+   ```
+
+   `smriti worktree close` refuses if you have uncommitted changes —
+   that's the safety net. Either commit the work, abandon the
+   intentionally-discarded changes with `--force`, or leave the
+   worktree active and tell the human in your final message that
+   you're handing it off intentionally.
+
+   Leftover worktrees mislead the next agent: the state brief shows
+   them as active, suggesting work-in-progress that has actually
+   stopped.
+4. **Push your branch.** If your work is on a branch, push it to
    origin so the next agent (and the human) can see it. A
    local-only branch is invisible to everyone else.
-4. **Clean up local residue.** Do not leave unexplained modified
+5. **Clean up local residue.** Do not leave unexplained modified
    files, stash entries, or temporary files in the working tree.
    If you created a stash during reconciliation, either drop it
    (if the stashed content is no longer needed) or note in your
    checkpoint that the stash exists and what it contains.
-5. **Do not leave the repo on a dead branch.** If your branch has
+6. **Do not leave the repo on a dead branch.** If your branch has
    been merged or is no longer active, switch back to main before
    ending the session so the next agent starts in a clean state.
 
@@ -344,7 +361,8 @@ which path, which branch, how many dirty files, ahead/behind vs main,
 last commit. Other agents seeing your claim know exactly what state
 your tree is in without asking.
 
-When your work is done and merged, close the worktree:
+When your work is done and merged, close the worktree. This is also
+part of session-end hygiene in Section 3.4 — Clean finish:
 
 ```
 {{mcp:smriti_worktree_close(worktree_id="<worktree-id>")}}{{cli:smriti worktree close <worktree-id>}}
@@ -969,7 +987,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-2.1 — this file is
+*Smriti skill pack version {{primary_mode}}-2.2 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

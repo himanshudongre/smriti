@@ -559,6 +559,17 @@ without reducing risk. Making `worktree_id` optional lets Smriti surface
 filesystem isolation when contention risk exists while preserving the
 lightweight claim path for work that does not need a separate git index.
 
+### Why short-ID resolution is per-resource, not global
+
+Short-ID resolution is shipping first for worktrees because that is where
+real friction appeared: `smriti worktree list` displays truncated IDs while
+`smriti worktree close` previously required the full UUID. Applying short
+prefixes globally to checkpoints, claims, and other resources would create a
+larger ambiguity surface with different ergonomics and different lookup/cache
+patterns per endpoint. The safer pattern is to add short-ID resolution
+per-resource as observed workflow friction justifies it, preserving explicit
+errors for ambiguous prefixes instead of making a sweeping global contract.
+
 ### Why canonical project_root lives on RepoModel, lazily backfilled
 
 `CommitModel.project_root` remains per-checkpoint provenance: it records where
