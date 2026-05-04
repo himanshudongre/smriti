@@ -21,7 +21,6 @@ from pathlib import Path
 import pytest
 
 from smriti_cli.skill_pack import (
-    InstallResult,
     get_target,
     get_version,
     install,
@@ -44,7 +43,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "2.0"
+    assert version == "2.1"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -164,6 +163,10 @@ _REQUIRED_PHRASES = [
     "worktree_id",
     "cross-agent commit pollution",
     "Open a worktree per agent",
+    # Section 3.6.1 — V3 additions
+    "dirty paths",
+    "absolute paths",
+    "custom branch name",
     # Section 3.7 — freshness check
     "check freshness",
     "since",

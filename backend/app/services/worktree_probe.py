@@ -33,6 +33,19 @@ def _run_git(path: str, args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _parse_dirty_paths(porcelain_output: str, limit: int = 3) -> list[str]:
+    """Parse `git status --porcelain` output into the first dirty paths."""
+    paths: list[str] = []
+    for line in porcelain_output.splitlines():
+        if not line.strip():
+            continue
+        if len(line) >= 3:
+            paths.append(line[3:].strip())
+        if len(paths) >= limit:
+            break
+    return paths
+
+
 def _probe_worktree(worktree_id: str, path: str, branch: str) -> dict[str, Any] | None:
     """Return git drift information for a worktree, or None on any error.
 
@@ -61,6 +74,7 @@ def _probe_worktree_uncached(
             _log_probe_failure(worktree_id, "status", status)
             return None
         dirty_files = len([line for line in status.stdout.splitlines() if line.strip()])
+        dirty_paths = _parse_dirty_paths(status.stdout)
 
         counts = _run_git(path, ["rev-list", "--left-right", "--count", "HEAD...origin/main"])
         if counts.returncode != 0:
@@ -94,6 +108,7 @@ def _probe_worktree_uncached(
             "path": path,
             "branch": branch,
             "dirty_files": dirty_files,
+            "dirty_paths": dirty_paths,
             "ahead": ahead,
             "behind": behind,
             "last_commit_sha": last_parts[0],

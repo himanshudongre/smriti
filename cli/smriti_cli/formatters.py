@@ -52,6 +52,27 @@ def format_worktree_ahead(worktree: dict) -> str:
     return "0"
 
 
+def _truncate_dirty_path(path: str, limit: int = 40) -> str:
+    """Truncate long dirty paths so active-work lines stay readable."""
+    if len(path) <= limit:
+        return path
+    return path[: limit - 1] + "…"
+
+
+def _format_dirty_summary(dirty_files: int, dirty_paths: list[str] | None) -> str:
+    """Render dirty count plus the first dirty paths for active work claims."""
+    if dirty_files <= 0:
+        return "0 dirty"
+    paths = dirty_paths or []
+    if not paths:
+        return f"{dirty_files} dirty"
+
+    shown = [_truncate_dirty_path(path) for path in paths[:3]]
+    if dirty_files > len(shown):
+        shown.append(f"+{dirty_files - len(shown)} more")
+    return f"{dirty_files} dirty ({', '.join(shown)})"
+
+
 def _relative_time(iso_ts: str) -> str:
     """Format an ISO-8601 UTC timestamp as a relative-time string."""
     try:
@@ -148,7 +169,7 @@ def _artifact_section(
         return ""
     if compact:
         # Labels only — no content. Explicit recovery instruction.
-        lines = [f"## Attached artifacts (compact — content omitted)"]
+        lines = ["## Attached artifacts (compact — content omitted)"]
         for art in artifacts:
             label = art.get("label") or "Untitled"
             lines.append(f"- {label}")
@@ -291,6 +312,10 @@ def _format_active_claims_section(active_claims: list[dict]) -> str:
         if worktree:
             path = _pretty_path(worktree.get("path")) or worktree.get("path") or "?"
             dirty = worktree.get("dirty_files", 0)
+            dirty_summary = _format_dirty_summary(
+                int(dirty or 0),
+                worktree.get("dirty_paths") or [],
+            )
             ahead = worktree.get("ahead", 0)
             behind = worktree.get("behind", 0)
             last_sha = worktree.get("last_commit_sha") or "?"
@@ -298,7 +323,7 @@ def _format_active_claims_section(active_claims: list[dict]) -> str:
             lines.append(f"   · worktree: {path}")
             lines.append(
                 f"   · branch: {worktree.get('branch') or '?'} · "
-                f"{dirty} dirty · ahead {ahead} · behind {behind} · "
+                f"{dirty_summary} · ahead {ahead} · behind {behind} · "
                 f"last commit `{last_sha}` {last_rel}"
             )
         elif worktree_id:

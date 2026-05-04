@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 2.0
+smriti_skill_pack_version: 2.1
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -367,6 +367,49 @@ When NOT to open a worktree:
 Say out loud: **"Opening a worktree for this session."** before the
 first worktree open. **"Binding my claim to worktree <id>."** when
 claiming. **"Closing the worktree."** when done.
+
+The state brief now shows you which files other agents are actively
+editing, not just how many. Each active claim's worktree drift line
+includes the first 3 dirty paths inline:
+
+```
+   · branch: ... · 3 dirty (cli/main.py, backend/app/main.py, +1 more) · ...
+```
+
+This is your file-level coordination signal. Before editing a file in
+your worktree, scan the active-claim drift lines for that path. If
+another agent already has it dirty, hold off or pick a different file.
+The signal is best-effort — it shows the first 3 dirty paths only and
+the cache is 60 seconds — but it catches the common case where two
+agents drift into the same file by accident.
+
+If your shell tool resets the working directory between commands (some
+agent harnesses do this — every Bash call starts in the original cwd
+even after `cd <worktree-path>`), use absolute paths to the worktree
+throughout. Example:
+
+```
+WT=/Users/.../.smriti/worktrees/<space>/<agent-slug>
+cat $WT/some/file.py
+edit $WT/some/file.py
+```
+
+The skill pack used to say "use the worktree path as your cwd" — that
+works for persistent shells, but absolute-path discipline works
+everywhere. Capture the worktree path from `smriti worktree open` once
+and reuse it.
+
+The default branch name when you `smriti worktree open` is
+`smriti/<agent>/<short-uuid>`. That's fine for the system but ugly for
+PR titles. Pass `--branch <name>` to use a custom branch name instead:
+
+```
+smriti worktree open <space> --agent <id> --branch v3-feature-name
+```
+
+Use this when the worktree maps cleanly to a single feature/PR. Stick
+with the default when the worktree is short-lived or when several
+related branches will live in it.
 
 ### 3.7 Check freshness before checkpointing
 
@@ -926,7 +969,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-2.0 — this file is
+*Smriti skill pack version {{primary_mode}}-2.1 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

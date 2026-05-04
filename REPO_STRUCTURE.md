@@ -64,7 +64,7 @@ smriti/
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
 │   ├── alembic/                Database migrations (14 versions)
 │   ├── tests/
-│   │   ├── integration/        API integration tests (122 tests)
+│   │   ├── integration/        API integration tests (124 tests)
 │   │   │   ├── test_api_v4_chat.py
 │   │   │   ├── test_api_v5_lineage.py
 │   │   │   ├── test_multi_branch_state.py
@@ -73,7 +73,7 @@ smriti/
 │   │   │   ├── test_worktrees.py
 │   │   │   ├── test_checkpoint_extract.py
 │   │   │   └── test_delete_endpoints.py
-│   │   └── unit/               Unit tests (125 tests)
+│   │   └── unit/               Unit tests (129 tests)
 │   │       ├── test_config_loader.py
 │   │       ├── test_extractor.py
 │   │       ├── test_golden_outputs.py
@@ -113,10 +113,10 @@ smriti/
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
-│   │       ├── template.md     Single source of truth (v2.0, 15 sections)
+│   │       ├── template.md     Single source of truth (v2.1, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (122 tests)
+│   └── tests/                  CLI + MCP tests (129 tests)
 │       ├── test_branch_close.py
 │       ├── test_init.py
 │       ├── test_mcp_server.py
@@ -164,11 +164,11 @@ make migration      Create a new migration (usage: make migration msg="...")
 
 ---
 
-## Test counts (as of V2 worktree binding)
+## Test counts (as of V3 dirty paths)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 122 | `backend/tests/integration/` |
-| Backend unit | 125 | `backend/tests/unit/` |
-| CLI + MCP | 122 | `cli/tests/` |
-| **Total** | **369** | |
+| Backend integration | 124 | `backend/tests/integration/` |
+| Backend unit | 129 | `backend/tests/unit/` |
+| CLI + MCP | 129 | `cli/tests/` |
+| **Total** | **382** | |

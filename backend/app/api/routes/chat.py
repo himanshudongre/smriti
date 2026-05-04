@@ -372,6 +372,7 @@ class ActiveWorktreeSummary(BaseModel):
     path: str
     branch: str
     dirty_files: int
+    dirty_paths: list[str] = Field(default_factory=list)
     ahead: int
     behind: int
     last_commit_sha: str

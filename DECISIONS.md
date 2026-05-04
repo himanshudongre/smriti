@@ -528,6 +528,12 @@ sees right now. The cost is bounded by the cache (60s TTL per worktree
 in process memory) and the per-probe timeout (3s). Failures fail closed —
 the worktree field becomes `null` rather than crashing the state endpoint.
 
+V3 extends the same probe with `dirty_paths` because the file-level conflict
+signal also lives in git, not the database. Persisting "which files are dirty"
+would have the same stale-truth problem as persisting dirty counts; showing
+the first three `status --porcelain` paths inline keeps the state brief honest
+while staying bounded and cheap.
+
 ### Why the worktree probe cache is 60 seconds, not longer or shorter
 
 The cache exists to keep state-brief reads cheap when called repeatedly

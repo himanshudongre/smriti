@@ -188,6 +188,7 @@ def test_list_includes_probe_data_for_active_worktrees(client, tmp_path, monkeyp
             "path": path,
             "branch": branch,
             "dirty_files": 3,
+            "dirty_paths": ["cli/main.py", "backend/app/api/routes/worktrees.py"],
             "ahead": 1,
             "behind": 0,
             "last_commit_sha": "abc1234",
@@ -203,6 +204,7 @@ def test_list_includes_probe_data_for_active_worktrees(client, tmp_path, monkeyp
     assert data[0]["id"] == created["id"]
     assert data[0]["probe"] == {
         "dirty_files": 3,
+        "dirty_paths": ["cli/main.py", "backend/app/api/routes/worktrees.py"],
         "ahead": 1,
         "behind": 0,
         "last_commit_sha": "abc1234",

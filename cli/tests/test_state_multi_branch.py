@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from smriti_cli import mcp_server
 from smriti_cli.formatters import (
     _format_active_branches_section,
@@ -690,6 +688,51 @@ def test_claims_section_with_worktree_info():
     assert "last commit `def5678` 5 minutes ago" in out
 
 
+def test_render_dirty_paths_inline():
+    from smriti_cli.formatters import _format_active_claims_section
+
+    claims = [_worktree_claim(dirty_files=3, dirty_paths=[
+        "cli/main.py",
+        "backend/app/api/routes/chat.py",
+        "backend/app/services/worktree_probe.py",
+    ])]
+
+    out = _format_active_claims_section(claims)
+
+    assert (
+        "3 dirty (cli/main.py, backend/app/api/routes/chat.py, "
+        "backend/app/services/worktree_probe.py)"
+    ) in out
+
+
+def test_render_dirty_paths_with_overflow():
+    from smriti_cli.formatters import _format_active_claims_section
+
+    claims = [_worktree_claim(dirty_files=5, dirty_paths=[
+        "cli/main.py",
+        "backend/app/api/routes/chat.py",
+        "backend/app/services/worktree_probe.py",
+    ])]
+
+    out = _format_active_claims_section(claims)
+
+    assert (
+        "5 dirty (cli/main.py, backend/app/api/routes/chat.py, "
+        "backend/app/services/worktree_probe.py, +2 more)"
+    ) in out
+
+
+def test_render_dirty_paths_zero():
+    from smriti_cli.formatters import _format_active_claims_section
+
+    claims = [_worktree_claim(dirty_files=0, dirty_paths=[])]
+
+    out = _format_active_claims_section(claims)
+
+    assert "0 dirty · ahead" in out
+    assert "0 dirty (" not in out
+
+
 def test_claims_section_with_worktree_probe_failure():
     """A bound claim with failed probing still renders a useful hint."""
     from smriti_cli.formatters import _format_active_claims_section
@@ -709,3 +752,26 @@ def test_claims_section_with_worktree_probe_failure():
     out = _format_active_claims_section(claims)
 
     assert "probe failed or worktree closed" in out
+
+
+def _worktree_claim(dirty_files: int, dirty_paths: list[str]) -> dict:
+    return {
+        "agent": "codex-local",
+        "branch_name": "v3-dirty-paths-and-skill-pack",
+        "scope": "Implement V3",
+        "worktree_id": "worktree-uuid",
+        "worktree": {
+            "id": "worktree-uuid",
+            "path": "/Users/example/.smriti/worktrees/smriti-dev/codex-local-abc12345",
+            "branch": "v3-dirty-paths-and-skill-pack",
+            "dirty_files": dirty_files,
+            "dirty_paths": dirty_paths,
+            "ahead": 1,
+            "behind": 0,
+            "last_commit_sha": "def5678",
+            "last_commit_relative": "5 minutes ago",
+        },
+        "intent_type": "implement",
+        "base_commit_hash": "abc1234",
+        "claimed_at": datetime.now(timezone.utc).isoformat(),
+    }

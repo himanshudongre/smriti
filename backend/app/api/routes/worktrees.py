@@ -183,6 +183,7 @@ class WorkTreeResponse(BaseModel):
 
 class WorkTreeProbe(BaseModel):
     dirty_files: int
+    dirty_paths: list[str] = Field(default_factory=list)
     ahead: int
     behind: int
     last_commit_sha: str | None = None

@@ -38,6 +38,7 @@ def test_probe_worktree_success(monkeypatch):
         "path": "/tmp/wt",
         "branch": "feature/wt",
         "dirty_files": 2,
+        "dirty_paths": ["file.py", "new.py"],
         "ahead": 2,
         "behind": 1,
         "last_commit_sha": "abc1234",
@@ -108,3 +109,54 @@ def test_probe_worktree_malformed_output_returns_none(monkeypatch):
     monkeypatch.setattr(worktree_probe, "_run_git", fake_run_git)
 
     assert worktree_probe._probe_worktree("wt-bad", "/tmp/wt", "branch") is None
+
+
+def test_parse_dirty_paths_basic():
+    output = "\n".join(
+        [
+            " M cli/main.py",
+            "?? backend/app/main.py",
+            "A  docs/notes.md",
+            " D old.py",
+            "MM changed.py",
+        ]
+    )
+
+    assert worktree_probe._parse_dirty_paths(output) == [
+        "cli/main.py",
+        "backend/app/main.py",
+        "docs/notes.md",
+    ]
+
+
+def test_parse_dirty_paths_handles_renamed():
+    output = "R  old/path.py -> new/path.py\n"
+
+    assert worktree_probe._parse_dirty_paths(output) == [
+        "old/path.py -> new/path.py",
+    ]
+
+
+def test_parse_dirty_paths_empty():
+    assert worktree_probe._parse_dirty_paths("") == []
+
+
+def test_parse_dirty_paths_respects_limit():
+    output = "\n".join(
+        [
+            " M one.py",
+            " M two.py",
+            " M three.py",
+            " M four.py",
+            " M five.py",
+            " M six.py",
+        ]
+    )
+
+    assert worktree_probe._parse_dirty_paths(output, limit=5) == [
+        "one.py",
+        "two.py",
+        "three.py",
+        "four.py",
+        "five.py",
+    ]
