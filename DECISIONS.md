@@ -475,13 +475,83 @@ are live coordination state (active, done, or abandoned with TTL expiry). Agents
 cross-reference at read time via the skill pack's selection logic, not via a
 stored link.
 
+### Why git worktrees as a first-class Smriti primitive
+
+The chaanbeen-web retrospectives documented one catastrophic failure mode of
+multi-agent development on a shared local checkout: cross-agent commit
+pollution. Two agents share one git working tree. Agent A has staged but
+uncommitted files. Agent B runs `git add` + `git commit` for unrelated work.
+Git packages BOTH agents' staged files into one commit. The commit lands on
+main, gets pushed, the migration auto-applies, and prod regresses.
+
+This cannot be fixed with reasoning-state primitives. Claims make work
+visible but do not isolate filesystem state. The standard solution is git
+worktrees: one `.git` directory, multiple working trees, separate staging
+indexes per tree. Smriti exposes worktrees as a first-class primitive
+(`smriti worktree open/list/show/close`) rather than documenting clone-per-
+agent as workflow because:
+
+- A clone-per-agent setup is heavy: ~200MB per clone vs ~50MB per worktree.
+  Ten agents on a 200MB repo is 2GB of clones vs 700MB of worktrees plus
+  one shared `.git` (and `git fetch` updates them all at once).
+- A clone-per-agent setup is brittle: branches don't appear across clones
+  without push/pull. Worktrees share the same `.git`, so any branch any
+  agent creates is immediately visible to every other agent's worktree.
+- A workflow rule ("just clone twice") is unenforceable. A primitive that
+  the skill pack teaches and the state brief surfaces makes the discipline
+  default.
+
+The primitive shipped in V1 (the CRUD endpoints) and was integrated with
+claims and the state brief in V2.
+
+### Why the state-brief enrichment shells out to git per request
+
+Each `GET /spaces/{id}/state` call probes git for every active claim with
+a bound worktree: `status --porcelain` for dirty count, `rev-list
+--left-right --count HEAD...origin/main` for ahead/behind, `log -1` for
+last commit. Three subprocess calls per active claim per state-brief
+request.
+
+Considered: persisting drift state in the database, refreshed by a
+background sweeper or by hooks on the worktree. Rejected because:
+
+- The drift is filesystem state. The database knowing it would be
+  authoritative-but-stale; the only real source of truth is git itself.
+  A persisted view would invariably lag and lie.
+- Background sweepers add infrastructure (a worker, a schedule, failure
+  handling) for a feature that's only useful when read on demand.
+- Hook-based updates (post-commit, post-status) would require installing
+  hooks in every agent's worktree, which is fragile and version-dependent.
+
+Shelling out per request is honest: the state brief reflects what git
+sees right now. The cost is bounded by the cache (60s TTL per worktree
+in process memory) and the per-probe timeout (3s). Failures fail closed —
+the worktree field becomes `null` rather than crashing the state endpoint.
+
+### Why the worktree probe cache is 60 seconds, not longer or shorter
+
+The cache exists to keep state-brief reads cheap when called repeatedly
+within a short window (e.g., an agent re-checks state every minute or
+two during a work session). 60 seconds is long enough to absorb that
+read pattern but short enough that visible drift updates within the
+window an agent would naturally re-check. Longer (5 minutes) would mean
+agents see stale dirty counts for longer than feels right; shorter
+(10 seconds) would defeat the cache's purpose for repeated reads in a
+session.
+
+The cache lives in process memory in the backend. There is no shared
+cache across backend instances because there is currently only one
+backend. If Smriti ever runs multiple backend processes, the cache
+becomes per-process and may need rethinking — but that's a future
+problem.
+
 ### Why claim ↔ worktree binding is optional, not required
 
-Claims still need to work for solo agents, read-only investigations, and small
-non-overlapping work where opening a worktree would add ceremony without
-reducing risk. Making `worktree_id` optional lets Smriti surface filesystem
-isolation when contention risk exists while preserving the lightweight claim
-path for work that does not need a separate git index.
+Claims still need to work for solo agents, read-only investigations, and
+small non-overlapping work where opening a worktree would add ceremony
+without reducing risk. Making `worktree_id` optional lets Smriti surface
+filesystem isolation when contention risk exists while preserving the
+lightweight claim path for work that does not need a separate git index.
 
 ---
 
