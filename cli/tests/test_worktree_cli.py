@@ -126,6 +126,65 @@ def test_cmd_worktree_list_calls_client(capsys: pytest.CaptureFixture[str]):
     client.list_worktrees.assert_called_once_with("space-uuid", include_closed=False)
 
 
+def test_list_renders_probe_data(capsys: pytest.CaptureFixture[str]):
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    client.list_worktrees.return_value = [
+        _worktree_dict(
+            probe={
+                "dirty_files": 3,
+                "ahead": 1,
+                "behind": 0,
+                "last_commit_sha": "abc1234",
+                "last_commit_relative": "5 minutes ago",
+            },
+        )
+    ]
+    args = argparse.Namespace(space="my-project", include_closed=False, json=False)
+
+    cli_main.cmd_worktree_list(client, args)
+
+    out = capsys.readouterr().out
+    assert "DIRTY" in out
+    assert "AHEAD" in out
+    assert "3" in out
+    assert "+1" in out
+
+
+def test_list_renders_dash_when_probe_null(capsys: pytest.CaptureFixture[str]):
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    client.list_worktrees.return_value = [_worktree_dict(probe=None)]
+    args = argparse.Namespace(space="my-project", include_closed=False, json=False)
+
+    cli_main.cmd_worktree_list(client, args)
+
+    out = capsys.readouterr().out
+    assert "—" in out
+
+
+def test_list_renders_negative_ahead_for_behind_only(capsys: pytest.CaptureFixture[str]):
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    client.list_worktrees.return_value = [
+        _worktree_dict(
+            probe={
+                "dirty_files": 0,
+                "ahead": 0,
+                "behind": 2,
+                "last_commit_sha": "abc1234",
+                "last_commit_relative": "5 minutes ago",
+            },
+        )
+    ]
+    args = argparse.Namespace(space="my-project", include_closed=False, json=False)
+
+    cli_main.cmd_worktree_list(client, args)
+
+    out = capsys.readouterr().out
+    assert "-2" in out
+
+
 def test_cmd_worktree_show_calls_client(capsys: pytest.CaptureFixture[str]):
     client = MagicMock(spec=SmritiClient)
     client.get_worktree.return_value = _worktree_dict()

@@ -59,6 +59,18 @@ def test_mcp_worktree_list_calls_client(mock_client):
     )
 
 
+def test_mcp_worktree_list_renders_probe_data(mock_client):
+    mock_client.resolve_space.return_value = {"id": "space-uuid", "name": "my-project"}
+    mock_client.list_worktrees.return_value = [
+        _worktree_dict(probe={"dirty_files": 3, "ahead": 0, "behind": 2})
+    ]
+
+    result = mcp_server.smriti_worktree_list(space="my-project")
+
+    assert "3" in result
+    assert "-2" in result
+
+
 def test_mcp_worktree_show_calls_client(mock_client):
     mock_client.get_worktree.return_value = _worktree_dict()
 

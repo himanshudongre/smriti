@@ -29,6 +29,8 @@ from .formatters import (
     format_review,
     format_space_list,
     format_state_brief,
+    format_worktree_ahead,
+    format_worktree_dirty,
 )
 
 
@@ -645,8 +647,8 @@ def _format_worktree_list(worktrees: list[dict]) -> str:
             f"{short_id} | "
             f"{worktree.get('agent', '')} | "
             f"{worktree.get('branch_name', '')} | "
-            "— | "
-            "— | "
+            f"{format_worktree_dirty(worktree)} | "
+            f"{format_worktree_ahead(worktree)} | "
             f"{worktree.get('path', '')} |"
         )
     return "\n".join(lines)
@@ -700,9 +702,9 @@ def smriti_worktree_open(
 def smriti_worktree_list(space: str, include_closed: bool = False) -> str:
     """List worktrees for a Smriti space.
 
-    Use this to see active agent worktree directories. Dirty/ahead columns
-    are placeholders in V1 and always render as unknown until a future git
-    status enrichment pass lands.
+    Use this to see active agent worktree directories. Dirty shows dirty
+    file count when available. Ahead shows +N when ahead of origin/main,
+    -N when behind, 0 when even, or — when unknown.
 
     Args:
         space: Space name or UUID.

@@ -26,6 +26,32 @@ def _pretty_path(path: str | None) -> str | None:
     return path
 
 
+def format_worktree_dirty(worktree: dict) -> str:
+    """Render the worktree dirty-file count, preserving dash on unknown rows."""
+    if worktree.get("status") == "closed":
+        return "—"
+    probe = worktree.get("probe")
+    if not probe:
+        return "—"
+    return str(probe.get("dirty_files", "—"))
+
+
+def format_worktree_ahead(worktree: dict) -> str:
+    """Render compact ahead/behind drift for the existing AHEAD column."""
+    if worktree.get("status") == "closed":
+        return "—"
+    probe = worktree.get("probe")
+    if not probe:
+        return "—"
+    ahead = int(probe.get("ahead") or 0)
+    behind = int(probe.get("behind") or 0)
+    if ahead > 0:
+        return f"+{ahead}"
+    if behind > 0:
+        return f"-{behind}"
+    return "0"
+
+
 def _relative_time(iso_ts: str) -> str:
     """Format an ISO-8601 UTC timestamp as a relative-time string."""
     try:

@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import CommitModel, RepoModel, WorkTree
+from app.services.worktree_probe import _probe_worktree
 
 router = APIRouter(prefix="/worktrees", tags=["worktrees-v5"])
 
@@ -180,6 +181,18 @@ class WorkTreeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WorkTreeProbe(BaseModel):
+    dirty_files: int
+    ahead: int
+    behind: int
+    last_commit_sha: str | None = None
+    last_commit_relative: str | None = None
+
+
+class WorkTreeListEntry(WorkTreeResponse):
+    probe: WorkTreeProbe | None = None
+
+
 # -- Endpoints ----------------------------------------------------------------
 
 
@@ -249,7 +262,7 @@ def create_worktree(
     return worktree
 
 
-@router.get("", response_model=list[WorkTreeResponse])
+@router.get("", response_model=list[WorkTreeListEntry])
 def list_worktrees(
     space_id: uuid.UUID = Query(..., description="Space UUID"),
     include_closed: bool = Query(False, description="Include closed worktrees"),
@@ -264,7 +277,23 @@ def list_worktrees(
     )
     if not include_closed:
         stmt = stmt.where(WorkTree.status == "active")
-    return list(db.scalars(stmt).all())
+    entries = []
+    for worktree in db.scalars(stmt).all():
+        probe = None
+        if worktree.status == "active":
+            probed = _probe_worktree(
+                str(worktree.id),
+                worktree.path,
+                worktree.branch_name,
+            )
+            if probed:
+                probe = WorkTreeProbe(**probed)
+        entries.append(
+            WorkTreeListEntry.model_validate(worktree).model_copy(
+                update={"probe": probe},
+            )
+        )
+    return entries
 
 
 @router.get("/{worktree_id}", response_model=WorkTreeResponse)

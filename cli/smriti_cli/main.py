@@ -62,6 +62,8 @@ from .formatters import (
     format_review,
     format_space_list,
     format_state_brief,
+    format_worktree_ahead,
+    format_worktree_dirty,
 )
 
 
@@ -832,8 +834,8 @@ def _print_worktree_table(worktrees: list[dict]) -> None:
             _short_id(str(w.get("id", ""))),
             str(w.get("agent", "")),
             str(w.get("branch_name", "")),
-            "—",
-            "—",
+            format_worktree_dirty(w),
+            format_worktree_ahead(w),
             _display_path(str(w.get("path", ""))),
         ]
         for w in worktrees
@@ -1262,7 +1264,15 @@ def _build_parser() -> argparse.ArgumentParser:
     wt_open.add_argument("--json", action="store_true")
     wt_open.set_defaults(func=cmd_worktree_open)
 
-    wt_list = worktree_sub.add_parser("list", help="List worktrees for a space")
+    wt_list = worktree_sub.add_parser(
+        "list",
+        help="List worktrees for a space",
+        description=(
+            "List worktrees for a space. DIRTY shows dirty file count when "
+            "available. AHEAD shows +N when ahead of origin/main, -N when "
+            "behind, 0 when even, or — when unknown."
+        ),
+    )
     wt_list.add_argument("space", help="Space name or UUID")
     wt_list.add_argument("--include-closed", action="store_true", help="Include closed worktrees")
     wt_list.add_argument("--json", action="store_true")

@@ -173,6 +173,66 @@ def test_list_show_and_close_clean_worktree(client, tmp_path):
     assert len(all_r.json()) == 1
 
 
+def test_list_includes_probe_data_for_active_worktrees(client, tmp_path, monkeypatch):
+    git_repo = _init_git_repo(tmp_path)
+    space_id = _create_project_with_root(client, git_repo)
+    target = tmp_path / "probe-worktree"
+    created = _create_worktree(client, space_id, base_path=str(target)).json()
+
+    def fake_probe(worktree_id, path, branch):
+        assert worktree_id == created["id"]
+        assert path == str(target.resolve())
+        assert branch == created["branch_name"]
+        return {
+            "id": worktree_id,
+            "path": path,
+            "branch": branch,
+            "dirty_files": 3,
+            "ahead": 1,
+            "behind": 0,
+            "last_commit_sha": "abc1234",
+            "last_commit_relative": "5 minutes ago",
+        }
+
+    monkeypatch.setattr(worktrees, "_probe_worktree", fake_probe)
+
+    r = client.get(f"/api/v5/worktrees?space_id={space_id}")
+
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data[0]["id"] == created["id"]
+    assert data[0]["probe"] == {
+        "dirty_files": 3,
+        "ahead": 1,
+        "behind": 0,
+        "last_commit_sha": "abc1234",
+        "last_commit_relative": "5 minutes ago",
+    }
+
+
+def test_list_probe_null_for_closed_worktrees(client, tmp_path, monkeypatch):
+    git_repo = _init_git_repo(tmp_path)
+    space_id = _create_project_with_root(client, git_repo)
+    created = _create_worktree(
+        client,
+        space_id,
+        base_path=str(tmp_path / "closed-probe"),
+    ).json()
+    close_r = client.delete(f"/api/v5/worktrees/{created['id']}")
+    assert close_r.status_code == 200, close_r.text
+
+    def fail_probe(worktree_id, path, branch):
+        raise AssertionError("closed worktrees should not be probed")
+
+    monkeypatch.setattr(worktrees, "_probe_worktree", fail_probe)
+
+    r = client.get(f"/api/v5/worktrees?space_id={space_id}&include_closed=true")
+
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["id"] == created["id"]
+    assert r.json()[0]["probe"] is None
+
+
 def test_show_nonexistent_worktree_returns_404(client):
     r = client.get(f"/api/v5/worktrees/{uuid.uuid4()}")
     assert r.status_code == 404
