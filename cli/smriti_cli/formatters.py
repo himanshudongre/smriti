@@ -756,6 +756,7 @@ def format_doctor(report: dict) -> str:
     """Readable diagnostics for backend/runtime consistency."""
     backend = report.get("backend") or {}
     local = report.get("local") or {}
+    cli = report.get("cli") or {}
     checks = report.get("checks") or {}
     hints = report.get("hints") or []
 
@@ -769,6 +770,46 @@ def format_doctor(report: dict) -> str:
         parts.append(f"Backend git_sha: `{backend.get('git_sha') or 'unknown'}`")
     else:
         parts.append(f"Backend error: {backend.get('error') or 'unknown'}")
+    parts.append("")
+
+    parts.append("## Runtime")
+    database = backend.get("database") or {}
+    if database:
+        mode = database.get("mode") or "unknown"
+        parts.append(f"Database mode: `{mode}`")
+        if mode == "local":
+            parts.append(f"Local DB path: `{database.get('local_db_path') or 'unknown'}`")
+        elif mode == "postgres":
+            configured = database.get("database_url_set")
+            configured_label = "yes" if configured else "using default"
+            parts.append(f"Postgres DATABASE_URL set: {configured_label}")
+        if database.get("url_scheme"):
+            parts.append(f"Database URL scheme: `{database.get('url_scheme')}`")
+    else:
+        parts.append("Database mode: unknown")
+
+    providers = backend.get("providers") or {}
+    bg = providers.get("background_intelligence") if providers else None
+    if bg:
+        status = "ready" if bg.get("configured") else "mock/disabled"
+        provider = bg.get("provider") or "unknown"
+        model = bg.get("model") or "unknown"
+        parts.append(f"Background intelligence: {status} (`{provider}` / `{model}`)")
+    else:
+        parts.append("Background intelligence: unknown")
+    parts.append("")
+
+    parts.append("## CLI")
+    parts.append(f"Executable: `{cli.get('executable') or 'unknown'}`")
+    parts.append(f"`smriti` on PATH: `{cli.get('path_entry') or 'not found'}`")
+    parts.append(f"Package version: `{cli.get('package_version') or 'unknown'}`")
+    path_match = cli.get("path_matches_executable")
+    if path_match is True:
+        parts.append("PATH matches executable: yes")
+    elif path_match is False:
+        parts.append("PATH matches executable: no")
+    else:
+        parts.append("PATH matches executable: unknown")
     parts.append("")
 
     parts.append("## Local repo")
@@ -786,6 +827,8 @@ def format_doctor(report: dict) -> str:
         parts.append("- missing capabilities: " + ", ".join(f"`{c}`" for c in missing))
     else:
         parts.append("- missing capabilities: none")
+    parts.append(f"- CLI path: {checks.get('cli_path') or 'unknown'}")
+    parts.append(f"- background provider: {checks.get('background_provider') or 'unknown'}")
     parts.append("")
 
     parts.append("## Capabilities")

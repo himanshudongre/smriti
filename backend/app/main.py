@@ -2,11 +2,27 @@ import logging
 import pathlib
 import re
 import subprocess
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+
+
+def _database_runtime_status() -> dict:
+    """Return safe-to-expose database mode metadata for diagnostics."""
+    resolved_url = settings.resolved_database_url
+    status = {
+        "mode": settings.db_mode,
+        "url_scheme": urlsplit(resolved_url).scheme or "unknown",
+    }
+    if settings.db_mode == "local":
+        status["local_db_path"] = str(settings.local_db_path)
+    else:
+        # Do not expose DATABASE_URL: it may contain credentials.
+        status["database_url_set"] = bool(settings.database_url.strip())
+    return status
 
 
 def _resolve_git_sha() -> str:
@@ -99,20 +115,27 @@ def create_app() -> FastAPI:
         "compact_state",      # --compact mode on state brief
         "worktrees",          # /api/v5/worktrees
         "worktree_binding",   # claims can bind to worktrees + state drift summary
+        "activation_health",  # /health includes DB mode + provider confidence
     ]
 
     @app.get("/health")
     async def health_check():
+        from app.config_loader import providers_status
+
         return {
             "status": "ok",
             "git_sha": _git_sha,
             "capabilities": _capabilities,
+            "database": _database_runtime_status(),
+            "providers": providers_status(),
         }
 
     @app.on_event("startup")
     async def startup_event():
-        from app.config_loader import providers_status
         import logging
+
+        from app.config_loader import providers_status
+
         logger = logging.getLogger("smriti.startup")
 
         status = providers_status()

@@ -51,8 +51,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+from importlib import metadata
+from pathlib import Path
 from typing import Any
 
 from .client import SmritiClient, SmritiError
@@ -115,6 +118,7 @@ EXPECTED_HEALTH_CAPABILITIES = {
     "compact_state",
     "worktrees",
     "worktree_binding",
+    "activation_health",
 }
 
 
@@ -142,6 +146,55 @@ def _git_sha_matches(backend_sha: str | None, local_sha: str | None) -> bool | N
     return local.startswith(backend) or backend.startswith(local)
 
 
+def _resolve_executable_path(value: str | None) -> str | None:
+    """Resolve a command path for diagnostics without requiring it to exist."""
+    if not value:
+        return None
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        found = shutil.which(value)
+        if found:
+            candidate = Path(found)
+    try:
+        return str(candidate.expanduser().resolve())
+    except OSError:
+        return str(candidate)
+
+
+def _package_version() -> str | None:
+    try:
+        return metadata.version("smriti-cli")
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def _build_cli_info() -> dict:
+    """Return local CLI-source details so stale PATH wrappers are visible."""
+    invoked = _resolve_executable_path(sys.argv[0])
+    path_entry = _resolve_executable_path(shutil.which("smriti"))
+    match: bool | None
+    if invoked and path_entry:
+        match = invoked == path_entry
+    elif invoked or path_entry:
+        match = False
+    else:
+        match = None
+
+    return {
+        "executable": invoked,
+        "path_entry": path_entry,
+        "path_matches_executable": match,
+        "package_version": _package_version(),
+    }
+
+
+def _background_provider_check(providers: dict) -> str:
+    bg = providers.get("background_intelligence") if providers else None
+    if not bg:
+        return "unknown"
+    return "ready" if bg.get("configured") else "mock_or_disabled"
+
+
 def _build_doctor_report(client: SmritiClient) -> dict:
     """Build a small diagnostics report without attempting repairs."""
     local_sha = _git_output("rev-parse", "HEAD")
@@ -165,9 +218,12 @@ def _build_doctor_report(client: SmritiClient) -> dict:
             "git_sha_short": local_short,
             "branch": local_branch,
         },
+        "cli": _build_cli_info(),
         "checks": {
             "runtime_match": "unknown",
             "missing_capabilities": None,
+            "cli_path": "unknown",
+            "background_provider": "unknown",
         },
         "hints": [],
     }
@@ -177,12 +233,23 @@ def _build_doctor_report(client: SmritiClient) -> dict:
     except SmritiError as e:
         report["backend"]["error"] = str(e)
         report["hints"].append(
-            "Backend is not reachable; start Smriti and rerun `smriti doctor`."
+            "Backend is not reachable; start Smriti with `make dev-local` "
+            "for solo/local mode or `make dev-postgres` for shared/team mode, "
+            "then rerun `smriti doctor`."
         )
+        cli_info = report.get("cli") or {}
+        if cli_info.get("path_matches_executable") is False:
+            report["checks"]["cli_path"] = "mismatch"
+            report["hints"].append(
+                "The `smriti` on PATH differs from this doctor executable. "
+                "Activate the intended environment or update PATH before daily use."
+            )
         return report
 
     capabilities = sorted(health.get("capabilities") or [])
     backend_sha = health.get("git_sha")
+    database = health.get("database") or {}
+    providers = health.get("providers") or {}
     missing = sorted(EXPECTED_HEALTH_CAPABILITIES - set(capabilities))
     match = _git_sha_matches(backend_sha, local_sha)
 
@@ -191,9 +258,25 @@ def _build_doctor_report(client: SmritiClient) -> dict:
         "status": health.get("status"),
         "git_sha": backend_sha,
         "capabilities": capabilities,
+        "database": database,
+        "providers": providers,
         "error": None,
     })
     report["checks"]["missing_capabilities"] = missing
+    report["checks"]["background_provider"] = _background_provider_check(providers)
+
+    cli_info = report.get("cli") or {}
+    cli_match = cli_info.get("path_matches_executable")
+    if cli_match is True:
+        report["checks"]["cli_path"] = "ok"
+    elif cli_match is False:
+        report["checks"]["cli_path"] = "mismatch"
+        report["hints"].append(
+            "The `smriti` on PATH differs from this doctor executable. "
+            "Activate the intended environment or update PATH before daily use."
+        )
+    else:
+        report["checks"]["cli_path"] = "unknown"
 
     if match is True:
         report["checks"]["runtime_match"] = "ok"
@@ -218,6 +301,24 @@ def _build_doctor_report(client: SmritiClient) -> dict:
             "Backend is missing capabilities expected by this CLI: "
             + ", ".join(missing)
             + ". Pull/restart the backend if you expected newer behavior."
+        )
+    if not database:
+        report["hints"].append(
+            "Backend /health did not report database mode; restart after updating "
+            "the backend if you expected activation diagnostics."
+        )
+
+    bg = providers.get("background_intelligence") if providers else None
+    if not bg:
+        report["hints"].append(
+            "Backend /health did not report provider status; provider/mock "
+            "confidence is unknown."
+        )
+    elif not bg.get("configured"):
+        provider = bg.get("provider") or "background"
+        report["hints"].append(
+            f"Background intelligence provider `{provider}` is not configured; "
+            "checkpoint extract/review flows may use mock output or fail."
         )
 
     return report
