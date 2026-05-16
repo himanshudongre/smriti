@@ -6,6 +6,7 @@ Commands for agent and programmatic use:
     smriti space create <name> [--description] [--project-root <path>] [--no-project-root]
     smriti space set-project-root <space> <path>
     smriti space delete <space> [-y]
+    smriti doctor
     smriti state <space> [--preview]
     smriti fork <checkpoint-id> [--branch <name>]
     smriti restore <checkpoint-id>
@@ -49,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from typing import Any
 
@@ -57,6 +59,7 @@ from .formatters import (
     format_checkpoint,
     format_commit_list,
     format_compare_result,
+    format_doctor,
     format_fork_result,
     format_metrics,
     format_restore_brief,
@@ -98,6 +101,124 @@ def _confirm(preview: str, yes_flag: bool) -> bool:
     except EOFError:
         return False
     return resp == "yes"
+
+
+EXPECTED_HEALTH_CAPABILITIES = {
+    "claims",
+    "structured_tasks",
+    "task_ids",
+    "checkpoint_notes",
+    "branch_disposition",
+    "freshness",
+    "compact_state",
+    "worktrees",
+    "worktree_binding",
+}
+
+
+def _git_output(*args: str) -> str | None:
+    """Return trimmed git output for diagnostics, or None outside a git repo."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def _git_sha_matches(backend_sha: str | None, local_sha: str | None) -> bool | None:
+    if not backend_sha or not local_sha:
+        return None
+    backend = backend_sha.strip()
+    local = local_sha.strip()
+    if not backend or not local:
+        return None
+    return local.startswith(backend) or backend.startswith(local)
+
+
+def _build_doctor_report(client: SmritiClient) -> dict:
+    """Build a small diagnostics report without attempting repairs."""
+    local_sha = _git_output("rev-parse", "HEAD")
+    local_branch = (
+        _git_output("branch", "--show-current")
+        or _git_output("rev-parse", "--abbrev-ref", "HEAD")
+    )
+    local_short = _git_output("rev-parse", "--short", "HEAD")
+
+    report = {
+        "api_url": client.base_url,
+        "backend": {
+            "reachable": False,
+            "status": None,
+            "git_sha": None,
+            "capabilities": [],
+            "error": None,
+        },
+        "local": {
+            "git_sha": local_sha,
+            "git_sha_short": local_short,
+            "branch": local_branch,
+        },
+        "checks": {
+            "runtime_match": "unknown",
+            "missing_capabilities": None,
+        },
+        "hints": [],
+    }
+
+    try:
+        health = client.get_health()
+    except SmritiError as e:
+        report["backend"]["error"] = str(e)
+        report["hints"].append(
+            "Backend is not reachable; start Smriti and rerun `smriti doctor`."
+        )
+        return report
+
+    capabilities = sorted(health.get("capabilities") or [])
+    backend_sha = health.get("git_sha")
+    missing = sorted(EXPECTED_HEALTH_CAPABILITIES - set(capabilities))
+    match = _git_sha_matches(backend_sha, local_sha)
+
+    report["backend"].update({
+        "reachable": True,
+        "status": health.get("status"),
+        "git_sha": backend_sha,
+        "capabilities": capabilities,
+        "error": None,
+    })
+    report["checks"]["missing_capabilities"] = missing
+
+    if match is True:
+        report["checks"]["runtime_match"] = "ok"
+    elif match is False:
+        report["checks"]["runtime_match"] = "mismatch"
+        report["hints"].append(
+            "Backend git_sha differs from local HEAD; restart the backend "
+            "after syncing code, or check out the commit the backend is running."
+        )
+    else:
+        report["checks"]["runtime_match"] = "unknown"
+        report["hints"].append(
+            "Could not compare backend git_sha with local HEAD."
+        )
+
+    if health.get("status") != "ok":
+        report["hints"].append(
+            f"Backend status is `{health.get('status') or 'unknown'}` instead of `ok`."
+        )
+    if missing:
+        report["hints"].append(
+            "Backend is missing capabilities expected by this CLI: "
+            + ", ".join(missing)
+            + ". Pull/restart the backend if you expected newer behavior."
+        )
+
+    return report
 
 
 _USAGE_HINT = (
@@ -151,6 +272,15 @@ def _read_checkpoint_json(args: argparse.Namespace) -> dict:
 
 
 # ── command handlers ─────────────────────────────────────────────────────
+
+
+def cmd_doctor(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Print narrow backend/runtime diagnostics."""
+    report = _build_doctor_report(client)
+    if args.json:
+        _print_json(report)
+    else:
+        print(format_doctor(report), end="")
 
 
 def cmd_space_list(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -985,6 +1115,14 @@ def _build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--description", help="Space description", default="")
     init_parser.add_argument("--json", action="store_true")
     init_parser.set_defaults(func=cmd_init)
+
+    # doctor — local/runtime diagnostics
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Diagnose backend reachability and runtime/code freshness",
+    )
+    doctor_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    doctor_parser.set_defaults(func=cmd_doctor)
 
     # space
     space_parser = subparsers.add_parser("space", help="Manage Smriti spaces (projects)")

@@ -78,6 +78,12 @@ class SmritiClient:
             return None
         return resp.json()
 
+    # ── health ─────────────────────────────────────────────────────────────
+
+    def get_health(self) -> dict:
+        """GET /health — backend status, git SHA, and capability manifest."""
+        return self._request("GET", "/health")
+
     # ── spaces (V2) ────────────────────────────────────────────────────────
 
     def list_spaces(self) -> list[dict]:

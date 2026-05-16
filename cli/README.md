@@ -126,6 +126,7 @@ The installer is version-aware: it refuses to overwrite a destination whose inst
 
 ```
 smriti init <space> [--description "..."]             # one-step agent onboarding
+smriti doctor                                          # backend/runtime diagnostics
 
 smriti space list
 smriti space create <name> [--description "..."]

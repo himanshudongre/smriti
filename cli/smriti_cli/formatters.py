@@ -531,6 +531,61 @@ def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
 
+def format_doctor(report: dict) -> str:
+    """Readable diagnostics for backend/runtime consistency."""
+    backend = report.get("backend") or {}
+    local = report.get("local") or {}
+    checks = report.get("checks") or {}
+    hints = report.get("hints") or []
+
+    parts: list[str] = ["# Smriti Doctor\n"]
+
+    reachable = bool(backend.get("reachable"))
+    parts.append(f"Backend: {'reachable' if reachable else 'unreachable'}")
+    parts.append(f"API URL: `{report.get('api_url', '?')}`")
+    if reachable:
+        parts.append(f"Backend status: {backend.get('status') or 'unknown'}")
+        parts.append(f"Backend git_sha: `{backend.get('git_sha') or 'unknown'}`")
+    else:
+        parts.append(f"Backend error: {backend.get('error') or 'unknown'}")
+    parts.append("")
+
+    parts.append("## Local repo")
+    parts.append(f"Branch: `{local.get('branch') or 'unknown'}`")
+    parts.append(f"HEAD: `{local.get('git_sha_short') or local.get('git_sha') or 'unknown'}`")
+    parts.append("")
+
+    parts.append("## Checks")
+    runtime_match = checks.get("runtime_match") or "unknown"
+    parts.append(f"- runtime match: {runtime_match}")
+    missing = checks.get("missing_capabilities")
+    if missing is None:
+        parts.append("- missing capabilities: unknown (backend unreachable)")
+    elif missing:
+        parts.append("- missing capabilities: " + ", ".join(f"`{c}`" for c in missing))
+    else:
+        parts.append("- missing capabilities: none")
+    parts.append("")
+
+    parts.append("## Capabilities")
+    capabilities = backend.get("capabilities") or []
+    if capabilities:
+        for capability in capabilities:
+            parts.append(f"- {capability}")
+    else:
+        parts.append("- none advertised")
+    parts.append("")
+
+    parts.append("## Hints")
+    if hints:
+        for hint in hints:
+            parts.append(f"- {hint}")
+    else:
+        parts.append("- none")
+
+    return "\n".join(parts).rstrip() + "\n"
+
+
 def format_metrics(data: dict) -> str:
     """Readable one-screen project metrics."""
     parts: list[str] = []
