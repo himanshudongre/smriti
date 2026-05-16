@@ -8,6 +8,7 @@ Commands for agent and programmatic use:
     smriti space delete <space> [-y]
     smriti doctor
     smriti state <space> [--preview]
+    smriti current <space>
     smriti fork <checkpoint-id> [--branch <name>]
     smriti restore <checkpoint-id>
     smriti compare <checkpoint-a> <checkpoint-b>
@@ -62,6 +63,7 @@ from .formatters import (
     format_doctor,
     format_fork_result,
     format_metrics,
+    format_project_current,
     format_restore_brief,
     format_review,
     format_space_list,
@@ -425,6 +427,175 @@ def _print_no_checkpoints(space: dict, args: argparse.Namespace) -> None:
         print(f"Project root: {space['project_root']}")
     print()
     print("No checkpoints yet. Create one with `smriti checkpoint create`.")
+
+
+def _current_task_item(raw: Any) -> dict:
+    if isinstance(raw, str):
+        return {"text": raw}
+    if isinstance(raw, dict):
+        return raw
+    return {"text": str(raw)}
+
+
+def _current_open_tasks_by_intent(tasks: list) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for raw in tasks:
+        task = _current_task_item(raw)
+        status = task.get("status", "open")
+        if status and status != "open":
+            continue
+        intent = task.get("intent_hint") or task.get("intent_type") or "other"
+        grouped.setdefault(intent, []).append(task)
+    return grouped
+
+
+def _current_milestones(commits: list[dict], limit: int = 5) -> list[dict]:
+    milestones: list[dict] = []
+    for commit in commits:
+        metadata = commit.get("metadata") or commit.get("metadata_") or {}
+        notes = metadata.get("notes") or []
+        for note in notes:
+            if note.get("kind") != "milestone":
+                continue
+            milestones.append({
+                "commit_hash": commit.get("commit_hash"),
+                "message": commit.get("message"),
+                "note": note.get("text") or commit.get("message"),
+                "author": note.get("author") or commit.get("author_agent"),
+                "created_at": note.get("created_at") or commit.get("created_at"),
+            })
+            if len(milestones) >= limit:
+                return milestones
+
+        # Lineage/current endpoints may expose only note kind summaries. When
+        # the note text is unavailable, still surface the checkpoint as a
+        # milestone so the current-state view does not hide the marker.
+        note_kinds = commit.get("note_kinds") or []
+        if "milestone" in note_kinds:
+            milestones.append({
+                "commit_hash": commit.get("commit_hash"),
+                "message": commit.get("message"),
+                "note": commit.get("message"),
+                "author_agent": commit.get("author_agent"),
+                "created_at": commit.get("created_at"),
+            })
+            if len(milestones) >= limit:
+                return milestones
+    return milestones
+
+
+def _current_activity(commits: list[dict], limit: int = 5) -> list[dict]:
+    return [
+        {
+            "id": c.get("id"),
+            "commit_hash": c.get("commit_hash"),
+            "message": c.get("message"),
+            "author_agent": c.get("author_agent"),
+            "branch_name": c.get("branch_name"),
+            "created_at": c.get("created_at"),
+        }
+        for c in commits[:limit]
+    ]
+
+
+def _build_current_payload_from_existing(client: SmritiClient, space: dict) -> dict:
+    """Compose the Project Current State contract from shipped endpoints.
+
+    This keeps the CLI usable while the backend-owned compact endpoint rolls
+    out in parallel. Once the endpoint is present, `cmd_current` will prefer
+    it and skip this compatibility path.
+    """
+    space_id = space["id"]
+    state = client.get_space_state(space_id)
+    commits = client.list_commits(space_id)
+    try:
+        metrics = client.get_space_metrics(space_id)
+    except SmritiError as e:
+        if e.status not in (404, 405):
+            raise
+        metrics = {}
+
+    commit = state.get("commit") or {}
+    active_work = state.get("active_claims") or []
+    active_branches = state.get("active_branches") or []
+    open_tasks = _current_open_tasks_by_intent(commit.get("tasks") or [])
+    open_task_count = sum(len(items) for items in open_tasks.values())
+    milestones = _current_milestones(commits)
+
+    attention: list[dict] = []
+    if not commit:
+        attention.append({
+            "severity": "setup",
+            "message": "No checkpoints yet; create the first checkpoint to establish project direction.",
+        })
+    divergence = state.get("divergence") or {}
+    if divergence.get("pairs"):
+        attention.append({
+            "severity": "risk",
+            "message": "Active branch divergence detected; run `smriti compare` before reconciling.",
+        })
+    if active_branches:
+        attention.append({
+            "severity": "branch",
+            "message": f"{len(active_branches)} active branch(es) need disposition when resolved.",
+        })
+    open_questions = commit.get("open_questions") or []
+    if open_questions:
+        attention.append({
+            "severity": "question",
+            "message": f"{len(open_questions)} open question(s) on the latest checkpoint.",
+        })
+    if open_task_count > 0 and not active_work:
+        attention.append({
+            "severity": "next",
+            "message": f"{open_task_count} open task(s) are available with no active claim.",
+        })
+
+    coord = metrics.get("coordination") or {}
+    state_quality = metrics.get("state_quality") or {}
+    branch_metrics = metrics.get("branches") or {}
+    counts = {
+        "checkpoints": coord.get("total_checkpoints", len(commits)),
+        "active_claims": len(active_work),
+        "active_branches": branch_metrics.get("active", len(active_branches)),
+        "open_tasks": open_task_count,
+        "milestones": state_quality.get("milestone_count", len(milestones)),
+        "attention": len(attention),
+    }
+
+    return {
+        "space_id": space_id,
+        "name": space.get("name"),
+        "description": space.get("description") or "",
+        "current_direction": (
+            commit.get("objective")
+            or commit.get("summary")
+            or commit.get("message")
+            or ""
+        ),
+        "counts": counts,
+        "attention": attention,
+        "active_work": active_work,
+        "recent_milestones": milestones,
+        "open_tasks_by_intent": open_tasks,
+        "recent_activity": _current_activity(commits),
+    }
+
+
+def cmd_current(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Print the compact Project Current State surface for a space."""
+    space = client.resolve_space(args.space)
+    try:
+        data = client.get_current_state(space["id"])
+    except SmritiError as e:
+        if e.status not in (404, 405):
+            raise
+        data = _build_current_payload_from_existing(client, space)
+
+    if args.json:
+        _print_json(data)
+    else:
+        print(format_project_current(data), end="")
 
 
 def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -1228,6 +1399,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     state_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     state_parser.set_defaults(func=cmd_state)
+
+    # current — compact founder/agent current-state surface
+    current_parser = subparsers.add_parser(
+        "current",
+        help="Print the compact Project Current State surface for a space",
+    )
+    current_parser.add_argument("space", help="Space name or UUID")
+    current_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    current_parser.set_defaults(func=cmd_current)
 
     # checkpoint
     cp_parser = subparsers.add_parser("checkpoint", help="Manage checkpoints")

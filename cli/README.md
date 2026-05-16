@@ -136,6 +136,8 @@ smriti state <space>                                     # multi-branch continua
 smriti state <space> --preview                           # truncate artifacts to a short preview
 smriti state <space> --main-only                         # legacy single-HEAD path (pre-V4 behaviour)
 smriti state <space> --json                              # structured output
+smriti current <space>                                   # compact Project Current State surface
+smriti current <space> --json                            # structured current-state payload
 
 smriti claim create <space> --agent <name> --scope "..." # declare work intent before starting
 smriti claim create <space> --agent <name> --scope "..." --intent-type review

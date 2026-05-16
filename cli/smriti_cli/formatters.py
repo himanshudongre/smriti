@@ -100,6 +100,13 @@ def _short_hash(commit_hash: str | None) -> str:
     return commit_hash[:7] if commit_hash else "?"
 
 
+def _truncate_text(text: str, limit: int = 180) -> str:
+    """Keep compact surfaces compact without hiding that content exists."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
 def _list_section(heading: str, items: list[str]) -> str:
     if not items:
         return ""
@@ -476,6 +483,220 @@ def format_state_brief(
             result += _format_compact_stats_footer(None, compact=False)
 
     return result
+
+
+def _direction_text(value) -> str:
+    """Normalize current_direction to a readable paragraph.
+
+    The backend contract may keep `current_direction` as a string or a richer
+    object. Keep the formatter tolerant so the CLI can ship in parallel with
+    the backend implementation.
+    """
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("text", "summary", "objective", "message"):
+            raw = value.get(key)
+            if isinstance(raw, str) and raw.strip():
+                return raw.strip()
+    return ""
+
+
+def _format_current_counts(counts: dict | None) -> str:
+    if not counts:
+        return "## Counts\nNo count data available.\n"
+
+    labels = {
+        "checkpoints": "checkpoints",
+        "active_claims": "active claims",
+        "active_branches": "active branches",
+        "open_tasks": "open tasks",
+        "milestones": "milestones",
+        "attention": "attention signals",
+    }
+    ordered = [
+        "checkpoints",
+        "active_claims",
+        "active_branches",
+        "open_tasks",
+        "milestones",
+        "attention",
+    ]
+    bits: list[str] = []
+    for key in ordered:
+        if key in counts and counts.get(key) is not None:
+            bits.append(f"{labels[key]}: {counts[key]}")
+    for key in sorted(k for k in counts.keys() if k not in labels):
+        bits.append(f"{key.replace('_', ' ')}: {counts[key]}")
+    return "## Counts\n" + (" · ".join(bits) if bits else "No count data available.") + "\n"
+
+
+def _format_attention(attention: list | None) -> str:
+    lines = ["## Needs attention"]
+    if not attention:
+        lines.append("- none")
+        return "\n".join(lines) + "\n"
+
+    for raw in attention:
+        if isinstance(raw, str):
+            lines.append(f"- {raw}")
+            continue
+        if isinstance(raw, dict):
+            severity = raw.get("severity") or raw.get("kind")
+            message = raw.get("message") or raw.get("text") or raw.get("label")
+            if not message:
+                message = str(raw)
+            prefix = f"[{severity}] " if severity else ""
+            lines.append(f"- {prefix}{message}")
+            continue
+        lines.append(f"- {raw}")
+    return "\n".join(lines) + "\n"
+
+
+def _format_current_active_work(active_work: list | None) -> str:
+    lines = ["## Active work"]
+    if not active_work:
+        lines.append("No active work claims.")
+        return "\n".join(lines) + "\n"
+
+    for item in active_work:
+        if not isinstance(item, dict):
+            lines.append(f"- {item}")
+            continue
+        agent = item.get("agent") or "unknown"
+        intent = item.get("intent_type") or item.get("intent") or "implement"
+        branch = item.get("branch_name") or item.get("branch") or "main"
+        scope = item.get("scope") or item.get("message") or "(no scope)"
+        task_id = item.get("task_id")
+        created = item.get("claimed_at") or item.get("created_at")
+        rel = f" · {_relative_time(created)}" if created else ""
+        task = f" task `{task_id}`" if task_id else ""
+        lines.append(
+            f"- `{agent}` [{intent}]{task} on `{branch}`{rel} — {scope}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _format_recent_milestones(milestones: list | None) -> str:
+    lines = ["## Recent milestones"]
+    if not milestones:
+        lines.append("No recent milestones.")
+        return "\n".join(lines) + "\n"
+
+    for item in milestones:
+        if not isinstance(item, dict):
+            lines.append(f"- {item}")
+            continue
+        h = item.get("commit_hash") or item.get("checkpoint_hash") or ""
+        hash_part = f"`{_short_hash(h)}`"
+        created = item.get("created_at")
+        rel = f" · {_relative_time(created)}" if created else ""
+        text = (
+            item.get("note")
+            or item.get("text")
+            or item.get("message")
+            or "(milestone)"
+        )
+        author = item.get("author") or item.get("author_agent")
+        author_part = f" · `{author}`" if author else ""
+        lines.append(f"- {hash_part}{author_part}{rel} — {_truncate_text(str(text))}")
+    return "\n".join(lines) + "\n"
+
+
+def _format_open_tasks_by_intent(open_tasks_by_intent: dict | None) -> str:
+    lines = ["## Open tasks by intent"]
+    if not open_tasks_by_intent:
+        lines.append("No open tasks.")
+        return "\n".join(lines) + "\n"
+
+    rendered_any = False
+    for intent in sorted(open_tasks_by_intent.keys()):
+        tasks = open_tasks_by_intent.get(intent) or []
+        if not tasks:
+            continue
+        rendered_any = True
+        lines.append(f"### {intent}")
+        for raw in tasks:
+            task = _normalize_task_item(raw)
+            text = task.get("text", "")
+            task_id = task.get("id")
+            blocked = task.get("blocked_by")
+            id_part = f"`{task_id}` " if task_id else ""
+            blocked_part = f" → blocked by: {blocked}" if blocked else ""
+            lines.append(f"- {id_part}{text}{blocked_part}")
+
+    if not rendered_any:
+        lines.append("No open tasks.")
+    return "\n".join(lines) + "\n"
+
+
+def _format_recent_activity(activity: list | None) -> str:
+    lines = ["## Recent activity"]
+    if not activity:
+        lines.append("No recent activity.")
+        return "\n".join(lines) + "\n"
+
+    for item in activity:
+        if not isinstance(item, dict):
+            lines.append(f"- {item}")
+            continue
+        h = item.get("commit_hash") or item.get("checkpoint_hash") or ""
+        author = item.get("author_agent") or item.get("author") or "unknown"
+        branch = item.get("branch_name") or item.get("branch")
+        created = item.get("created_at")
+        rel = f" · {_relative_time(created)}" if created else ""
+        branch_part = f" on `{branch}`" if branch and branch != "main" else ""
+        msg = item.get("message") or item.get("title") or "(no message)"
+        lines.append(
+            f"- `{_short_hash(h)}` · `{author}`{branch_part}{rel} — {_truncate_text(str(msg), 140)}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def format_project_current(data: dict) -> str:
+    """Readable Project Current State surface.
+
+    Contract keys:
+    space_id, name, description, current_direction, counts, attention,
+    active_work, recent_milestones, open_tasks_by_intent, recent_activity.
+    """
+    name = data.get("name") or data.get("space_name") or "Untitled space"
+    parts: list[str] = [f"# {name} — current state\n"]
+
+    if data.get("description"):
+        parts.append(str(data["description"]).rstrip() + "\n")
+
+    direction = _direction_text(data.get("current_direction"))
+    if direction:
+        parts.append(direction + "\n")
+    else:
+        parts.append("No current direction recorded.\n")
+
+    latest = data.get("latest_checkpoint")
+    if isinstance(data.get("current_direction"), dict):
+        latest = latest or data["current_direction"].get("latest_checkpoint")
+    if not latest and data.get("recent_activity"):
+        latest = data["recent_activity"][0]
+    if isinstance(latest, dict):
+        h = latest.get("commit_hash") or latest.get("checkpoint_hash") or ""
+        msg = latest.get("message") or "(no message)"
+        author = latest.get("author_agent") or latest.get("author")
+        created = latest.get("created_at")
+        meta = [f"Latest checkpoint: `{_short_hash(h)}`"]
+        if author:
+            meta.append(f"by `{author}`")
+        if created:
+            meta.append(_relative_time(created))
+        parts.append(" · ".join(meta) + f" — {msg}\n")
+
+    parts.append(_format_current_counts(data.get("counts")))
+    parts.append(_format_attention(data.get("attention")))
+    parts.append(_format_current_active_work(data.get("active_work")))
+    parts.append(_format_recent_milestones(data.get("recent_milestones")))
+    parts.append(_format_open_tasks_by_intent(data.get("open_tasks_by_intent")))
+    parts.append(_format_recent_activity(data.get("recent_activity")))
+
+    return "\n".join(p for p in parts if p).rstrip() + "\n"
 
 
 def format_checkpoint(commit: dict, *, full_artifacts: bool = False) -> str:

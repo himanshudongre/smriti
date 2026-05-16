@@ -192,6 +192,16 @@ class SmritiClient:
             params=params if params else None,
         )
 
+    def get_current_state(self, space_id: str) -> dict:
+        """GET /api/v5/current/spaces/{space_id} — Project Current State.
+
+        This endpoint is the backend-owned compact operational payload for
+        founder-facing and agent-facing current-state surfaces. CLI callers
+        may fall back to composing the same contract from existing endpoints
+        while older backends are still deployed.
+        """
+        return self._request("GET", f"/api/v5/current/spaces/{space_id}")
+
     # ── Work claims ──────────────────────────────────────────────────
 
     def create_claim(
