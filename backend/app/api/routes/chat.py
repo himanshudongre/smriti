@@ -936,6 +936,63 @@ def _compute_space_divergence(
     return DivergenceSummary(pairs=pairs) if pairs else None
 
 
+def _get_active_claims(
+    repo_id: uuid.UUID, db: Session, limit: int = 10
+) -> list[ActiveClaimSummary]:
+    """Active, non-expired work claims for a space, most-recently-claimed first.
+
+    Claims bound to an active worktree are enriched with cached git drift
+    (path, branch, dirty file count, ahead/behind vs origin/main, last
+    commit). Shared by `GET /spaces/{id}/state` and
+    `GET /api/v5/current/spaces/{id}` so both surfaces report active work
+    identically.
+    """
+    now = _utcnow()
+    claims_stmt = (
+        select(WorkClaim)
+        .where(
+            WorkClaim.repo_id == repo_id,
+            WorkClaim.status == "active",
+            WorkClaim.expires_at > now,
+        )
+        .order_by(WorkClaim.claimed_at.desc())
+        .limit(limit)
+    )
+    active_claims: list[ActiveClaimSummary] = []
+    for wc in db.scalars(claims_stmt):
+        base_hash = None
+        if wc.base_commit_id:
+            base_commit = db.get(CommitModel, wc.base_commit_id)
+            base_hash = base_commit.commit_hash[:7] if base_commit else None
+        worktree_summary = None
+        if wc.worktree_id:
+            worktree = db.get(WorkTree, wc.worktree_id)
+            if worktree and worktree.status == "active":
+                probed = _probe_worktree(
+                    str(worktree.id),
+                    worktree.path,
+                    worktree.branch_name,
+                )
+                if probed:
+                    worktree_summary = ActiveWorktreeSummary(**probed)
+        active_claims.append(
+            ActiveClaimSummary(
+                id=wc.id,
+                agent=wc.agent,
+                branch_name=wc.branch_name,
+                scope=wc.scope,
+                task_id=wc.task_id,
+                worktree_id=wc.worktree_id,
+                worktree=worktree_summary,
+                intent_type=wc.intent_type,
+                claimed_at=wc.claimed_at,
+                expires_at=wc.expires_at,
+                base_commit_hash=base_hash,
+            )
+        )
+    return active_claims
+
+
 FRESHNESS_NEW_CHECKPOINTS_CAP = 5
 
 
@@ -1016,50 +1073,8 @@ def get_space_state(
     if main_head_commit and active_branch_commits:
         divergence = _compute_space_divergence(main_head_commit, active_branch_commits)
 
-    # Active work claims — query-time expiration filter.
-    now = _utcnow()
-    claims_stmt = (
-        select(WorkClaim)
-        .where(
-            WorkClaim.repo_id == repo_id,
-            WorkClaim.status == "active",
-            WorkClaim.expires_at > now,
-        )
-        .order_by(WorkClaim.claimed_at.desc())
-        .limit(10)
-    )
-    active_claims = []
-    for wc in db.scalars(claims_stmt):
-        base_hash = None
-        if wc.base_commit_id:
-            base_commit = db.get(CommitModel, wc.base_commit_id)
-            base_hash = base_commit.commit_hash[:7] if base_commit else None
-        worktree_summary = None
-        if wc.worktree_id:
-            worktree = db.get(WorkTree, wc.worktree_id)
-            if worktree and worktree.status == "active":
-                probed = _probe_worktree(
-                    str(worktree.id),
-                    worktree.path,
-                    worktree.branch_name,
-                )
-                if probed:
-                    worktree_summary = ActiveWorktreeSummary(**probed)
-        active_claims.append(
-            ActiveClaimSummary(
-                id=wc.id,
-                agent=wc.agent,
-                branch_name=wc.branch_name,
-                scope=wc.scope,
-                task_id=wc.task_id,
-                worktree_id=wc.worktree_id,
-                worktree=worktree_summary,
-                intent_type=wc.intent_type,
-                claimed_at=wc.claimed_at,
-                expires_at=wc.expires_at,
-                base_commit_hash=base_hash,
-            )
-        )
+    # Active work claims — extracted helper, shared with GET /api/v5/current.
+    active_claims = _get_active_claims(repo_id, db)
 
     # Freshness check: if since_commit_id is provided, determine whether
     # HEAD has moved and list new checkpoints since the caller's base.

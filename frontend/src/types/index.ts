@@ -237,6 +237,7 @@ export interface ActiveClaimSummary {
   branch_name: string;
   scope: string;
   intent_type: string;
+  task_id?: string | null;
   claimed_at: string;
   expires_at: string;
   base_commit_hash: string | null;
@@ -318,4 +319,75 @@ export interface CheckpointReviewResponse {
   checkpoint_id: string;
   issues: ReviewIssue[];
   suggestions: string[];
+}
+
+// ── Project Current State (V5) ────────────────────────────────────────────────
+//
+// Shape of GET /api/v5/current/spaces/{id} — the packaged "where is this
+// project right now" payload. Shared contract with the `smriti current`
+// CLI command and the ProjectCurrentState UI panel.
+
+export interface CurrentDirection {
+  objective: string | null;
+  headline: string | null;
+  summary: string | null;
+  checkpoint_id: string | null;
+  checkpoint_hash: string | null;
+  author_agent: string | null;
+  updated_at: string | null;
+}
+
+export interface CurrentCounts {
+  checkpoints: number;
+  agents: number;
+  active_claims: number;
+  active_branches: number;
+  open_tasks: number;
+  milestones: number;
+}
+
+export interface AttentionSignal {
+  kind: 'open_question' | 'divergence' | 'active_work';
+  severity: 'info' | 'warn';
+  message: string;
+}
+
+export interface MilestoneEntry {
+  checkpoint_id: string;
+  checkpoint_hash: string;
+  checkpoint_message: string;
+  note: string;
+  author_agent: string | null;
+  created_at: string;
+}
+
+export interface CurrentTask {
+  text: string;
+  id: string | null;
+  intent_hint: string | null;
+  blocked_by: string | null;
+  status: string;
+}
+
+export interface RecentActivityEntry {
+  checkpoint_id: string;
+  checkpoint_hash: string;
+  message: string;
+  author_agent: string | null;
+  branch_name: string;
+  created_at: string;
+  has_milestone: boolean;
+}
+
+export interface CurrentState {
+  space_id: string;
+  name: string;
+  description: string | null;
+  current_direction: CurrentDirection;
+  counts: CurrentCounts;
+  attention: AttentionSignal[];
+  active_work: ActiveClaimSummary[];
+  recent_milestones: MilestoneEntry[];
+  open_tasks_by_intent: Record<string, CurrentTask[]>;
+  recent_activity: RecentActivityEntry[];
 }

@@ -18,15 +18,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getLineage, getSpaceState, compareCheckpoints, forkSession } from '../api/client';
+import { ProjectCurrentState } from '../components/ProjectCurrentState';
 import type {
   ActiveClaimSummary,
   CheckpointNode,
   SessionNode,
   LineageResponse,
   CompareResponse,
-  StructuredTask,
 } from '../types';
-import { normalizeTask } from '../types';
 import { GitBranch, GitCommit, Loader2, X, ArrowLeft, Zap } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -624,7 +623,6 @@ export function LineagePage() {
 
   const [lineage, setLineage] = useState<LineageResponse | null>(null);
   const [activeClaims, setActiveClaims] = useState<ActiveClaimSummary[]>([]);
-  const [spaceState, setSpaceState] = useState<import('../types').SpaceStateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -646,7 +644,6 @@ export function LineagePage() {
     ])
       .then(([lin, state]) => {
         setLineage(lin);
-        setSpaceState(state);
         setActiveClaims(state?.active_claims ?? []);
       })
       .catch(e => setErr(e.message || 'Failed to load lineage'))
@@ -752,101 +749,8 @@ export function LineagePage() {
 
         {lineage && !loading && (
           <div className="space-y-10">
-            {/* Current-state summary panel */}
-            {spaceState && (
-              <section className="rounded-xl border p-5 space-y-4" style={{ borderColor: 'var(--color-border, #27272a)', background: 'var(--color-surface, #18181b)' }}>
-                {/* Project header */}
-                <div>
-                  <h2 className="text-base font-semibold text-white">
-                    {spaceState.space.name}
-                  </h2>
-                  {spaceState.space.description && (
-                    <p className="text-xs text-gray-500 mt-0.5">{spaceState.space.description}</p>
-                  )}
-                </div>
-
-                {/* Current direction */}
-                {spaceState.commit && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-gray-600 uppercase tracking-wider">Current direction</span>
-                    </div>
-                    <p className="text-sm text-gray-200">{spaceState.commit.message}</p>
-                    {spaceState.commit.objective && (
-                      <p className="text-xs text-gray-500">{spaceState.commit.objective}</p>
-                    )}
-                    <div className="flex items-center gap-2 text-[10px] text-gray-600">
-                      {spaceState.commit.author_agent && (
-                        <span className="font-mono border border-gray-700 px-1.5 py-px rounded text-gray-500">
-                          {spaceState.commit.author_agent}
-                        </span>
-                      )}
-                      <span>{fmt(spaceState.commit.created_at)}</span>
-                      <code className="text-blue-400">{spaceState.commit.commit_hash?.slice(0, 7)}</code>
-                    </div>
-                  </div>
-                )}
-
-                {/* Status bar */}
-                <div className="flex items-center gap-4 flex-wrap text-[11px]">
-                  <span className="text-gray-500">
-                    <span className="text-white font-medium">{lineage.checkpoints.length}</span> checkpoint{lineage.checkpoints.length !== 1 ? 's' : ''}
-                  </span>
-                  {(spaceState.active_branches?.length ?? 0) > 0 && (
-                    <span className="text-gray-500">
-                      <span className="text-purple-400 font-medium">{spaceState.active_branches.length}</span> active branch{spaceState.active_branches.length !== 1 ? 'es' : ''}
-                    </span>
-                  )}
-                  {activeClaims.length > 0 && (
-                    <span className="text-gray-500">
-                      <span className="text-amber-400 font-medium">{activeClaims.length}</span> active claim{activeClaims.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {spaceState.divergence && (spaceState.divergence.pairs?.length ?? 0) > 0 && (
-                    <span className="text-red-400 font-medium flex items-center gap-1">
-                      ⚠ Divergence detected
-                    </span>
-                  )}
-                  {(spaceState.commit?.tasks?.length ?? 0) > 0 && (() => {
-                    const tasks = (spaceState.commit.tasks ?? []).map(normalizeTask);
-                    const openCount = tasks.filter((t: StructuredTask) => !t.status || t.status === 'open').length;
-                    const doneCount = tasks.filter((t: StructuredTask) => t.status === 'done').length;
-                    return (
-                      <span className="text-gray-500">
-                        <span className="text-green-400 font-medium">{openCount}</span> open task{openCount !== 1 ? 's' : ''}
-                        {doneCount > 0 && (
-                          <>, <span className="text-gray-600">{doneCount} done</span></>
-                        )}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                {/* Needs attention signal */}
-                {(() => {
-                  const reasons: string[] = [];
-                  if (spaceState.divergence && (spaceState.divergence.pairs?.length ?? 0) > 0)
-                    reasons.push('Branch divergence needs resolution');
-                  if (activeClaims.length > 0)
-                    reasons.push(`${activeClaims.length} agent${activeClaims.length !== 1 ? 's' : ''} working — check before starting new work`);
-                  if ((spaceState.commit?.open_questions?.length ?? 0) > 0)
-                    reasons.push(`${spaceState.commit.open_questions.length} open question${spaceState.commit.open_questions.length !== 1 ? 's' : ''} from latest checkpoint`);
-                  if (reasons.length === 0) return null;
-                  return (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-900/10 px-3 py-2">
-                      <div className="flex items-center gap-2 text-[11px] text-amber-400 font-medium mb-1">
-                        <span>⚡ Needs attention</span>
-                      </div>
-                      <ul className="text-[11px] text-amber-300/80 space-y-0.5">
-                        {reasons.map((r, i) => (
-                          <li key={i}>• {r}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })()}
-              </section>
-            )}
+            {/* Project Current State panel */}
+            {spaceId && <ProjectCurrentState spaceId={spaceId} />}
 
             {/* Active work claims */}
             {activeClaims.length > 0 && (

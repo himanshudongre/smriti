@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
         claims,
         commits,
         context_git,
+        current,
         lineage,
         metrics,
         repos,
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(lineage.router, prefix="/api/v5", tags=["lineage-v5"])
     app.include_router(claims.router, prefix="/api/v5", tags=["claims-v5"])
     app.include_router(metrics.router, prefix="/api/v5", tags=["metrics-v5"])
+    app.include_router(current.router, prefix="/api/v5", tags=["current-v5"])
     app.include_router(worktrees.router, prefix="/api/v5", tags=["worktrees-v5"])
 
     # ── Capabilities manifest ────────────────────────────────────────

@@ -361,6 +361,15 @@ export async function getSpaceState(spaceId: string): Promise<import('../types')
   return requestV4<import('../types').SpaceStateResponse>(`/chat/spaces/${spaceId}/state`);
 }
 
+/**
+ * Packaged "Project Current State" snapshot for a space — current direction,
+ * counts, attention signals, active work, open tasks by intent, recent
+ * milestones, and recent activity. One round trip.
+ */
+export async function getCurrentState(spaceId: string): Promise<import('../types').CurrentState> {
+  return requestV5<import('../types').CurrentState>(`/current/spaces/${spaceId}`);
+}
+
 export async function compareCheckpoints(
   aId: string,
   bId: string,
