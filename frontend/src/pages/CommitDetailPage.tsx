@@ -267,7 +267,7 @@ export function CommitDetailPage() {
               {commit.metadata?.notes && commit.metadata.notes.length > 0 && (
                 <FieldBlock label="Notes">
                   <div className="space-y-2">
-                    {commit.metadata.notes.map((n: any, i: number) => (
+                    {commit.metadata.notes.map((n, i) => (
                       <div key={n.id || i} className="text-sm">
                         <div className="flex items-center gap-2 mb-0.5">
                           {n.kind && n.kind !== 'note' && (

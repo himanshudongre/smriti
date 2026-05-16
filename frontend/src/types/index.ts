@@ -98,6 +98,22 @@ export interface Artifact {
   content: string;
 }
 
+/** An additive founder/agent annotation on a checkpoint. */
+export interface Note {
+  id: string;
+  author: string;
+  text: string;
+  kind: string;
+  created_at: string;
+}
+
+/** Commit metadata blob. `notes` are additive annotations; the open index
+ *  signature preserves room for other backend-written keys (e.g. session_id). */
+export interface CommitMetadata {
+  notes?: Note[];
+  [key: string]: unknown;
+}
+
 export interface Commit {
   id: string;
   repo_id: string;
@@ -117,7 +133,7 @@ export interface Commit {
   artifacts: Artifact[];
   context_blob: Record<string, unknown>;
   raw_source_text: string | null;
-  metadata: Record<string, unknown>;
+  metadata: CommitMetadata;
   created_at: string;
 }
 /** Delta between a commit and its parent, used for the diff view on CommitDetailPage */

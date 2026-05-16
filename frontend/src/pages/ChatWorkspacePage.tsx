@@ -25,6 +25,7 @@ import {
   reviewCheckpoint,
 } from '../api/client';
 import type { Artifact, ChatSession, Commit, CompareResponse, CheckpointReviewResponse, HeadState, TurnEvent, Repo, ProviderStatus } from '../types';
+import { normalizeTask } from '../types';
 import {
   Check,
   Copy,
@@ -626,7 +627,7 @@ function CheckpointDetailPanel({
       )}
       {rows(commit.decisions ?? [], 'Decisions')}
       {rows(commit.assumptions ?? [], 'Assumptions')}
-      {rows(commit.tasks ?? [], 'Tasks')}
+      {rows((commit.tasks ?? []).map(t => normalizeTask(t).text), 'Tasks')}
       {rows(commit.open_questions ?? [], 'Open Questions')}
       {rows(commit.entities ?? [], 'Entities')}
 
