@@ -72,9 +72,10 @@ One project, one Smriti Space, multiple agents. Each reads the state, declares i
 
 ## Getting started
 
-You will need: Python 3.11+, Node 18+, Docker (for Postgres).
+You will need: Python 3.11+ and Node 18+. Docker is only needed for
+Postgres/shared-team mode.
 
-### 1. Clone and set up
+### 1. Clone and set up for solo/local mode
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
@@ -89,11 +90,14 @@ cp .env.example .env
 #   SMRITI_GENERIC_MODEL=llama3.1:8b
 # See .env.example for details.
 
-docker compose up -d postgres    # start the database
-make setup                       # backend venv + deps + migrations + CLI + frontend
+make setup-local                 # backend venv + CLI + frontend, no Docker
 ```
 
-`make setup` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries are installed into the backend venv at `backend/.venv/bin/`. To use them from your shell:
+Local mode uses SQLite at `~/.smriti/smriti.db` by default. Override it
+with `SMRITI_LOCAL_DB_PATH=/path/to/smriti.db` if you want the database
+somewhere else.
+
+`make setup-local` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries are installed into the backend venv at `backend/.venv/bin/`. To use them from your shell:
 
 ```bash
 source backend/.venv/bin/activate
@@ -102,11 +106,31 @@ source backend/.venv/bin/activate
 ### 2. Start the backend and frontend
 
 ```bash
-make dev              # backend on http://localhost:8000 (keep running)
+make dev-local        # backend on http://localhost:8000 (keep running)
 make dev-frontend     # frontend on http://localhost:5173 (separate terminal)
 ```
 
 **For the chat UI only, you're done.** Open http://localhost:5173.
+
+### Shared/team mode with Postgres
+
+Postgres remains the stronger shared/team mode. Use it when you want an
+explicit database service, Docker-backed state, or a closer path toward a
+hosted deployment.
+
+```bash
+cp .env.example .env
+# In .env, set:
+#   SMRITI_DB_MODE=postgres
+#   DATABASE_URL=postgresql://smriti:smriti@localhost:5432/smriti
+
+make setup-postgres              # starts Docker Postgres and runs migrations
+make dev-postgres                # backend on http://localhost:8000
+make dev-frontend                # frontend on http://localhost:5173
+```
+
+If `DATABASE_URL` is explicitly set to a Postgres URL, Smriti preserves
+Postgres behavior.
 
 ### 3. For coding agents
 
@@ -139,7 +163,11 @@ smriti skills install claude-code     # → .claude/skills/smriti/SKILL.md
 smriti skills install codex           # → AGENTS.md (commit it)
 ```
 
-**Runtime model.** Postgres runs in Docker. The backend runs locally via `make dev`. The human starts both. Agents are clients of `http://localhost:8000` — they do not manage the backend.
+**Runtime model.** In solo/local mode, Smriti stores state in a SQLite
+file and the backend runs locally via `make dev-local`. In shared/team
+mode, Postgres runs in Docker and the backend runs via `make dev-postgres`.
+Agents are clients of `http://localhost:8000` — they do not manage the
+backend.
 
 ### 4. Auto-inject state at session start (Claude Code)
 
@@ -152,7 +180,7 @@ smriti skills install codex           # → AGENTS.md (commit it)
         "hooks": [
           {
             "type": "command",
-            "command": "smriti state my-project --compact 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev'"
+            "command": "smriti state my-project --compact 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev-local'"
           }
         ]
       }

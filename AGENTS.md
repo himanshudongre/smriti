@@ -224,8 +224,8 @@ are a client of it. You do not own it.
   That is your reachability check — no separate health probe needed.
 - **If the backend is unreachable, stop and tell the human.** Say:
   "The Smriti backend is not reachable at http://localhost:8000.
-  Please start it with `make dev` and ensure Postgres is running
-  via `docker compose up -d postgres`."
+  Please start it with `make dev-local` for solo/local mode, or
+  `make dev-postgres` for Postgres/shared-team mode."
 - **Do not attempt to start, restart, or manage the backend or
   Docker yourself.** Starting the server from inside an agent's
   tool loop creates environment-variable inheritance issues that

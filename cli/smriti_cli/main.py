@@ -937,8 +937,8 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     except Exception:
         _fail(
             f"error: Cannot reach Smriti backend at {client.base_url}.\n"
-            "Start the backend with `make dev` and ensure Postgres is running "
-            "via `docker compose up -d postgres`."
+            "Start the backend with `make dev-local` for solo/local mode, "
+            "or `make dev-postgres` for Postgres/shared-team mode."
         )
         return
 
@@ -999,7 +999,7 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     settings_path = Path(".claude/settings.json")
     hook_command = (
         f"backend/.venv/bin/smriti state {space_name} --preview 2>/dev/null "
-        f"|| echo 'Smriti backend not reachable. Start with: make dev'"
+        f"|| echo 'Smriti backend not reachable. Start with: make dev-local'"
     )
     hook_entry = {
         "type": "command",

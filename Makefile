@@ -1,4 +1,4 @@
-.PHONY: help dev up down test test-unit test-int lint format migrate
+.PHONY: help dev dev-local dev-postgres up down test test-unit test-int lint format migrate setup setup-local setup-postgres
 
 VENV := cd backend && source .venv/bin/activate &&
 
@@ -21,8 +21,14 @@ logs:  ## Follow logs
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 
-dev:  ## Run backend dev server locally (requires venv)
+dev:  ## Run backend dev server with configured DB mode (requires venv)
 	$(VENV) uvicorn app.main:app --reload --port 8000
+
+dev-local:  ## Run backend in local-first SQLite mode
+	$(VENV) SMRITI_DB_MODE=local uvicorn app.main:app --reload --port 8000
+
+dev-postgres:  ## Run backend in Postgres mode
+	$(VENV) SMRITI_DB_MODE=postgres uvicorn app.main:app --reload --port 8000
 
 test:  ## Run all backend tests
 	$(VENV) python -m pytest -v
@@ -44,8 +50,8 @@ format:  ## Format backend code
 
 # ── Database ─────────────────────────────────────────────────────────────────
 
-migrate:  ## Run database migrations
-	$(VENV) alembic upgrade head
+migrate:  ## Run database migrations for Postgres/shared mode
+	$(VENV) SMRITI_DB_MODE=postgres alembic upgrade head
 
 migration:  ## Create a new migration (usage: make migration msg="add users table")
 	$(VENV) alembic revision --autogenerate -m "$(msg)"
@@ -71,11 +77,25 @@ install:  ## Install all dependencies (creates venv, installs CLI + MCP server)
 	cd cli && ../backend/.venv/bin/pip install -e .
 	cd frontend && npm install
 
-setup:  ## Full local setup (venv + deps + migrations)
+setup: setup-local  ## Default solo setup (local-first SQLite)
+
+setup-local:  ## Solo setup: venv + deps + local SQLite path, no Docker
+	cp -n .env.example .env || true
+	mkdir -p "$$HOME/.smriti"
+	$(MAKE) install
+	@echo "\n✅ Setup complete!"
+	@echo "    Mode:            local SQLite"
+	@echo "    Local DB path:   $${SMRITI_LOCAL_DB_PATH:-$$HOME/.smriti/smriti.db}"
+	@echo "    Activate the CLI:  source backend/.venv/bin/activate"
+	@echo "    Start backend:     make dev-local"
+	@echo "    Start frontend:    make dev-frontend"
+
+setup-postgres:  ## Shared/team setup: venv + deps + Docker Postgres + migrations
 	cp -n .env.example .env || true
 	$(MAKE) install
+	docker compose up -d postgres
 	$(MAKE) migrate
-	@echo "\n✅ Setup complete!"
+	@echo "\n✅ Postgres setup complete!"
 	@echo "    Activate the CLI:  source backend/.venv/bin/activate"
-	@echo "    Start backend:     make dev"
+	@echo "    Start backend:     make dev-postgres"
 	@echo "    Start frontend:    make dev-frontend"

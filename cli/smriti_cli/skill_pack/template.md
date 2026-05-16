@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 2.2
+smriti_skill_pack_version: 2.3
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -241,8 +241,8 @@ are a client of it. You do not own it.
   That is your reachability check — no separate health probe needed.
 - **If the backend is unreachable, stop and tell the human.** Say:
   "The Smriti backend is not reachable at http://localhost:8000.
-  Please start it with `make dev` and ensure Postgres is running
-  via `docker compose up -d postgres`."
+  Please start it with `make dev-local` for solo/local mode, or
+  `make dev-postgres` for Postgres/shared-team mode."
 - **Do not attempt to start, restart, or manage the backend or
   Docker yourself.** Starting the server from inside an agent's
   tool loop creates environment-variable inheritance issues that
@@ -257,7 +257,8 @@ are a client of it. You do not own it.
   the backend is running stale code. Tell the human: "The backend
   at localhost:8000 does not support [feature]. Its git_sha is
   [sha] but the current repo is at [repo sha]. Please restart
-  the backend with `make dev` to pick up recent changes."
+  the backend with the same mode you are using (`make dev-local`
+  or `make dev-postgres`) to pick up recent changes."
   For worktree-aware coordination, the capabilities list should include
   both `worktrees` and `worktree_binding`.
 - **When to check capabilities:** You do NOT need to check on every

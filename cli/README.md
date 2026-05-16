@@ -23,6 +23,11 @@ export SMRITI_API_URL=http://localhost:8000
 
 Or pass `--api-url` on any command.
 
+Local-first vs Postgres storage is configured on the backend, not in the
+CLI. For solo use, start the backend with `make dev-local`; for
+Postgres/shared-team use, start it with `make dev-postgres`. The CLI and
+MCP server keep talking to the same HTTP API either way.
+
 ## MCP server
 
 Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsurf can read and write reasoning state natively — no subprocess-shelling to the `smriti` binary.
