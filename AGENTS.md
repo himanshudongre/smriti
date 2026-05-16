@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 1.5
+smriti_skill_pack_version: 2.3
 title: Smriti — how to use it well
 target: Codex
 ---
@@ -198,15 +198,32 @@ next agent.
    - "Branch `X` needs review before merge." or
    - "Branch `X` is exploratory / not ready." or
    - "Work was done directly on main."
-3. **Push your branch.** If your work is on a branch, push it to
+3. **Close any worktrees you opened.** If you opened a worktree at the
+   start of this session via `smriti worktree open`, close it before
+   ending:
+
+   ```
+   smriti worktree close <worktree-id>
+   ```
+
+   `smriti worktree close` refuses if you have uncommitted changes —
+   that's the safety net. Either commit the work, abandon the
+   intentionally-discarded changes with `--force`, or leave the
+   worktree active and tell the human in your final message that
+   you're handing it off intentionally.
+
+   Leftover worktrees mislead the next agent: the state brief shows
+   them as active, suggesting work-in-progress that has actually
+   stopped.
+4. **Push your branch.** If your work is on a branch, push it to
    origin so the next agent (and the human) can see it. A
    local-only branch is invisible to everyone else.
-4. **Clean up local residue.** Do not leave unexplained modified
+5. **Clean up local residue.** Do not leave unexplained modified
    files, stash entries, or temporary files in the working tree.
    If you created a stash during reconciliation, either drop it
    (if the stashed content is no longer needed) or note in your
    checkpoint that the stash exists and what it contains.
-5. **Do not leave the repo on a dead branch.** If your branch has
+6. **Do not leave the repo on a dead branch.** If your branch has
    been merged or is no longer active, switch back to main before
    ending the session so the next agent starts in a clean state.
 
@@ -214,7 +231,7 @@ Say out loud: **"Session complete. Branch pushed, checkpoint
 written, working tree clean."** or **"Stopping — checkpointed
 findings, branch is [disposition]."**
 
-### 3.5 Backend reachability
+### 3.5 Backend reachability and capabilities
 
 The Smriti backend is a shared service started by the human. You
 are a client of it. You do not own it.
@@ -231,14 +248,25 @@ are a client of it. You do not own it.
   tool loop creates environment-variable inheritance issues that
   cause silent mock fallback on all LLM-backed endpoints. The
   human starts the backend; you use it.
-- **Runtime freshness after code changes.** If backend code has
-  been merged to main since the backend was last started (e.g.,
-  new API routes, schema changes, config fixes), the backend
-  must be restarted before agents can rely on the new endpoints.
-  Check `git log --oneline -5` against the running server's
-  behavior. If a new endpoint returns 404 or the behavior does
-  not match the merged code, tell the human: "The backend may
-  need a restart to pick up recent changes on main."
+- **Check capabilities before using advanced features.** After
+  reading state, before creating claims or using features like
+  structured tasks, probe the backend:
+  `curl -s http://localhost:8000/health`
+  The response includes `git_sha` and a `capabilities` list. If
+  you need `claims` but the capabilities list does not include it,
+  the backend is running stale code. Tell the human: "The backend
+  at localhost:8000 does not support [feature]. Its git_sha is
+  [sha] but the current repo is at [repo sha]. Please restart
+  the backend with the same mode you are using (`make dev-local`
+  or `make dev-postgres`) to pick up recent changes."
+  For worktree-aware coordination, the capabilities list should include
+  both `worktrees` and `worktree_binding`.
+- **When to check capabilities:** You do NOT need to check on every
+  session. Check when:
+  - A Smriti API call returns 404 on a route you expect to exist
+  - The state brief is missing sections you expect (e.g., no
+    `## Active work` when you know claims were recently merged)
+  - You are about to use a feature for the first time in a session
 
 ### 3.6 Work claims: declare intent before working
 
@@ -299,6 +327,109 @@ so other agents can see your base state.
 Say out loud: **"Claiming: [intent_type] — <scope>."** before
 creating the claim.
 
+### 3.6.1 Worktrees: when and how
+
+If multiple agents are working on the same project on the same machine,
+each agent should work in its own git worktree. Sharing a working tree
+across agents is the single highest-cost failure mode — staged files
+from one agent can land in another agent's commit, and the wrong code
+ships to main. The chaanbeen-web retros documented exactly this incident.
+
+The reflex: when you start substantial work on a project where another
+agent might be active, open a worktree before your first edit.
+
+```
+smriti worktree open <project> --agent <your-id>
+```
+
+This returns a path. Use that path as your working directory for the
+rest of the session. Your edits, your staging index, your commits all
+live in that worktree. Other agents have their own worktrees; their
+filesystem state is invisible to you and yours to them.
+
+When you create your work claim, bind it to the worktree:
+
+```
+smriti claim create <project> --agent <your-id> \
+    --scope "..." --intent-type implement \
+    --task-id <task-id> --worktree <worktree-id>
+```
+
+MCP tools call this field `worktree_id`; the CLI flag is `--worktree`.
+
+The state brief now shows a worktree info line under your claim:
+which path, which branch, how many dirty files, ahead/behind vs main,
+last commit. Other agents seeing your claim know exactly what state
+your tree is in without asking.
+
+When your work is done and merged, close the worktree. This is also
+part of session-end hygiene in Section 3.4 — Clean finish:
+
+```
+smriti worktree close <worktree-id>
+```
+
+This refuses if you have uncommitted changes (correct default — stop
+and decide before destroying work). Pass `--force` only after you've
+confirmed the dirty changes are intentionally being discarded.
+
+When NOT to open a worktree:
+
+- Solo work on a project with no other active agents.
+- Quick read-only investigations that won't produce commits.
+- Documentation-only work that's clearly disjoint from anyone else's
+  track (e.g. you're writing in `docs/` while another agent is in
+  `backend/`). Worktrees are cheap but not zero cost; the discipline
+  is "open one when there's actual filesystem contention risk,"
+  not "open one for every session."
+
+Say out loud: **"Opening a worktree for this session."** before the
+first worktree open. **"Binding my claim to worktree <id>."** when
+claiming. **"Closing the worktree."** when done.
+
+The state brief now shows you which files other agents are actively
+editing, not just how many. Each active claim's worktree drift line
+includes the first 3 dirty paths inline:
+
+```
+   · branch: ... · 3 dirty (cli/main.py, backend/app/main.py, +1 more) · ...
+```
+
+This is your file-level coordination signal. Before editing a file in
+your worktree, scan the active-claim drift lines for that path. If
+another agent already has it dirty, hold off or pick a different file.
+The signal is best-effort — it shows the first 3 dirty paths only and
+the cache is 60 seconds — but it catches the common case where two
+agents drift into the same file by accident.
+
+If your shell tool resets the working directory between commands (some
+agent harnesses do this — every Bash call starts in the original cwd
+even after `cd <worktree-path>`), use absolute paths to the worktree
+throughout. Example:
+
+```
+WT=/Users/.../.smriti/worktrees/<space>/<agent-slug>
+cat $WT/some/file.py
+edit $WT/some/file.py
+```
+
+The skill pack used to say "use the worktree path as your cwd" — that
+works for persistent shells, but absolute-path discipline works
+everywhere. Capture the worktree path from `smriti worktree open` once
+and reuse it.
+
+The default branch name when you `smriti worktree open` is
+`smriti/<agent>/<short-uuid>`. That's fine for the system but ugly for
+PR titles. Pass `--branch <name>` to use a custom branch name instead:
+
+```
+smriti worktree open <space> --agent <id> --branch v3-feature-name
+```
+
+Use this when the worktree maps cleanly to a single feature/PR. Stick
+with the default when the worktree is short-lived or when several
+related branches will live in it.
+
 ### 3.7 Check freshness before checkpointing
 
 If you have been working for more than a few minutes, check whether
@@ -328,6 +459,80 @@ checkpoints create decision conflicts that the next agent has to
 untangle.
 
 Say out loud: **"Checking freshness before checkpointing."**
+
+### 3.8 Autonomous work selection from the task list
+
+Tasks in the state brief may carry structured annotations that help
+you pick complementary work without waiting for the human to route you.
+
+Each task can have:
+- **`[intent]`** — one of `implement`, `review`, `investigate`, `docs`,
+  `test`. This tells you the kind of work the task requires.
+- **`→ blocked by: <label>`** — this task depends on another task being
+  done first.
+- **`(done)`** — this task is already completed.
+
+**How to self-select work:**
+
+1. Read the `## In progress` section. Note which tasks have intents,
+   IDs, and which are blocked.
+2. Read the `## Active work` section. Note existing claims — especially
+   their `task:` references if present.
+3. **Pick a task that is not already referenced by any active claim.**
+   If tasks have IDs (`id: arch-docs`), check whether any claim shows
+   `(task: arch-docs)`. If so, that task is taken — pick a different
+   one. If tasks have no IDs, fall back to scope matching.
+4. **Prefer complementary intents.** If someone is `implement`ing,
+   look for `test`, `docs`, or `review` tasks. Same-intent is fine
+   if the tasks are clearly different (two distinct `[docs]` tasks
+   with different IDs).
+5. **Skip blocked tasks.** If a task says `→ blocked by: X`, check
+   whether task X is done. If X is still open or claimed, skip the
+   blocked task — pick something unblocked instead.
+6. **Skip done tasks.** Tasks marked `(done)` need no work.
+7. **If no complementary unblocked task exists:** tell the human.
+
+**Claim with task ID when available.** When you create a claim for a
+task that has an ID, reference it:
+`smriti claim create <project> --agent <your-agent> --scope "..." --task-id arch-docs --intent-type docs`
+This makes your claim precisely traceable to a task, not just loosely
+matched by scope text.
+
+**Recheck after claiming.** If another agent might be starting at the
+same time (e.g., you were both launched together), re-read the state
+briefly after creating your claim:
+`smriti state <project> --compact`
+Check `## Active work` for duplicate `task:` references. If another
+agent claimed the same task ID, abandon your claim and pick a
+different task. This catches near-simultaneous collisions within
+seconds.
+
+**When tasks have no IDs:** fall back to the scope-comparison logic
+from Section 3.6. Compare each task's text against active claim
+scopes and pick work that does not overlap. This is the same behavior
+as before — task IDs just make collision detection precise instead
+of fuzzy.
+
+**When writing tasks with IDs:** use short, stable slugs derived from
+the task content: `impl-freshness`, `test-e2e`, `docs-arch`. If a
+task persists across nearby checkpoints, reuse the same ID when
+practical — this makes cross-checkpoint task tracking easier. But do
+not block work when old checkpoints or legacy tasks have no IDs.
+
+**When writing checkpoints with tasks:** include intent hints on
+tasks you create. When you checkpoint your work, the tasks in your
+freeform markdown should indicate what kind of work each one requires.
+Write naturally — the extractor will classify them:
+
+```
+## Tasks
+- Implement the freshness endpoint (implement)
+- Write integration tests for freshness (test, blocked by freshness endpoint)
+- Update cli/README freshness walkthrough (docs, blocked by freshness endpoint)
+```
+
+Say out loud: **"Selecting complementary work from the task list."**
+when you self-select a task based on intent hints.
 
 ---
 
@@ -372,6 +577,45 @@ Always tag `author_agent` with a stable identifier for your agent
 (e.g. `claude-code`, `codex-local`). This is how humans and other
 agents know who wrote what on the shared timeline. Inconsistent or
 missing `author_agent` makes divergence unattributable.
+
+### 4.1 Checkpoint notes: annotating without checkpointing
+
+Sometimes you need to add context to an existing checkpoint without
+creating a new one. Checkpoint notes are additive annotations —
+founder commentary, milestone markers, or noise labels — that attach
+to a checkpoint without modifying its immutable fields.
+
+```
+smriti checkpoint note <id> --text "<note text>" --kind note
+```
+
+**Three kinds:**
+
+- `note` (default): General commentary. "This decision held up well
+  during implementation."
+- `milestone`: Marks a checkpoint as a significant project moment.
+  "This was the turning point — everything after built on this."
+- `noise`: Marks a checkpoint as low-signal or superseded. "Extractor
+  was degraded when this was written; decisions are unreliable."
+
+**When to use notes instead of a new checkpoint:**
+
+- You want to annotate a past checkpoint after the fact — adding
+  hindsight without rewriting history.
+- The human wants to mark a checkpoint as a milestone or as noise
+  for timeline legibility.
+- You are reviewing another agent's checkpoint and want to leave
+  commentary without creating a full review checkpoint.
+
+**When NOT to use notes:**
+
+- Do not use notes to record new decisions. That is a checkpoint.
+- Do not use notes as a running commentary on every checkpoint in
+  the lineage. Notes are sparse annotations, not a comment thread.
+
+Notes appear in the LineagePage timeline as indicators (★ for
+milestones, ◌ for noise, ● for plain notes) and in checkpoint detail
+views. They are visible to all agents reading the state.
 
 ---
 
@@ -630,6 +874,12 @@ Section 5.
   Duplicating completed work wastes a full session and creates noise
   in the timeline.
 
+- **Do not share a working tree between agents on the same project on
+  the same machine.** Open a worktree per agent. The chaanbeen
+  retrospectives documented one cross-agent commit pollution incident
+  that took ~1 hour to recover and degraded prod for ~6 endpoints —
+  this is the failure worktrees were built to prevent.
+
 - **Do not use `smriti_install_skill` to overwrite an in-project
   skill pack that you did not write.** If the project already has
   a skill pack of an older version, the install tool will tell you.
@@ -653,6 +903,11 @@ Use them literally.
 | reconcile state against repo | "Checking whether the flagged tasks are already reflected in the repo before starting." |
 | verify repo hygiene at start | "Repo is clean and synced against origin." or "Found local residue — classifying before proceeding." |
 | declare a work claim | "Claiming: [intent_type] — <scope>." |
+| open a worktree | "Opening a worktree for this session." |
+| bind a claim to a worktree | "Binding my claim to worktree <id>." |
+| close a worktree | "Closing the worktree." |
+| add a note to a checkpoint | "Adding a [kind] note to checkpoint X." |
+| self-select complementary work | "Selecting complementary work from the task list." |
 | check freshness before checkpoint | "Checking freshness before checkpointing." |
 | finish a session | "Session complete. Branch pushed, checkpoint written, working tree clean." |
 | surface drift to the human | "I'm seeing scope divergence between the state brief and my work. Stopping to reconcile before continuing." |
@@ -709,7 +964,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version cli-1.5 — this file is
+*Smriti skill pack version cli-2.2 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*

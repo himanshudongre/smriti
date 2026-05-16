@@ -6,7 +6,7 @@ smriti/
 ├── README.md                   Product overview, core concepts, setup,
 │                                 coding-agent quick start
 ├── ARCHITECTURE.md             System model, isolation mechanism, API versioning,
-│                                 multi-branch state, skill pack surface
+│                                 multi-branch state, local-first DB modes, skill pack surface
 ├── DECISIONS.md                Key architectural and product decisions
 ├── CONTRIBUTING.md             Development setup and contribution guide
 ├── AGENTS.md                   Smriti skill pack for Codex (generated, committed)
@@ -20,15 +20,17 @@ smriti/
 │   ├── app/
 │   │   ├── main.py             FastAPI app factory, CORS, router registration,
 │   │   │                         startup provider validation
-│   │   ├── config.py           Pydantic settings (DATABASE_URL, DEBUG)
+│   │   ├── config.py           Pydantic settings; local SQLite / Postgres db-mode resolution
 │   │   ├── config_loader.py    Provider config loader (dotenv + providers.yaml
 │   │   │                         + env vars), reset_config() for dev reloads
 │   │   ├── schemas/
 │   │   │   └── __init__.py     Pydantic request/response schemas
 │   │   ├── db/
-│   │   │   ├── database.py     SQLAlchemy engine and session factory
-│   │   │   └── models.py       ORM models: RepoModel, CommitModel, ChatSession,
-│   │   │                         TurnEvent, WorkClaim, WorkTree
+│   │   │   ├── database.py     SQLAlchemy engine + session factory; SQLite/Postgres
+│   │   │   │                     engine setup, local first-run bootstrap
+│   │   │   ├── models.py       ORM models: RepoModel, CommitModel, ChatSession,
+│   │   │   │                     TurnEvent, WorkClaim, WorkTree
+│   │   │   └── types.py        Portable column types (JSONB↔JSON, vector↔JSON)
 │   │   ├── domain/
 │   │   │   └── enums.py        SessionStatus, TargetTool, etc.
 │   │   ├── api/
@@ -36,6 +38,8 @@ smriti/
 │   │   │       ├── chat.py     V4: sessions, send_message, commit, head,
 │   │   │       │                 multi-branch state (/state), provider status
 │   │   │       ├── checkpoint.py  V5: draft, review, extract
+│   │   │       ├── current.py  V5: Project Current State aggregate surface
+│   │   │       ├── metrics.py  V5: project coordination / quality metrics
 │   │   │       ├── lineage.py  V5: fork, branch tree, checkpoint compare,
 │   │   │       │                 reachable checkpoints
 │   │   │       ├── claims.py   V5: work claims (create, update, list)
@@ -64,16 +68,18 @@ smriti/
 │   │   └── providers.yaml          Your keys (gitignored, not committed)
 │   ├── alembic/                Database migrations (15 versions)
 │   ├── tests/
-│   │   ├── integration/        API integration tests (140 tests)
+│   │   ├── integration/        API integration tests (156 tests)
 │   │   │   ├── test_api_v4_chat.py
 │   │   │   ├── test_api_v5_lineage.py
 │   │   │   ├── test_multi_branch_state.py
+│   │   │   ├── test_current_state.py
 │   │   │   ├── test_claims.py
 │   │   │   ├── test_claim_worktree_binding.py
 │   │   │   ├── test_project_root_migration.py
 │   │   │   ├── test_repos_project_root.py
 │   │   │   ├── test_worktrees.py
 │   │   │   ├── test_checkpoint_extract.py
+│   │   │   ├── test_local_sqlite_smoke.py
 │   │   │   └── test_delete_endpoints.py
 │   │   └── unit/               Unit tests (133 tests)
 │   │       ├── test_config_loader.py
@@ -108,19 +114,21 @@ smriti/
 │   ├── pyproject.toml          Installable as `pip install -e ./cli`
 │   │                             → `smriti` + `smriti-mcp` on PATH
 │   ├── smriti_cli/
-│   │   ├── main.py             argparse dispatcher: init, space, state,
-│   │   │                         checkpoint, fork, restore, compare,
-│   │   │                         branch, claim, worktree, skills
+│   │   ├── main.py             argparse dispatcher: init, doctor, space, state,
+│   │   │                         current, checkpoint, fork, restore, compare,
+│   │   │                         branch, claim, worktree, skills, metrics
 │   │   ├── mcp_server.py       FastMCP server (21 tools, stdio transport)
 │   │   ├── client.py           SmritiClient HTTP wrapper (includes claims/worktrees)
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
-│   │       ├── template.md     Single source of truth (v2.2, 15 sections)
+│   │       ├── template.md     Single source of truth (v2.3, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
-│   └── tests/                  CLI + MCP tests (141 tests)
+│   └── tests/                  CLI + MCP tests (151 tests)
 │       ├── test_branch_close.py
+│       ├── test_current_cli.py
+│       ├── test_doctor_cli.py
 │       ├── test_init.py
 │       ├── test_mcp_server.py
 │       ├── test_skill_pack.py
@@ -131,7 +139,8 @@ smriti/
 │       └── test_worktree_mcp.py
 │
 ├── docs/
-│   └── API.md                  V2, V4, and V5 endpoint reference
+│   ├── API.md                  V2, V4, and V5 endpoint reference
+│   └── DEMO_SCRIPT.md           Demo recording script
 │
 └── demos/
     └── branching-reasoning-demo/   Complete demo scenario with runbook,
@@ -147,32 +156,34 @@ smriti/
 | `/api/v1` | `sessions.py` | Legacy | Transcript paste ingestion |
 | `/api/v2` | `repos.py`, `commits.py` | Current | Space CRUD, checkpoint read/list. `CommitResponse` includes `assumptions` and `artifacts`. |
 | `/api/v4` | `chat.py` | Current | Chat sessions, send_message, commit, head, multi-branch state (`/state` with active branches, active claims, and divergence signal). Provider status. |
-| `/api/v5` | `checkpoint.py`, `lineage.py`, `claims.py`, `worktrees.py` | Current | Checkpoint draft/review/extract, fork, lineage tree, compare, work claims with optional worktree binding, git worktrees. |
+| `/api/v5` | `checkpoint.py`, `current.py`, `metrics.py`, `lineage.py`, `claims.py`, `worktrees.py` | Current | Checkpoint draft/review/extract, Project Current State, project metrics, fork, lineage tree, compare, work claims with optional worktree binding, git worktrees. |
 
 ---
 
 ## Make targets
 
 ```
-make setup          Install all deps (backend + CLI + frontend) + run migrations
-make dev            Run backend dev server (port 8000)
+make setup-local    Solo setup: venv + deps + CLI + frontend (local SQLite, no Docker)
+make setup-postgres Shared/team setup: venv + deps + Docker Postgres + migrations
+make dev-local      Run backend in local-first SQLite mode (port 8000)
+make dev-postgres   Run backend in Postgres mode (port 8000)
 make dev-frontend   Run frontend dev server (port 5173)
 make up             Start all services via Docker Compose
 make down           Stop all services
 make test           Run all backend tests
 make lint           Lint backend code (ruff)
 make format         Format backend code (ruff)
-make migrate        Run pending Alembic migrations
+make migrate        Run pending Alembic migrations (Postgres mode)
 make migration      Create a new migration (usage: make migration msg="...")
 ```
 
 ---
 
-## Test counts (as of V5a worktree polish)
+## Test counts (as of local-first SQLite mode)
 
 | Suite | Count | Location |
 |---|---|---|
-| Backend integration | 140 | `backend/tests/integration/` |
+| Backend integration | 156 | `backend/tests/integration/` |
 | Backend unit | 133 | `backend/tests/unit/` |
-| CLI + MCP | 141 | `cli/tests/` |
-| **Total** | **414** | |
+| CLI + MCP | 151 | `cli/tests/` |
+| **Total** | **440** | |

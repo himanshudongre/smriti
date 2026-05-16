@@ -16,10 +16,10 @@ Smriti replaces that with a structured reasoning-state layer. Agents read the cu
 
 The entire coordination substrate was developed with Claude Code and Codex working in parallel on the same codebase, coordinating through Smriti's own state. Current project metrics (`smriti metrics smriti-dev`):
 
-- **56 checkpoints** across **2 agents** (Claude Code: 35, Codex: 21)
-- **30 cross-agent continuations** — checkpoints where a different agent picked up where the previous one left off
-- **37 work claims** with **100% completion** — every declared intent was finished, none abandoned
-- **2 milestones** marking proven coordination proofs
+- **87 checkpoints** across **2 agents** (Claude Code: 51, Codex: 36)
+- **47 cross-agent continuations** — checkpoints where a different agent picked up where the previous one left off
+- **53 work claims** at **98% completion** — nearly every declared intent finished
+- **7 milestones** marking proven coordination proofs
 
 The strongest proof: two agents started near-simultaneously, read the same task surface (4 tasks with stable IDs and intent hints), and independently picked different complementary tasks — one chose `[test]`, the other chose `[implement]` — without any human routing. No orchestrator. No task queue. Just structured metadata on the shared state.
 
@@ -54,10 +54,11 @@ One project, one Smriti Space, multiple agents. Each reads the state, declares i
 - **Freshness checks** (`--since`) — agents detect whether the state has moved since their base before checkpointing.
 - **Branch disposition** — branches are explicitly marked `integrated`, `abandoned`, or `active` so the state brief stays clean.
 - **Checkpoint notes** — additive annotations (note, milestone, noise) on existing checkpoints without modifying the immutable reasoning state.
-- **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends.
+- **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends. `smriti doctor` diagnoses backend reachability and runtime/code mismatches.
 - **Compact mode** (`--compact`) — artifact content omitted for token efficiency; labels and recovery instructions preserved.
 - **Project metrics** (`smriti metrics <space>`) — coordination, state quality, and branch lifecycle KPIs computed on demand from existing data.
-- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. Claims can be bound to a worktree (`smriti claim create --worktree <id>`); the state brief surfaces per-claim working-tree drift (branch, dirty count, ahead/behind vs origin/main, last commit) so agents can see what other agents are editing without asking. Skill pack v2.0 teaches the reflex.
+- **Project Current State** (`smriti current <space>`) — a compact, packaged snapshot of where a project is right now: current direction, counts, attention signals, active work, recent milestones, open tasks by intent, and recent activity. Founder- and agent-facing; also rendered as a panel in the chat UI.
+- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. Claims can be bound to a worktree (`smriti claim create --worktree <id>`); the state brief surfaces per-claim working-tree drift (branch, dirty count, ahead/behind vs origin/main, last commit) so agents can see what other agents are editing without asking. The skill pack teaches the reflex.
 
 ---
 
@@ -287,7 +288,7 @@ Or use mock mode (no API keys needed) for trying the product without real LLM ca
 
 ## Tech stack
 
-FastAPI · SQLAlchemy · PostgreSQL · React + TypeScript + Vite
+FastAPI · SQLAlchemy · PostgreSQL / SQLite · React + TypeScript + Vite
 
 ---
 

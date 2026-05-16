@@ -306,13 +306,33 @@ pivot, not an incremental change.
 | `/api/v1` | Legacy | Transcript paste ingestion → session/artifact pipeline. Not part of current workflow. |
 | `/api/v2` | Partial | Space CRUD, checkpoint read by ID, checkpoint list by space. `CommitResponse` includes `assumptions` and `artifacts` so programmatic clients (CLI, agents) can read full checkpoints via this surface. |
 | `/api/v4` | Current | Chat sessions, message sending, provider management. The primary chat API. Also the canonical checkpoint write path (`POST /chat/commit`) because it accepts the full schema including `assumptions` and `artifacts`. Multi-branch continuation brief served from `GET /chat/spaces/{id}/state` — the agent-facing default; `GET /chat/spaces/{id}/head` remains as the main-only legacy endpoint. |
-| `/api/v5` | Current | Checkpoint drafting, review, fork, compare, lineage. Isolated from chat API by design. |
+| `/api/v5` | Current | Checkpoint drafting, review, fork, compare, lineage, project metrics, and the Project Current State aggregate (`GET /current/spaces/{id}`). Isolated from chat API by design. |
 
 V1 remains registered for compatibility but is not used by the frontend or CLI.
 
 The split between V4 and V5 is intentional: checkpoint operations (which involve a
 background LLM call and structured extraction) are separated from the real-time chat
 path. This allows different latency budgets and error handling strategies for each.
+
+---
+
+## Database modes
+
+Smriti runs against two storage backends, selected by `SMRITI_DB_MODE`:
+
+- **`local`** (the default when unconfigured) — a file-backed SQLite database at
+  `~/.smriti/smriti.db`, overridable via `SMRITI_LOCAL_DB_PATH`. No Docker, no
+  database server. The schema is created on first use via `create_all`; Alembic
+  is not used in local mode. This is the low-friction path for a solo builder.
+- **`postgres`** — the canonical shared/team backend. An explicitly-set Postgres
+  `DATABASE_URL` resolves to Postgres mode even when `SMRITI_DB_MODE` is unset,
+  so existing deployments are unaffected. Alembic owns the Postgres schema.
+
+The ORM models are dialect-portable: JSON columns render as `JSONB` on
+PostgreSQL and as generic `JSON` on SQLite (`backend/app/db/types.py`), so the
+same models and the same `create_all` work against either backend. Postgres
+remains the stronger mode for real multi-writer concurrency; local mode targets
+single-user solo/dev use.
 
 ---
 

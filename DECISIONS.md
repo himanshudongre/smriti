@@ -594,6 +594,36 @@ use while preserving explicit override via `smriti space set-project-root`.
 
 ---
 
+### Why an optional local-first SQLite mode, not a Postgres replacement
+
+Operating a PostgreSQL server was the single biggest first-run barrier for a
+solo builder evaluating Smriti: install Docker, start a container, run
+migrations, keep the database process alive. Smriti now defaults to a
+file-backed SQLite database at `~/.smriti/smriti.db` when unconfigured, so the
+solo path needs no Docker and no database server.
+
+It is an *optional mode*, not a replacement. Postgres remains the canonical
+shared/team backend — the stronger choice for real multi-writer concurrency —
+and an explicitly-set Postgres `DATABASE_URL` preserves Postgres behavior with
+no change for existing deployments. Local mode uses `create_all` rather than
+Alembic: a fresh single-user database has no migration history to honor, and
+porting the entire Alembic chain to SQLite would be disproportionate to the
+goal. The ORM models were made dialect-portable instead, so one schema
+definition serves both backends.
+
+### Why a Project Current State surface
+
+`smriti state` is a continuation brief — what the next agent needs to resume
+work. It is not a legibility surface for a human asking "where is this project
+right now?" `smriti current` (and `GET /api/v5/current/spaces/{id}`) packages
+that answer: current direction, counts, attention signals, active work, recent
+milestones, open tasks grouped by intent, and recent activity — computed on
+demand from existing data, with no new schema. It is deliberately a read-only
+aggregate, not a new primitive: it surfaces what checkpoints, claims, and notes
+already record, rather than introducing a new kind of state.
+
+---
+
 ## Open questions and deferred decisions
 
 - **Multi-user Spaces** — deferred. No auth, no user model.

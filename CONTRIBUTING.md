@@ -7,7 +7,8 @@ environment running, how to run tests, and how to propose changes.
 
 ## Dev environment
 
-**Prerequisites:** Python 3.11+, Node 18+, Docker (for Postgres).
+**Prerequisites:** Python 3.11+, Node 18+. Docker is optional — needed only
+for Postgres (shared/team) mode.
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
@@ -17,18 +18,20 @@ cp .env.example .env
 # Edit .env to add your API keys (OpenAI, Anthropic, or both).
 # Leave keys commented out to use mock mode (no real LLM calls).
 
-docker compose up -d postgres    # start the database
-make setup                       # backend venv + deps + migrations + CLI + frontend
+make setup-local                 # backend venv + deps + CLI + frontend (no Docker)
 
 # Start backend (terminal 1)
-make dev
+make dev-local
 
 # Start frontend (terminal 2)
 make dev-frontend
 ```
 
-`make setup` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the
-frontend. The CLI is installed into the backend venv at `backend/.venv/bin/`.
+`make setup-local` runs Smriti in local-first SQLite mode — no Docker, no
+Postgres; state lives in `~/.smriti/smriti.db`. It installs the backend, the
+CLI (`smriti` + `smriti-mcp`), and the frontend. For Postgres-backed
+shared/team mode, use `make setup-postgres` + `make dev-postgres` instead. The
+CLI is installed into the backend venv at `backend/.venv/bin/`.
 Activate the venv to use it from your shell:
 
 ```bash
@@ -67,8 +70,8 @@ fixtures — no running backend required.
 
 | Changed area | Run |
 |---|---|
-| `backend/app/` | `make test` (122 integration + 125 unit tests) |
-| `cli/smriti_cli/` | `cd cli && pytest` (122 tests) |
+| `backend/app/` | `make test` (156 integration + 133 unit tests) |
+| `cli/smriti_cli/` | `cd cli && pytest` (151 tests) |
 | `cli/smriti_cli/skill_pack/template.md` | `cd cli && pytest tests/test_skill_pack.py` — content-integrity tests catch dropped sections |
 | `frontend/src/` | `cd frontend && npx tsc --noEmit` |
 | Both backend + CLI | Both suites — they share no test infrastructure but both call the same backend API |
@@ -132,7 +135,7 @@ EXPECTED_OUTCOMES at minimum.
 
 Smriti has three agent-facing surfaces beyond the chat UI:
 
-- **CLI** (`cli/smriti_cli/main.py`) — `smriti` command, 8 subcommand groups
+- **CLI** (`cli/smriti_cli/main.py`) — `smriti` command, 14 commands
 - **MCP server** (`cli/smriti_cli/mcp_server.py`) — `smriti-mcp` command, 21 tools
 - **Skill pack** (`cli/smriti_cli/skill_pack/`) — versioned instruction files for Claude Code and Codex
 
