@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -186,6 +187,59 @@ def _build_cli_info() -> dict:
         "path_matches_executable": match,
         "package_version": _package_version(),
     }
+
+
+def _smriti_hook_executable() -> str:
+    """Choose a portable smriti executable for generated startup hooks.
+
+    Prefer the script that is running `smriti init` when it looks like the
+    installed `smriti` entry point. Fall back to the first `smriti` on PATH,
+    then to the bare command. We deliberately avoid repo-relative paths such
+    as `backend/.venv/bin/smriti` because init runs inside the user's target
+    project, not necessarily inside the Smriti checkout.
+    """
+    invoked = _resolve_executable_path(sys.argv[0])
+    if invoked:
+        invoked_path = Path(invoked)
+        if invoked_path.name == "smriti" and os.access(invoked_path, os.X_OK):
+            return invoked
+
+    path_entry = _resolve_executable_path(shutil.which("smriti"))
+    return path_entry or "smriti"
+
+
+def _build_session_start_hook_command(space_name: str) -> str:
+    command = " ".join(
+        [
+            shlex.quote(_smriti_hook_executable()),
+            "state",
+            shlex.quote(space_name),
+            "--compact",
+            "2>/dev/null",
+            "||",
+            "echo",
+            shlex.quote(
+                "Smriti backend not reachable. Start with: make dev-local"
+            ),
+        ]
+    )
+    return command
+
+
+def _is_smriti_session_start_entry(entry: Any) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        return False
+    for hook in hooks:
+        if not isinstance(hook, dict):
+            continue
+        command = hook.get("command")
+        normalized = command.replace("'", "").replace('"', "") if isinstance(command, str) else ""
+        if "smriti state " in normalized:
+            return True
+    return False
 
 
 def _background_provider_check(providers: dict) -> str:
@@ -1023,9 +1077,8 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     """One-step agent onboarding: create space, install skill packs,
     configure SessionStart hook. Idempotent — safe to run twice."""
     import json as _json
-    from pathlib import Path
 
-    from .skill_pack import get_version, install as install_skill, renderer
+    from .skill_pack import install as install_skill
 
     space_name = args.space
     results: list[str] = []
@@ -1098,10 +1151,7 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
 
     # 5. Generate SessionStart hook.
     settings_path = Path(".claude/settings.json")
-    hook_command = (
-        f"backend/.venv/bin/smriti state {space_name} --preview 2>/dev/null "
-        f"|| echo 'Smriti backend not reachable. Start with: make dev-local'"
-    )
+    hook_command = _build_session_start_hook_command(space_name)
     hook_entry = {
         "type": "command",
         "command": hook_command,
@@ -1122,16 +1172,27 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     else:
         existing = {}
 
-    if "hooks" in existing and "SessionStart" in existing.get("hooks", {}):
+    existing.setdefault("hooks", {})
+    existing_session_start = existing["hooks"].get("SessionStart")
+    if not isinstance(existing_session_start, list):
+        existing_session_start = []
+
+    non_smriti_hooks = [
+        entry for entry in existing_session_start
+        if not _is_smriti_session_start_entry(entry)
+    ]
+    merged_session_start = non_smriti_hooks + target_hooks["SessionStart"]
+
+    if existing_session_start == merged_session_start:
         results.append("SessionStart hook already configured → .claude/settings.json")
     else:
-        existing.setdefault("hooks", {})
-        existing["hooks"]["SessionStart"] = target_hooks["SessionStart"]
+        existing["hooks"]["SessionStart"] = merged_session_start
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(
             _json.dumps(existing, indent=2) + "\n", encoding="utf-8"
         )
-        results.append("SessionStart hook configured → .claude/settings.json")
+        action = "updated" if existing_session_start else "configured"
+        results.append(f"SessionStart hook {action} → .claude/settings.json")
 
     # 6. MCP config reminder.
     next_steps.append(
@@ -1139,7 +1200,11 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
         '    {"mcpServers": {"smriti": {"command": "smriti-mcp", '
         '"env": {"SMRITI_API_URL": "http://localhost:8000"}}}}'
     )
-    next_steps.append(f"Start working:\n    smriti state {space_name}")
+    next_steps.append(
+        "Verify activation:\n"
+        "    smriti doctor\n"
+        f"    smriti state {space_name} --compact"
+    )
 
     # 7. Output.
     if args.json:
