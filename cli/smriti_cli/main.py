@@ -208,10 +208,24 @@ def _smriti_hook_executable() -> str:
     return path_entry or "smriti"
 
 
-def _build_session_start_hook_command(space_name: str) -> str:
-    command = " ".join(
+def _smriti_mcp_executable() -> str:
+    """Choose a practical MCP server executable for generated config hints."""
+    smriti_exe = _smriti_hook_executable()
+    if smriti_exe != "smriti":
+        sibling = Path(smriti_exe).with_name("smriti-mcp")
+        if sibling.exists() and os.access(sibling, os.X_OK):
+            return str(sibling)
+
+    path_entry = _resolve_executable_path(shutil.which("smriti-mcp"))
+    return path_entry or "smriti-mcp"
+
+
+def _build_session_start_hook_command(space_name: str, api_url: str | None = None) -> str:
+    args = [shlex.quote(_smriti_hook_executable())]
+    if api_url:
+        args.extend(["--api-url", shlex.quote(api_url)])
+    args.extend(
         [
-            shlex.quote(_smriti_hook_executable()),
             "state",
             shlex.quote(space_name),
             "--compact",
@@ -222,6 +236,9 @@ def _build_session_start_hook_command(space_name: str) -> str:
                 "Smriti backend not reachable. Start with: make dev-local"
             ),
         ]
+    )
+    command = " ".join(
+        args
     )
     return command
 
@@ -237,7 +254,7 @@ def _is_smriti_session_start_entry(entry: Any) -> bool:
             continue
         command = hook.get("command")
         normalized = command.replace("'", "").replace('"', "") if isinstance(command, str) else ""
-        if "smriti state " in normalized:
+        if "smriti" in normalized and " state " in normalized:
             return True
     return False
 
@@ -1151,7 +1168,7 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
 
     # 5. Generate SessionStart hook.
     settings_path = Path(".claude/settings.json")
-    hook_command = _build_session_start_hook_command(space_name)
+    hook_command = _build_session_start_hook_command(space_name, client.base_url)
     hook_entry = {
         "type": "command",
         "command": hook_command,
@@ -1195,10 +1212,17 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
         results.append(f"SessionStart hook {action} → .claude/settings.json")
 
     # 6. MCP config reminder.
+    mcp_config = {
+        "mcpServers": {
+            "smriti": {
+                "command": _smriti_mcp_executable(),
+                "env": {"SMRITI_API_URL": client.base_url},
+            }
+        }
+    }
     next_steps.append(
         "Configure MCP in your host (if using Claude Code / Cursor / Windsurf):\n"
-        '    {"mcpServers": {"smriti": {"command": "smriti-mcp", '
-        '"env": {"SMRITI_API_URL": "http://localhost:8000"}}}}'
+        f"    {_json.dumps(mcp_config)}"
     )
     next_steps.append(
         "Verify activation:\n"
