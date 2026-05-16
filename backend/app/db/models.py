@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pgvector.sqlalchemy import Vector
 
 from app.db.database import Base
+from app.db.types import embedding_column, json_column
 
 
 def _utcnow() -> datetime:
@@ -73,11 +73,11 @@ class ExtractionResultModel(Base):
         unique=True,
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    decisions: Mapped[dict] = mapped_column(JSONB, default=list)
-    tasks: Mapped[dict] = mapped_column(JSONB, default=list)
-    open_questions: Mapped[dict] = mapped_column(JSONB, default=list)
-    entities: Mapped[dict] = mapped_column(JSONB, default=list)
-    code_snippets: Mapped[dict] = mapped_column(JSONB, default=list)
+    decisions: Mapped[dict] = mapped_column(json_column(), default=list)
+    tasks: Mapped[dict] = mapped_column(json_column(), default=list)
+    open_questions: Mapped[dict] = mapped_column(json_column(), default=list)
+    entities: Mapped[dict] = mapped_column(json_column(), default=list)
+    code_snippets: Mapped[dict] = mapped_column(json_column(), default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationships
@@ -113,12 +113,12 @@ class MemoryItemModel(Base):
     )
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)  # OpenAI small model dim
+    embedding: Mapped[list[float] | None] = mapped_column(embedding_column(1536), nullable=True)  # OpenAI small model dim
     source: Mapped[str] = mapped_column(String(255), nullable=True)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     importance: Mapped[float] = mapped_column(Float, default=1.0)
     status: Mapped[str] = mapped_column(String(50), default="active")
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", json_column(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -137,7 +137,7 @@ class RepoModel(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, index=True
     )
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", json_column(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -173,16 +173,16 @@ class CommitModel(Base):
     # State snapshots
     summary: Mapped[str] = mapped_column(Text, default="")
     objective: Mapped[str] = mapped_column(Text, default="")
-    decisions: Mapped[dict] = mapped_column(JSONB, default=list)
-    assumptions: Mapped[dict] = mapped_column(JSONB, default=list)
-    tasks: Mapped[dict] = mapped_column(JSONB, default=list)
-    open_questions: Mapped[dict] = mapped_column(JSONB, default=list)
-    entities: Mapped[dict] = mapped_column(JSONB, default=list)
-    artifacts: Mapped[dict] = mapped_column(JSONB, default=list)
-    context_blob: Mapped[dict] = mapped_column(JSONB, default=dict)
+    decisions: Mapped[dict] = mapped_column(json_column(), default=list)
+    assumptions: Mapped[dict] = mapped_column(json_column(), default=list)
+    tasks: Mapped[dict] = mapped_column(json_column(), default=list)
+    open_questions: Mapped[dict] = mapped_column(json_column(), default=list)
+    entities: Mapped[dict] = mapped_column(json_column(), default=list)
+    artifacts: Mapped[dict] = mapped_column(json_column(), default=list)
+    context_blob: Mapped[dict] = mapped_column(json_column(), default=dict)
     
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", json_column(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationships
@@ -220,7 +220,7 @@ class ChatSession(Base):
     # ## Active branches section of smriti state without deleting history.
     # Values: "active" (default, shown), "integrated" (hidden), "abandoned" (hidden).
     branch_disposition: Mapped[str] = mapped_column(String(20), default="active")
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", json_column(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -258,7 +258,7 @@ class TurnEvent(Base):
     commit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("commits.id", ondelete="SET NULL"), nullable=True
     )
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", json_column(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationships
