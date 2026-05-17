@@ -1060,6 +1060,136 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     print()
 
 
+# ── quickstart subcommand handler ───────────────────────────────────────────
+
+
+def _render_quickstart(args: argparse.Namespace, payload: dict) -> None:
+    """Emit a quickstart result — JSON when --json, otherwise human-readable."""
+    if args.json:
+        _print_json(payload)
+        return
+
+    space = payload["space"]
+    action = payload["action"]
+    print()
+
+    if action == "removed":
+        print(f'  ✓ Removed the demo space "{space}".')
+        print()
+        return
+
+    if action == "nothing-to-remove":
+        print(f'  No demo space to remove — "{space}" does not exist.')
+        print()
+        return
+
+    if action == "exists":
+        print(f'  The demo space "{space}" is already seeded.')
+        print()
+        print(f"    smriti current {space}      explore it")
+        print("    smriti quickstart --reset     rebuild it from scratch")
+        print("    smriti quickstart --remove    delete it")
+        print()
+        return
+
+    # action == "seeded"
+    claims = payload["claims"]
+    active = sum(1 for c in claims if c.get("status") != "done")
+    n_checkpoints = len(payload["checkpoints"])
+    print(f'  ✓ Seeded the demo space "{space}".')
+    print(
+        f"    {n_checkpoints} checkpoints · 2 agents · "
+        f"1 branch explored and dropped · "
+        f"{len(claims)} work claims ({active} still active)"
+    )
+    print()
+    print('  This is one small, finished feature — "add rate limiting to the')
+    print('  API" — captured the way Smriti captures reasoning: the decisions,')
+    print("  the assumptions under them, a branch that was tried and dropped,")
+    print("  and a hand-off between two agents. Smriti's value is this")
+    print("  accumulated state — quickstart just gives you some on day one.")
+    print()
+    print("  Walk through it — about three minutes:")
+    print()
+    for i, step in enumerate(payload["guide"], 1):
+        print(f"    {i}. {step['command']}")
+        print(f"       {step['note']}")
+        print()
+    print("  Then open the dashboard:  http://localhost:5173")
+    print()
+    print("  Done exploring?  smriti quickstart --remove")
+    print()
+
+
+def cmd_quickstart(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Seed a curated demo space so a new user sees what Smriti is for.
+
+    The empty-room problem: a fresh install opens to an empty space, and
+    Smriti's value only shows once reasoning has accumulated. `quickstart`
+    seeds one small, finished, realistic project — built by two agents, with
+    a branch that was explored and dropped — and prints a short walkthrough.
+
+    Default: seed `smriti-demo`. --remove deletes it; --reset removes then
+    re-seeds. Idempotent — re-running without flags when the demo already
+    exists just reprints how to explore or rebuild it.
+    """
+    from . import quickstart as qs
+
+    # Backend reachability — same failure guidance as `smriti init`.
+    try:
+        client.list_spaces()
+    except SmritiError:
+        _fail(
+            f"error: Cannot reach Smriti backend at {client.base_url}.\n"
+            "Start the backend with `make dev-local` for solo/local mode, "
+            "or `make dev-postgres` for Postgres/shared-team mode."
+        )
+        return
+
+    # Removal path — both --remove and --reset clear an existing demo space.
+    if args.remove or args.reset:
+        existing = qs.find_demo_space(client)
+        if existing is not None and qs.is_demo_space(existing):
+            if not _confirm(
+                f'Delete the demo space "{qs.DEMO_SPACE_NAME}" and all '
+                f"its checkpoints?",
+                args.yes,
+            ):
+                _fail("Cancelled.", code=0)
+        result = qs.remove_demo_space(client)
+        if not result["removed"] and result.get("reason") == "not-a-demo-space":
+            _fail(
+                f'error: A space named "{qs.DEMO_SPACE_NAME}" exists but was '
+                f"not created by quickstart — it lacks the demo marker.\n"
+                f"Refusing to delete it. To remove it yourself, run:\n"
+                f"    smriti space delete {qs.DEMO_SPACE_NAME}"
+            )
+            return
+        if args.remove:
+            action = "removed" if result["removed"] else "nothing-to-remove"
+            _render_quickstart(args, {"action": action, "space": qs.DEMO_SPACE_NAME})
+            return
+        # --reset: fall through and re-seed.
+
+    # Seeding path.
+    if qs.find_demo_space(client) is not None:
+        _render_quickstart(args, {"action": "exists", "space": qs.DEMO_SPACE_NAME})
+        return
+
+    seed = qs.seed_demo_space(client)
+    _render_quickstart(
+        args,
+        {
+            "action": "seeded",
+            "space": qs.DEMO_SPACE_NAME,
+            "space_id": seed["space_id"],
+            "checkpoints": seed["checkpoints"],
+            "claims": seed["claims"],
+            "guide": qs.build_guide(seed),
+        },
+    )
+
+
 # ── branch subcommand handlers ──────────────────────────────────────────────
 
 
@@ -1294,6 +1424,31 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     doctor_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     doctor_parser.set_defaults(func=cmd_doctor)
+
+    # quickstart — seed a curated demo space so the product clicks fast
+    quickstart_parser = subparsers.add_parser(
+        "quickstart",
+        help="Seed a curated demo space (smriti-demo) and print a guided walkthrough",
+    )
+    quickstart_mode = quickstart_parser.add_mutually_exclusive_group()
+    quickstart_mode.add_argument(
+        "--remove",
+        action="store_true",
+        help="Delete the demo space instead of seeding it",
+    )
+    quickstart_mode.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the demo space if present, then seed a fresh one",
+    )
+    quickstart_parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt when removing the demo space",
+    )
+    quickstart_parser.add_argument("--json", action="store_true")
+    quickstart_parser.set_defaults(func=cmd_quickstart)
 
     # space
     space_parser = subparsers.add_parser("space", help="Manage Smriti spaces (projects)")
