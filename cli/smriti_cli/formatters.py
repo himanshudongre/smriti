@@ -120,6 +120,25 @@ def _list_section(heading: str, items: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _coerce_blocked_by(value: object) -> str | None:
+    """Normalize blocked_by — string, list of dependency labels, or null —
+    to a single display string.
+
+    Real task payloads carry blocked_by as a plain string or as a list (a
+    task blocked by several others). Mirrors the backend CurrentTask
+    validator so `smriti state` and `smriti current` render it identically
+    instead of leaking a raw Python list repr into the state brief.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, (list, tuple)):
+        labels = [str(item).strip() for item in value if str(item).strip()]
+        return ", ".join(labels) or None
+    return str(value).strip() or None
+
+
 def _normalize_task_item(item) -> dict:
     """Normalize a task to a dict with at least a 'text' key.
 
@@ -131,6 +150,8 @@ def _normalize_task_item(item) -> dict:
         task = dict(item)
         if not task.get("intent_hint") and task.get("intent_type"):
             task["intent_hint"] = task["intent_type"]
+        if "blocked_by" in task:
+            task["blocked_by"] = _coerce_blocked_by(task["blocked_by"])
         return task
     # Fallback: coerce to string
     return {"text": str(item)}

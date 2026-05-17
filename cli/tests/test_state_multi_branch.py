@@ -504,6 +504,13 @@ def test_normalize_task_item_dict():
     assert result == task
 
 
+def test_normalize_task_item_coerces_list_blocked_by():
+    """A list-valued blocked_by is normalized to a comma-separated string."""
+    task = {"text": "Wire the limiter", "blocked_by": ["middleware", "load-test"]}
+    result = _normalize_task_item(task)
+    assert result["blocked_by"] == "middleware, load-test"
+
+
 def test_task_section_empty():
     """Empty task list produces empty string."""
     assert _task_section([]) == ""
@@ -545,6 +552,17 @@ def test_task_section_structured_with_blocked_by():
     ]
     out = _task_section(tasks)
     assert "→ blocked by: freshness-impl" in out
+
+
+def test_task_section_renders_list_valued_blocked_by():
+    """A list-valued blocked_by renders as a clean comma-separated string,
+    not a raw Python list repr — consistent with `smriti current`."""
+    tasks = [
+        {"text": "Wire the limiter", "blocked_by": ["middleware", "load-test"]},
+    ]
+    out = _task_section(tasks)
+    assert "→ blocked by: middleware, load-test" in out
+    assert "['" not in out  # not the raw Python list repr
 
 
 def test_task_section_structured_with_done_status():
