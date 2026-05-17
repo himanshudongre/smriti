@@ -201,6 +201,45 @@ def test_current_open_tasks_accept_legacy_intent_type(client):
     assert cur["open_tasks_by_intent"]["implement"][0]["id"] == "middleware"
 
 
+def test_current_handles_list_valued_blocked_by(client):
+    """Real projects produce tasks whose `blocked_by` is a list of
+    dependency labels. The current-state surface must normalize that to a
+    display string, not 500 on it (regression: HTTP 500 from a Pydantic
+    ValidationError when blocked_by was a list)."""
+    repo_id = _create_repo(client, "List Blocked-By")
+    session_id = _create_session(client, repo_id)
+    _commit(
+        client,
+        repo_id,
+        session_id,
+        message="Tasks with varied blocked_by shapes",
+        tasks=[
+            {
+                "text": "Wire the limiter into the gateway",
+                "intent_hint": "implement",
+                "id": "wire-gateway",
+                "status": "open",
+                "blocked_by": ["middleware", "load-test"],
+            },
+            {
+                "text": "Single-dependency task",
+                "intent_hint": "implement",
+                "id": "single-dep",
+                "status": "open",
+                "blocked_by": "wire-gateway",
+            },
+        ],
+    )
+
+    # Pre-fix, a list-valued blocked_by raised a Pydantic ValidationError
+    # and this request 500ed; _get_current asserts a 200.
+    cur = _get_current(client, repo_id)
+
+    by_id = {t["id"]: t for t in cur["open_tasks_by_intent"]["implement"]}
+    assert by_id["wire-gateway"]["blocked_by"] == "middleware, load-test"
+    assert by_id["single-dep"]["blocked_by"] == "wire-gateway"
+
+
 def test_current_recent_milestones(client):
     """Milestone notes surface in recent_milestones; plain notes do not."""
     repo_id = _create_repo(client, "Milestones")

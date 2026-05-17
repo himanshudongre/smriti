@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -107,6 +107,25 @@ class CurrentTask(BaseModel):
     intent_hint: Optional[str] = None
     blocked_by: Optional[str] = None
     status: str = "open"
+
+    @field_validator("blocked_by", mode="before")
+    @classmethod
+    def _coerce_blocked_by(cls, value: object) -> Optional[str]:
+        """Normalize blocked_by from whatever real task payloads carry.
+
+        A structured task's `blocked_by` shows up as a string, a list of
+        dependency labels (a task blocked by several others), or null.
+        Coerce any of them to a single display string so the current-state
+        surface never 500s on a list-valued blocked_by.
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip() or None
+        if isinstance(value, (list, tuple)):
+            labels = [str(item).strip() for item in value if str(item).strip()]
+            return ", ".join(labels) or None
+        return str(value).strip() or None
 
 
 class RecentActivityEntry(BaseModel):
