@@ -133,31 +133,64 @@ make dev-frontend                # frontend on http://localhost:5173
 If `DATABASE_URL` is explicitly set to a Postgres URL, Smriti preserves
 Postgres behavior.
 
-### 3. For coding agents
+### 3. See Smriti work — do this first
 
-**Quick path:**
+Before connecting your own project, watch Smriti work on a project that
+already has reasoning state in it. This is the fastest way to understand what
+it is for — and it keeps you from opening to an empty space.
+
+In a new terminal:
 
 ```bash
 source backend/.venv/bin/activate
+
+smriti doctor                  # confirm the backend and CLI are healthy
+smriti quickstart              # seed a demo space, then print a guided walkthrough
+```
+
+`smriti quickstart` seeds `smriti-demo` — one small, finished project (a
+rate-limiting feature built by two agents, with a branch explored and then
+dropped) — and prints a short, guided ~3-minute walkthrough of it. It shows
+the real shape of a Smriti project instead of an empty space, and it works in
+mock mode with no API key. Clean it up afterward with `smriti quickstart --remove`.
+
+### 4. Connect your own project (coding agents)
+
+Now point Smriti at a real project. In the same terminal where you activated
+the venv (step 3):
+
+```bash
+cd /path/to/your-project       # your own project — NOT the Smriti repo
 smriti init my-project
 ```
 
-This creates the space, installs skill packs for Claude Code and Codex, and configures the SessionStart hook. Follow the printed next steps.
+Run `smriti init` from **inside your own project's directory**. It writes the
+skill pack and the `SessionStart` hook into the current directory, so running
+it from the Smriti repo would wire up Smriti's own repo by mistake. It creates
+the space, installs the Claude Code and Codex skill packs, configures the
+SessionStart hook, and prints the exact next steps to follow.
 
-**MCP config** (Claude Code, Cursor, Windsurf):
+**MCP config** (Claude Code, Cursor, Windsurf). `smriti init` prints a
+ready-to-paste MCP config block with the executable path and API URL already
+resolved for your machine — use what it prints. The shape:
 
 ```json
 {
   "mcpServers": {
     "smriti": {
-      "command": "smriti-mcp",
+      "command": "/absolute/path/to/smriti-mcp",
       "env": { "SMRITI_API_URL": "http://localhost:8000" }
     }
   }
 }
 ```
 
-**Skill pack** (teaches the agent when and why to use Smriti):
+Use the resolved path from `smriti init` rather than a bare `"smriti-mcp"` — a
+bare command name only works if `smriti-mcp` is on the MCP host's PATH, which
+it usually is not for a venv install.
+
+**Skill pack** (teaches the agent when and why to use Smriti). `smriti init`
+already installs both — run these only to reinstall or upgrade:
 
 ```bash
 smriti skills install claude-code     # → .claude/skills/smriti/SKILL.md
@@ -170,7 +203,7 @@ mode, Postgres runs in Docker and the backend runs via `make dev-postgres`.
 Agents are clients of `http://localhost:8000` — they do not manage the
 backend.
 
-### 4. Auto-inject state at session start (Claude Code)
+### 5. Auto-inject state at session start (Claude Code)
 
 ```json
 {
@@ -190,7 +223,7 @@ backend.
 }
 ```
 
-With this hook in `.claude/settings.json`, the state brief is injected automatically at session start. The agent doesn't need to remember to call `smriti_state`.
+`smriti init` already writes this hook into `.claude/settings.json`, with the `smriti` path resolved for your machine — the block above is what it generates. With the hook in place, the state brief is injected automatically at session start; the agent doesn't need to remember to call `smriti_state`.
 
 ---
 
@@ -284,7 +317,12 @@ ANTHROPIC_API_KEY=...
 OPENROUTER_API_KEY=...
 ```
 
-Or use mock mode (no API keys needed) for trying the product without real LLM calls.
+**Mock mode.** With no API keys set, Smriti runs in mock mode. Setup, the chat
+UI, the CLI, `smriti quickstart`, and the whole coordination flow work
+normally — but the LLM-backed paths (`smriti checkpoint create --extract`,
+checkpoint draft, and review) return deterministic placeholder content instead
+of real extraction. Mock mode is good for trying the mechanics; add an API key
+when you want real structured checkpoints pulled from freeform notes.
 
 ## Tech stack
 
@@ -304,4 +342,8 @@ make down     # stop all services
 
 ## Try the demo
 
-There is a guided walkthrough in `demos/branching-reasoning-demo/` covering the single-user checkpoint/fork/compare workflow. For the multi-agent coordination story, follow the Getting Started section above and run `smriti state` + `smriti metrics` on your own project.
+The fastest way to see Smriti work is `smriti quickstart` — it seeds a demo
+space and prints a guided walkthrough (see Getting started, step 3).
+
+For a deeper single-user walkthrough, `demos/branching-reasoning-demo/` covers
+the checkpoint / fork / compare workflow step by step.
