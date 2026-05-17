@@ -123,11 +123,14 @@ EXPECTED_HEALTH_CAPABILITIES = {
 }
 
 
-def _git_output(*args: str) -> str | None:
+def _git_output_at(cwd: str | os.PathLike[str] | None, *args: str) -> str | None:
     """Return trimmed git output for diagnostics, or None outside a git repo."""
+    cmd = ["git", *args]
+    if cwd is not None:
+        cmd = ["git", "-C", str(cwd), *args]
     try:
         result = subprocess.run(
-            ["git", *args],
+            cmd,
             check=True,
             capture_output=True,
             text=True,
@@ -135,6 +138,65 @@ def _git_output(*args: str) -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip() or None
+
+
+def _git_output(*args: str) -> str | None:
+    """Return trimmed git output for the current directory."""
+    return _git_output_at(None, *args)
+
+
+def _git_context(cwd: str | os.PathLike[str] | None = None) -> dict:
+    root = _git_output_at(cwd, "rev-parse", "--show-toplevel")
+    sha = _git_output_at(cwd, "rev-parse", "HEAD")
+    short = _git_output_at(cwd, "rev-parse", "--short", "HEAD")
+    branch = (
+        _git_output_at(cwd, "branch", "--show-current")
+        or _git_output_at(cwd, "rev-parse", "--abbrev-ref", "HEAD")
+    )
+    return {
+        "git_root": root,
+        "git_sha": sha,
+        "git_sha_short": short,
+        "branch": branch,
+    }
+
+
+def _is_smriti_source_root(path: str | None) -> bool:
+    if not path:
+        return False
+    root = Path(path)
+    return (
+        (root / "cli" / "smriti_cli" / "main.py").exists()
+        and (root / "backend" / "app" / "main.py").exists()
+    )
+
+
+def _build_cwd_info() -> dict:
+    info = _git_context()
+    info["path"] = os.getcwd()
+    info["is_smriti_source"] = _is_smriti_source_root(info.get("git_root"))
+    return info
+
+
+def _build_smriti_source_info() -> dict:
+    """Detect the Smriti source checkout backing this CLI, if available.
+
+    `smriti doctor` is often run from a user's project repo. Runtime freshness
+    must compare the backend to Smriti's own source checkout, not the caller's
+    app repo. Editable installs have `__file__` inside the Smriti checkout; a
+    wheel/global install may not, in which case the git comparison is simply
+    unavailable rather than a mismatch.
+    """
+    module_dir = Path(__file__).resolve().parent
+    info = _git_context(module_dir)
+    info["path"] = str(module_dir)
+    info["is_smriti_source"] = _is_smriti_source_root(info.get("git_root"))
+    if not info["is_smriti_source"]:
+        info["git_root"] = None
+        info["git_sha"] = None
+        info["git_sha_short"] = None
+        info["branch"] = None
+    return info
 
 
 def _git_sha_matches(backend_sha: str | None, local_sha: str | None) -> bool | None:
@@ -268,12 +330,11 @@ def _background_provider_check(providers: dict) -> str:
 
 def _build_doctor_report(client: SmritiClient) -> dict:
     """Build a small diagnostics report without attempting repairs."""
-    local_sha = _git_output("rev-parse", "HEAD")
-    local_branch = (
-        _git_output("branch", "--show-current")
-        or _git_output("rev-parse", "--abbrev-ref", "HEAD")
-    )
-    local_short = _git_output("rev-parse", "--short", "HEAD")
+    source_info = _build_smriti_source_info()
+    cwd_info = _build_cwd_info()
+    if not source_info.get("git_sha") and cwd_info.get("is_smriti_source"):
+        source_info = dict(cwd_info)
+    source_sha = source_info.get("git_sha")
 
     report = {
         "api_url": client.base_url,
@@ -284,11 +345,11 @@ def _build_doctor_report(client: SmritiClient) -> dict:
             "capabilities": [],
             "error": None,
         },
-        "local": {
-            "git_sha": local_sha,
-            "git_sha_short": local_short,
-            "branch": local_branch,
-        },
+        # Backward-compatible alias: historically "local" meant cwd. It now
+        # means the local Smriti source/install used for runtime comparison.
+        "local": source_info,
+        "source": source_info,
+        "cwd": cwd_info,
         "cli": _build_cli_info(),
         "checks": {
             "runtime_match": "unknown",
@@ -322,7 +383,7 @@ def _build_doctor_report(client: SmritiClient) -> dict:
     database = health.get("database") or {}
     providers = health.get("providers") or {}
     missing = sorted(EXPECTED_HEALTH_CAPABILITIES - set(capabilities))
-    match = _git_sha_matches(backend_sha, local_sha)
+    match = _git_sha_matches(backend_sha, source_sha)
 
     report["backend"].update({
         "reachable": True,
@@ -354,14 +415,16 @@ def _build_doctor_report(client: SmritiClient) -> dict:
     elif match is False:
         report["checks"]["runtime_match"] = "mismatch"
         report["hints"].append(
-            "Backend git_sha differs from local HEAD; restart the backend "
-            "after syncing code, or check out the commit the backend is running."
+            "Backend git_sha differs from the local Smriti source HEAD; "
+            "restart the backend after syncing code, or check out the commit "
+            "the backend is running."
         )
     else:
-        report["checks"]["runtime_match"] = "unknown"
-        report["hints"].append(
-            "Could not compare backend git_sha with local HEAD."
-        )
+        report["checks"]["runtime_match"] = "not_applicable"
+        if source_info.get("git_root"):
+            report["hints"].append(
+                "Could not compare backend git_sha with the local Smriti source checkout."
+            )
 
     if health.get("status") != "ok":
         report["hints"].append(

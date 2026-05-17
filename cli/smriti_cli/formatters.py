@@ -763,6 +763,8 @@ def format_doctor(report: dict) -> str:
     """Readable diagnostics for backend/runtime consistency."""
     backend = report.get("backend") or {}
     local = report.get("local") or {}
+    source = report.get("source") or local
+    cwd = report.get("cwd") or {}
     cli = report.get("cli") or {}
     checks = report.get("checks") or {}
     hints = report.get("hints") or []
@@ -819,14 +821,36 @@ def format_doctor(report: dict) -> str:
         parts.append("PATH matches executable: unknown")
     parts.append("")
 
-    parts.append("## Local repo")
-    parts.append(f"Branch: `{local.get('branch') or 'unknown'}`")
-    parts.append(f"HEAD: `{local.get('git_sha_short') or local.get('git_sha') or 'unknown'}`")
+    parts.append("## Smriti source")
+    if source.get("git_root"):
+        parts.append(f"Repo: `{source.get('git_root')}`")
+        parts.append(f"Branch: `{source.get('branch') or 'unknown'}`")
+        source_head = source.get("git_sha_short") or source.get("git_sha") or "unknown"
+        parts.append(f"HEAD: `{source_head}`")
+    else:
+        parts.append("Repo: not detected (installed package or non-git install)")
+        parts.append("HEAD: not available")
+    parts.append("")
+
+    parts.append("## Current directory")
+    parts.append(f"Path: `{cwd.get('path') or 'unknown'}`")
+    if cwd.get("git_root"):
+        parts.append(f"Git repo: `{cwd.get('git_root')}`")
+        parts.append(f"Branch: `{cwd.get('branch') or 'unknown'}`")
+        cwd_head = cwd.get("git_sha_short") or cwd.get("git_sha") or "unknown"
+        parts.append(f"HEAD: `{cwd_head}`")
+        if source.get("git_root") and cwd.get("git_root") != source.get("git_root"):
+            parts.append(
+                "Runtime match is checked against the Smriti source above, "
+                "not this project repo."
+            )
+    else:
+        parts.append("Git repo: none detected")
     parts.append("")
 
     parts.append("## Checks")
     runtime_match = checks.get("runtime_match") or "unknown"
-    parts.append(f"- runtime match: {runtime_match}")
+    parts.append(f"- runtime match: {str(runtime_match).replace('_', ' ')}")
     missing = checks.get("missing_capabilities")
     if missing is None:
         parts.append("- missing capabilities: unknown (backend unreachable)")

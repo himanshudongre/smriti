@@ -17,15 +17,43 @@ def _client(health: dict | None = None) -> MagicMock:
     return client
 
 
-def _patch_git(monkeypatch: pytest.MonkeyPatch, *, sha: str = "c470947abcdef", branch: str = "main") -> None:
+def _patch_git(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    sha: str = "c470947abcdef",
+    branch: str = "main",
+    cwd_sha: str | None = None,
+    cwd_branch: str = "main",
+    source_detected: bool = True,
+) -> None:
     short = sha[:7]
-    values = {
-        ("rev-parse", "HEAD"): sha,
-        ("rev-parse", "--short", "HEAD"): short,
-        ("branch", "--show-current"): branch,
-        ("rev-parse", "--abbrev-ref", "HEAD"): branch,
-    }
-    monkeypatch.setattr(cli_main, "_git_output", lambda *args: values.get(args))
+    cwd_sha = cwd_sha if cwd_sha is not None else sha
+    cwd_short = cwd_sha[:7] if cwd_sha else None
+
+    monkeypatch.setattr(
+        cli_main,
+        "_build_smriti_source_info",
+        lambda: {
+            "path": "/repo/cli/smriti_cli",
+            "git_root": "/repo" if source_detected else None,
+            "git_sha": sha if source_detected else None,
+            "git_sha_short": short if source_detected else None,
+            "branch": branch if source_detected else None,
+            "is_smriti_source": source_detected,
+        },
+    )
+    monkeypatch.setattr(
+        cli_main,
+        "_build_cwd_info",
+        lambda: {
+            "path": "/work/project",
+            "git_root": "/work/project" if cwd_sha else None,
+            "git_sha": cwd_sha,
+            "git_sha_short": cwd_short,
+            "branch": cwd_branch if cwd_sha else None,
+            "is_smriti_source": False,
+        },
+    )
 
 
 def _patch_cli(
@@ -110,8 +138,82 @@ def test_doctor_report_flags_mismatch_and_missing_capability(
 
     assert report["checks"]["runtime_match"] == "mismatch"
     assert report["checks"]["missing_capabilities"] == ["worktree_binding"]
-    assert any("differs from local HEAD" in hint for hint in report["hints"])
+    assert any(
+        "differs from the local Smriti source HEAD" in hint
+        for hint in report["hints"]
+    )
     assert any("missing capabilities" in hint for hint in report["hints"])
+
+
+def test_doctor_report_ignores_external_project_git_head(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _patch_git(monkeypatch, sha="c470947abcdef", cwd_sha="deadbeefeedface")
+    _patch_cli(monkeypatch)
+    client = _client(_health(git_sha="c470947"))
+
+    report = cli_main._build_doctor_report(client)
+
+    assert report["checks"]["runtime_match"] == "ok"
+    assert report["source"]["git_sha_short"] == "c470947"
+    assert report["cwd"]["git_sha_short"] == "deadbee"
+    assert not any(
+        "differs from the local Smriti source HEAD" in hint
+        for hint in report["hints"]
+    )
+
+
+def test_doctor_report_does_not_mismatch_without_source_repo(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _patch_git(
+        monkeypatch,
+        sha="ignored",
+        cwd_sha="deadbeefeedface",
+        source_detected=False,
+    )
+    _patch_cli(monkeypatch)
+    client = _client(_health(git_sha="c470947"))
+
+    report = cli_main._build_doctor_report(client)
+
+    assert report["checks"]["runtime_match"] == "not_applicable"
+    assert report["source"]["git_sha"] is None
+    assert report["cwd"]["git_sha_short"] == "deadbee"
+    assert not any(
+        "differs from the local Smriti source HEAD" in hint
+        for hint in report["hints"]
+    )
+
+
+def test_doctor_report_uses_cwd_when_it_is_smriti_source(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _patch_git(
+        monkeypatch,
+        sha="ignored",
+        cwd_sha="c470947abcdef",
+        source_detected=False,
+    )
+    monkeypatch.setattr(
+        cli_main,
+        "_build_cwd_info",
+        lambda: {
+            "path": "/repo",
+            "git_root": "/repo",
+            "git_sha": "c470947abcdef",
+            "git_sha_short": "c470947",
+            "branch": "main",
+            "is_smriti_source": True,
+        },
+    )
+    _patch_cli(monkeypatch)
+    client = _client(_health(git_sha="c470947"))
+
+    report = cli_main._build_doctor_report(client)
+
+    assert report["checks"]["runtime_match"] == "ok"
+    assert report["source"]["git_root"] == "/repo"
 
 
 def test_doctor_report_flags_cli_path_mismatch(monkeypatch: pytest.MonkeyPatch):
@@ -205,3 +307,5 @@ def test_cmd_doctor_prints_activation_details(
     assert "Background intelligence: ready (`openai` / `gpt-4o-mini`)" in out
     assert "## CLI" in out
     assert "PATH matches executable: yes" in out
+    assert "## Smriti source" in out
+    assert "## Current directory" in out
