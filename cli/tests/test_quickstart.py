@@ -150,6 +150,12 @@ def test_fixture_claim_intent_types_are_backend_valid():
         assert claim["intent_type"] in BACKEND_INTENT_TYPES
 
 
+def test_fixture_task_intent_hints_are_backend_valid():
+    for cp in [*MAIN_CHECKPOINTS, FORK_CHECKPOINT]:
+        for task in cp["tasks"]:
+            assert task["intent_hint"] in BACKEND_INTENT_TYPES
+
+
 def test_fixture_has_one_done_and_one_active_claim():
     statuses = {claim["final_status"] for claim in CLAIMS}
     assert statuses == {"done", "active"}
@@ -180,7 +186,7 @@ def test_fixture_branch_diverges_from_its_fork_source():
 def test_fixture_tasks_are_well_formed():
     for cp in [*MAIN_CHECKPOINTS, FORK_CHECKPOINT]:
         for task in cp["tasks"]:
-            assert {"id", "text", "intent_type", "status"} <= set(task)
+            assert {"id", "text", "intent_hint", "status"} <= set(task)
             assert task["status"] in {"open", "done"}
 
 

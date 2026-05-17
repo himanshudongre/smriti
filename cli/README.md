@@ -36,11 +36,15 @@ Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsu
 
 **Claude Code config** (typically `~/.config/claude-code/mcp.json` or `~/Library/Application Support/Claude/claude_desktop_config.json` — check your host's docs for the exact path):
 
+`smriti init <space>` prints the recommended MCP config for the current
+install. If you configure MCP manually, use the absolute path from
+`which smriti-mcp` after activating the intended environment.
+
 ```json
 {
   "mcpServers": {
     "smriti": {
-      "command": "smriti-mcp",
+      "command": "/absolute/path/to/smriti-mcp",
       "env": { "SMRITI_API_URL": "http://localhost:8000" }
     }
   }

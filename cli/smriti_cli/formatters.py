@@ -128,7 +128,10 @@ def _normalize_task_item(item) -> dict:
     if isinstance(item, str):
         return {"text": item}
     if isinstance(item, dict) and item.get("text"):
-        return item
+        task = dict(item)
+        if not task.get("intent_hint") and task.get("intent_type"):
+            task["intent_hint"] = task["intent_type"]
+        return task
     # Fallback: coerce to string
     return {"text": str(item)}
 
@@ -499,7 +502,7 @@ def _direction_text(value) -> str:
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, dict):
-        for key in ("text", "summary", "objective", "message"):
+        for key in ("text", "objective", "headline", "summary", "message"):
             raw = value.get(key)
             if isinstance(raw, str) and raw.strip():
                 return raw.strip()
@@ -867,7 +870,10 @@ def format_metrics(data: dict) -> str:
     agent_dist = coord.get("agent_checkpoints", {})
     dist_str = ", ".join(f"{a}: {n}" for a, n in sorted(agent_dist.items()))
     parts.append("## Coordination")
-    parts.append(f"{total} checkpoints · {agents} agent{'s' if agents != 1 else ''} ({dist_str})")
+    agent_summary = f"{total} checkpoints · {agents} agent{'s' if agents != 1 else ''}"
+    if dist_str:
+        agent_summary += f" ({dist_str})"
+    parts.append(agent_summary)
 
     cross = coord.get("cross_agent_continuations", 0)
     parts.append(f"{cross} cross-agent continuation{'s' if cross != 1 else ''}")
@@ -889,7 +895,12 @@ def format_metrics(data: dict) -> str:
     noise = sq.get("noise_count", 0)
     parts.append("## State quality")
     parts.append(f"{avg_d} decisions/checkpoint · {avg_t} tasks/checkpoint")
-    parts.append(f"{structured} with structured tasks · {with_ids} with task IDs")
+    structured_label = "checkpoint" if structured == 1 else "checkpoints"
+    ids_label = "checkpoint" if with_ids == 1 else "checkpoints"
+    parts.append(
+        f"{structured} {structured_label} with structured tasks · "
+        f"{with_ids} {ids_label} with task IDs"
+    )
     parts.append(f"{milestones} milestone{'s' if milestones != 1 else ''} · {noise} noise label{'s' if noise != 1 else ''}")
     parts.append("")
 

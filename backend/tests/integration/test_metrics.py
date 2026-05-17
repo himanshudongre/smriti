@@ -143,12 +143,14 @@ def test_metrics_structured_tasks_and_ids(client):
             tasks=[{"text": "Task", "intent_hint": "implement"}])
     _commit(client, repo_id, sid, "with ids",
             tasks=[{"text": "Task", "id": "t1", "intent_hint": "test"}])
+    _commit(client, repo_id, sid, "with id but no intent",
+            tasks=[{"text": "Task", "id": "t2"}])
 
     r = client.get(f"/api/v5/metrics/spaces/{repo_id}")
     data = r.json()
 
-    assert data["state_quality"]["checkpoints_with_structured_tasks"] == 2
-    assert data["state_quality"]["checkpoints_with_task_ids"] == 1
+    assert data["state_quality"]["checkpoints_with_structured_tasks"] == 3
+    assert data["state_quality"]["checkpoints_with_task_ids"] == 2
 
 
 def test_metrics_response_shape(client):
