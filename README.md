@@ -170,6 +170,13 @@ it from the Smriti repo would wire up Smriti's own repo by mistake. It creates
 the space, installs the Claude Code and Codex skill packs, configures the
 SessionStart hook, and prints the exact next steps to follow.
 
+It also **attaches** the repo to that space — a small `.smriti.json` file at
+the repo root. From then on, `smriti` commands run inside the repo resolve the
+space automatically: `smriti state`, `smriti current`, `smriti claim …` need no
+space argument, and a Claude or Codex session opened anywhere in the repo
+connects to the right space on its own. Use `smriti attach <space>` to attach a
+repo (or re-point one) without the full `init`.
+
 **MCP config** (Claude Code, Cursor, Windsurf). `smriti init` prints a
 ready-to-paste MCP config block with the executable path and API URL already
 resolved for your machine — use what it prints. If you configure MCP manually

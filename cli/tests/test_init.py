@@ -55,14 +55,12 @@ def test_session_start_hook_command_shell_quotes(monkeypatch):
         lambda: "/Applications/Smriti Tools/bin/smriti",
     )
 
-    command = cli_main._build_session_start_hook_command(
-        "my project",
-        "http://localhost:8000",
-    )
+    command = cli_main._build_session_start_hook_command("http://localhost:8000")
 
+    # Space-agnostic: the hook resolves the space from .smriti.json — no name embedded.
     assert command.startswith(
         "'/Applications/Smriti Tools/bin/smriti' --api-url "
-        "http://localhost:8000 state 'my project' --compact"
+        "http://localhost:8000 state --compact"
     )
     assert "backend/.venv/bin/smriti" not in command
 
@@ -116,10 +114,16 @@ def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
     command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
     assert command.startswith(
         "/opt/smriti/bin/smriti --api-url "
-        "http://localhost:8000 state test-project --compact"
+        "http://localhost:8000 state --compact"
     )
     assert "backend/.venv/bin/smriti" not in command
     assert "--preview" not in command
+    assert "test-project" not in command  # the hook is space-agnostic
+
+    # init attaches the repo: .smriti.json records the repo → space binding
+    record = json.loads((tmp_path / ".smriti.json").read_text())
+    assert record["space"] == "test-project"
+    assert record["space_id"] == "new-space-uuid"
 
 
 def test_init_connects_existing_space(mock_client, tmp_path, monkeypatch):
@@ -239,7 +243,7 @@ def test_init_updates_stale_smriti_session_start_hook(
     assert len(commands) == 3
     assert all(
         command.startswith(
-            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
+            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state --compact"
         )
         for command in commands
     )
@@ -273,7 +277,7 @@ def test_init_preserves_unrelated_session_start_hooks(
     assert len(entries) == 4
     assert any(
         entry["hooks"][0]["command"].startswith(
-            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
+            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state --compact"
         )
         for entry in entries[1:]
     )

@@ -59,6 +59,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+from . import attachment
 from .client import SmritiClient, SmritiError
 from .formatters import (
     format_checkpoint,
@@ -282,14 +283,19 @@ def _smriti_mcp_executable() -> str:
     return path_entry or "smriti-mcp"
 
 
-def _build_session_start_hook_command(space_name: str, api_url: str | None = None) -> str:
+def _build_session_start_hook_command(api_url: str | None = None) -> str:
+    """Build the SessionStart hook command.
+
+    The hook is space-agnostic: `smriti state --compact` resolves the space
+    from the repo's `.smriti.json` attachment, so the same hook works for
+    every attached project and survives re-attaching to a different space.
+    """
     args = [shlex.quote(_smriti_hook_executable())]
     if api_url:
         args.extend(["--api-url", shlex.quote(api_url)])
     args.extend(
         [
             "state",
-            shlex.quote(space_name),
             "--compact",
             "2>/dev/null",
             "||",
@@ -299,10 +305,48 @@ def _build_session_start_hook_command(space_name: str, api_url: str | None = Non
             ),
         ]
     )
-    command = " ".join(
-        args
-    )
-    return command
+    return " ".join(args)
+
+
+def _resolve_space(client: SmritiClient, args: argparse.Namespace) -> dict:
+    """Resolve the space a command should act on.
+
+    Precedence:
+      1. an explicit `<space>` argument, when the command was given one;
+      2. otherwise the repo's `.smriti.json` attachment.
+
+    Fails with actionable guidance when neither is available, so an agent
+    in an un-attached repo gets a clear next step instead of a stack trace.
+    """
+    explicit = getattr(args, "space", None)
+    if explicit:
+        return client.resolve_space(explicit)
+
+    record = attachment.read_attachment()
+    if record is None:
+        _fail(
+            "No space given, and this directory is not attached to a Smriti space.\n"
+            "Attach it once with `smriti attach <space>` (or `smriti init <space>`),\n"
+            "or pass the space explicitly: `smriti <command> <space>`."
+        )
+
+    # Prefer the recorded id; fall back to the name when the id misses — the
+    # attachment is git-committable and may be read against another backend.
+    space_id = record.get("space_id")
+    if space_id:
+        try:
+            return client.get_space(space_id)
+        except SmritiError as e:
+            if e.status != 404:
+                raise
+    try:
+        return client.resolve_space(record["space"])
+    except SmritiError:
+        _fail(
+            f'This repo is attached to Smriti space "{record["space"]}", but it '
+            f"was not found on the backend at {client.base_url}.\n"
+            "Re-attach with `smriti attach <space>`, or start/point at the right backend."
+        )
 
 
 def _is_smriti_session_start_entry(entry: Any) -> bool:
@@ -550,7 +594,7 @@ def cmd_space_create(client: SmritiClient, args: argparse.Namespace) -> None:
 
 
 def cmd_space_set_project_root(client: SmritiClient, args: argparse.Namespace) -> None:
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     if args.here or args.path in {".", "--here"}:
         path = os.getcwd()
     elif args.path:
@@ -565,7 +609,7 @@ def cmd_space_set_project_root(client: SmritiClient, args: argparse.Namespace) -
 
 
 def cmd_space_delete(client: SmritiClient, args: argparse.Namespace) -> None:
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     commits = client.list_commits(space["id"])
     commit_count = len(commits)
     preview = (
@@ -597,7 +641,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
     and produces main-branch-only output. Useful for scripts that parsed
     the old shape or for debugging the endpoint in isolation.
     """
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
 
     if args.main_only:
         # Legacy path — main branch HEAD only. Two round trips.
@@ -819,7 +863,7 @@ def _build_current_payload_from_existing(client: SmritiClient, space: dict) -> d
 
 def cmd_current(client: SmritiClient, args: argparse.Namespace) -> None:
     """Print the compact Project Current State surface for a space."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     try:
         data = client.get_current_state(space["id"])
     except SmritiError as e:
@@ -834,7 +878,7 @@ def cmd_current(client: SmritiClient, args: argparse.Namespace) -> None:
 
 
 def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> None:
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
 
     if args.extract and args.from_json:
         _fail("--extract and --from-json are mutually exclusive.")
@@ -939,7 +983,7 @@ def cmd_checkpoint_show(client: SmritiClient, args: argparse.Namespace) -> None:
 
 
 def cmd_checkpoint_list(client: SmritiClient, args: argparse.Namespace) -> None:
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     commits = client.list_commits(space["id"], branch=args.branch)
     if args.json:
         _print_json(commits)
@@ -1187,6 +1231,16 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
         )
         results.append(f'Space "{space_name}" created (id: {space["id"][:8]}…)')
 
+    # 2b. Attach this repo to the space — a durable .smriti.json binding so
+    #     commands and the session hook resolve the space automatically.
+    repo_dir = _git_output("rev-parse", "--show-toplevel") or os.getcwd()
+    try:
+        client.set_project_root(space["id"], repo_dir)
+    except Exception:
+        pass  # project_root is a backend hint; the attachment is the source of truth
+    attachment_path = attachment.write_attachment(repo_dir, space["name"], space["id"])
+    results.append(f"Repo attached to space → {attachment_path}")
+
     # 3. Install Claude Code skill pack.
     claude_result = install_skill("claude-code")
     if claude_result.action == "created":
@@ -1231,7 +1285,7 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
 
     # 5. Generate SessionStart hook.
     settings_path = Path(".claude/settings.json")
-    hook_command = _build_session_start_hook_command(space_name, client.base_url)
+    hook_command = _build_session_start_hook_command(client.base_url)
     hook_entry = {
         "type": "command",
         "command": hook_command,
@@ -1290,7 +1344,7 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
     next_steps.append(
         "Verify activation:\n"
         "    smriti doctor\n"
-        f"    smriti state {space_name} --compact"
+        "    smriti state --compact"
     )
 
     # 7. Output.
@@ -1310,6 +1364,96 @@ def cmd_init(client: SmritiClient, args: argparse.Namespace) -> None:
         print("  Next steps:")
         for i, step in enumerate(next_steps, 1):
             print(f"    {i}. {step}")
+    print()
+
+
+# ── attach subcommand handler ───────────────────────────────────────────────
+
+
+def cmd_attach(client: SmritiClient, args: argparse.Namespace) -> None:
+    """Attach this repo to a Smriti space — a durable `.smriti.json` binding.
+
+    With no <space>: print the repo's current attachment.
+    With <space>: resolve or create the space, write `.smriti.json` at the
+    repo root, and set the space's project_root. Afterward, commands in this
+    repo resolve the space automatically — no <space> argument needed.
+    """
+    # No space → show the current attachment and stop.
+    if not args.space:
+        record = attachment.read_attachment()
+        path = attachment.find_attachment_file()
+        if record is None:
+            if args.json:
+                _print_json({"attached": False})
+            else:
+                print("This directory is not attached to a Smriti space.")
+                print("Attach it once:  smriti attach <space>")
+            return
+        if args.json:
+            _print_json({
+                "attached": True,
+                "space": record.get("space"),
+                "space_id": record.get("space_id"),
+                "attachment": str(path) if path else None,
+            })
+            return
+        print(f'Attached to Smriti space "{record.get("space")}".')
+        if record.get("space_id"):
+            print(f"  space id:   {record['space_id']}")
+        print(f"  attachment: {path}")
+        return
+
+    # Verify backend reachability.
+    try:
+        client.list_spaces()
+    except SmritiError:
+        _fail(
+            f"error: Cannot reach Smriti backend at {client.base_url}.\n"
+            "Start the backend with `make dev-local` for solo/local mode, "
+            "or `make dev-postgres` for Postgres/shared-team mode."
+        )
+        return
+
+    # Resolve the space, or create it if it does not exist yet.
+    target_name = args.space
+    try:
+        space = client.resolve_space(target_name)
+        created = False
+    except SmritiError:
+        space = client.create_space(
+            name=target_name, description=args.description or ""
+        )
+        created = True
+
+    repo_dir = _git_output("rev-parse", "--show-toplevel") or os.getcwd()
+
+    # Set the backend's project_root hint (best-effort). The `.smriti.json`
+    # attachment is the source of truth for repo → space resolution.
+    try:
+        client.set_project_root(space["id"], repo_dir)
+    except SmritiError:
+        pass
+
+    path = attachment.write_attachment(repo_dir, space["name"], space["id"])
+
+    if args.json:
+        _print_json({
+            "space": space["name"],
+            "space_id": space["id"],
+            "attachment": str(path),
+            "project_root": repo_dir,
+            "created": created,
+        })
+        return
+
+    verb = "created and attached" if created else "attached"
+    print()
+    print(f'  ✓ Repo {verb} to Smriti space "{space["name"]}"')
+    print(f"    attachment:   {path}")
+    print(f"    project root: {repo_dir}")
+    print()
+    print("  Commands in this repo now resolve the space automatically —")
+    print("  `smriti state`, `smriti current`, `smriti claim create …` need no <space>.")
     print()
 
 
@@ -1448,7 +1592,7 @@ def cmd_quickstart(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_branch_close(client: SmritiClient, args: argparse.Namespace) -> None:
     """Set the disposition of a branch (integrated, abandoned, or active)."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     result = client.close_branch(space["id"], args.branch_name, args.disposition)
     if args.json:
         _print_json(result)
@@ -1464,7 +1608,7 @@ def cmd_branch_close(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_claim_create(client: SmritiClient, args: argparse.Namespace) -> None:
     """Create a work claim — declare intent before starting work."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     head = client.get_head(space["id"])
     base_commit_id = head.get("commit_id")  # auto-bind to current HEAD
 
@@ -1509,7 +1653,7 @@ def cmd_claim_abandon(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_claim_list(client: SmritiClient, args: argparse.Namespace) -> None:
     """List active claims for a space."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     claims = client.list_claims(space["id"], include_expired=args.all)
     if args.json:
         _print_json(claims)
@@ -1566,7 +1710,7 @@ def _print_worktree_table(worktrees: list[dict]) -> None:
 
 def cmd_worktree_open(client: SmritiClient, args: argparse.Namespace) -> None:
     """Create a git worktree for an agent and print its path."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     worktree = client.create_worktree(
         space_id=space["id"],
         agent=args.agent,
@@ -1582,7 +1726,7 @@ def cmd_worktree_open(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_worktree_list(client: SmritiClient, args: argparse.Namespace) -> None:
     """List worktrees for a space."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     worktrees = client.list_worktrees(space["id"], include_closed=args.include_closed)
     if args.json:
         _print_json(worktrees)
@@ -1637,7 +1781,7 @@ def cmd_restore(client: SmritiClient, args: argparse.Namespace) -> None:
 
 def cmd_metrics(client: SmritiClient, args: argparse.Namespace) -> None:
     """Print project-level KPIs for a space."""
-    space = client.resolve_space(args.space)
+    space = _resolve_space(client, args)
     data = client.get_space_metrics(space["id"])
     if args.json:
         _print_json(data)
@@ -1669,6 +1813,22 @@ def _build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--description", help="Space description", default="")
     init_parser.add_argument("--json", action="store_true")
     init_parser.set_defaults(func=cmd_init)
+
+    # attach — bind this repo to a Smriti space (durable .smriti.json)
+    attach_parser = subparsers.add_parser(
+        "attach",
+        help="Attach this repo to a Smriti space so commands resolve it automatically",
+    )
+    attach_parser.add_argument(
+        "space",
+        nargs="?",
+        help="Space to attach to (omit to show the repo's current attachment)",
+    )
+    attach_parser.add_argument(
+        "--description", default="", help="Description, used only if the space is created"
+    )
+    attach_parser.add_argument("--json", action="store_true")
+    attach_parser.set_defaults(func=cmd_attach)
 
     # doctor — local/runtime diagnostics
     doctor_parser = subparsers.add_parser(
@@ -1764,7 +1924,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "state",
         help="Print a continuation-oriented brief of the current project state",
     )
-    state_parser.add_argument("space", help="Space name or UUID")
+    state_parser.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     state_parser.add_argument(
         "--preview",
         action="store_true",
@@ -1813,7 +1973,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "current",
         help="Print the compact Project Current State surface for a space",
     )
-    current_parser.add_argument("space", help="Space name or UUID")
+    current_parser.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     current_parser.add_argument("--json", action="store_true", help="Output structured JSON")
     current_parser.set_defaults(func=cmd_current)
 
@@ -1825,7 +1985,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "create",
         help="Create a checkpoint from JSON on stdin or --from-json <path>",
     )
-    cp_create.add_argument("space", help="Space name or UUID")
+    cp_create.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     cp_create.add_argument(
         "--from-json",
         help="Path to a JSON file with the checkpoint payload (use '-' for stdin)",
@@ -1884,7 +2044,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cp_show.set_defaults(func=cmd_checkpoint_show)
 
     cp_list = cp_sub.add_parser("list", help="List checkpoints in a space")
-    cp_list.add_argument("space", help="Space name or UUID")
+    cp_list.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     cp_list.add_argument("--branch", help="Filter by branch name")
     cp_list.add_argument("--json", action="store_true", help="Output structured JSON")
     cp_list.set_defaults(func=cmd_checkpoint_list)
@@ -1987,7 +2147,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "close",
         help="Set the disposition of a branch (integrated, abandoned, or active)",
     )
-    br_close.add_argument("space", help="Space name or UUID")
+    br_close.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     br_close.add_argument("branch_name", help="Branch name to update")
     br_close.add_argument(
         "--disposition", default="integrated",
@@ -2005,7 +2165,7 @@ def _build_parser() -> argparse.ArgumentParser:
     claim_sub = claim_parser.add_subparsers(dest="subcommand", required=True)
 
     cl_create = claim_sub.add_parser("create", help="Declare intent before starting work")
-    cl_create.add_argument("space", help="Space name or UUID")
+    cl_create.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     cl_create.add_argument("--agent", required=True, help="Your agent identifier (e.g. claude-code)")
     cl_create.add_argument("--scope", required=True, help="One sentence describing what you are about to work on")
     cl_create.add_argument("--branch", help="Branch name (default: main)", default=None)
@@ -2031,7 +2191,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cl_abandon.set_defaults(func=cmd_claim_abandon)
 
     cl_list = claim_sub.add_parser("list", help="List active claims for a space")
-    cl_list.add_argument("space", help="Space name or UUID")
+    cl_list.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     cl_list.add_argument("--all", action="store_true", help="Include expired/done/abandoned claims")
     cl_list.add_argument("--json", action="store_true")
     cl_list.set_defaults(func=cmd_claim_list)
@@ -2044,7 +2204,7 @@ def _build_parser() -> argparse.ArgumentParser:
     worktree_sub = worktree_parser.add_subparsers(dest="subcommand", required=True)
 
     wt_open = worktree_sub.add_parser("open", help="Create a worktree for an agent")
-    wt_open.add_argument("space", help="Space name or UUID")
+    wt_open.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     wt_open.add_argument("--agent", required=True, help="Agent identifier (e.g. claude-code)")
     wt_open.add_argument("--branch", help="Branch name for the new worktree", default=None)
     wt_open.add_argument("--base-commit", dest="base_commit", help="Git SHA to base the worktree on", default=None)
@@ -2061,7 +2221,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "behind, 0 when even, or — when unknown."
         ),
     )
-    wt_list.add_argument("space", help="Space name or UUID")
+    wt_list.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     wt_list.add_argument("--include-closed", action="store_true", help="Include closed worktrees")
     wt_list.add_argument("--json", action="store_true")
     wt_list.set_defaults(func=cmd_worktree_list)
@@ -2137,7 +2297,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # ── metrics ────────────────────────────────────────────────────────
     metrics_parser = subparsers.add_parser("metrics", help="Project-level KPIs for a space")
-    metrics_parser.add_argument("space", help="Space name or UUID")
+    metrics_parser.add_argument("space", nargs="?", help="Space name or UUID (optional — defaults to the attached space)")
     metrics_parser.add_argument("--json", action="store_true", help="Output raw JSON")
     metrics_parser.set_defaults(func=cmd_metrics)
 

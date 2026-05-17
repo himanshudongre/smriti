@@ -139,6 +139,7 @@ The installer is version-aware: it refuses to overwrite a destination whose inst
 
 ```
 smriti init <space> [--description "..."]             # one-step agent onboarding
+smriti attach [<space>]                                # bind this repo to a space (omit: show the binding)
 smriti doctor                                          # backend/runtime diagnostics
 smriti quickstart [--remove | --reset]                 # seed a demo space + guided walkthrough
 
@@ -188,6 +189,15 @@ smriti checkpoint list <space>
 smriti checkpoint review <checkpoint-id>
 smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
 ```
+
+**Project attachment.** `smriti init` and `smriti attach` write a small
+`.smriti.json` file at the repo root recording which Smriti space the repo is
+bound to. After that, the `<space>` argument is optional on the everyday
+commands (`state`, `current`, `metrics`, `claim`, `checkpoint`, `branch`,
+`worktree`): run them with no space and the CLI resolves the attached space,
+walking up from the working directory the way git finds `.git`. Pass an
+explicit `<space>` to override. `smriti space delete` always requires an
+explicit space.
 
 `smriti state` shows full artifact content by default — flip to `--preview` for the truncated brief.
 
