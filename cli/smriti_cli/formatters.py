@@ -79,6 +79,10 @@ def _relative_time(iso_ts: str) -> str:
         then = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
     except Exception:
         return iso_ts
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    else:
+        then = then.astimezone(timezone.utc)
     now = datetime.now(timezone.utc)
     delta = now - then
     secs = int(delta.total_seconds())
