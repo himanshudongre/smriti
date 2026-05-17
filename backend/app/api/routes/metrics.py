@@ -37,6 +37,7 @@ class CoordinationMetrics(BaseModel):
     total_claims: int = 0
     claims_done: int = 0
     claims_abandoned: int = 0
+    claims_unresolved: int = 0
     claims_with_task_id: int = 0
     claim_completion_rate: Optional[float] = None
 
@@ -134,6 +135,7 @@ def get_space_metrics(space_id: uuid.UUID, db: Session = Depends(get_db)):
     )
     cl_row = db.execute(claim_stmt).one()
     total_resolved = cl_row.done + cl_row.abandoned
+    unresolved = max(cl_row.total - total_resolved, 0)
     completion_rate = round(cl_row.done / total_resolved, 2) if total_resolved > 0 else None
 
     coordination = CoordinationMetrics(
@@ -144,6 +146,7 @@ def get_space_metrics(space_id: uuid.UUID, db: Session = Depends(get_db)):
         total_claims=cl_row.total,
         claims_done=cl_row.done,
         claims_abandoned=cl_row.abandoned,
+        claims_unresolved=unresolved,
         claims_with_task_id=cl_row.with_task_id,
         claim_completion_rate=completion_rate,
     )

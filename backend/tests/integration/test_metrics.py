@@ -56,6 +56,7 @@ def test_metrics_empty_space(client):
     assert data["coordination"]["total_checkpoints"] == 0
     assert data["coordination"]["unique_agents"] == 0
     assert data["coordination"]["total_claims"] == 0
+    assert data["coordination"]["claims_unresolved"] == 0
     assert data["state_quality"]["avg_decisions_per_checkpoint"] == 0.0
     assert data["branches"]["active"] == 0
 
@@ -127,6 +128,7 @@ def test_metrics_claim_stats(client):
     assert data["coordination"]["total_claims"] == 3
     assert data["coordination"]["claims_done"] == 1
     assert data["coordination"]["claims_abandoned"] == 1
+    assert data["coordination"]["claims_unresolved"] == 1
     assert data["coordination"]["claims_with_task_id"] == 1
     # Completion rate: 1 done / (1 done + 1 abandoned) = 0.5
     assert data["coordination"]["claim_completion_rate"] == 0.5

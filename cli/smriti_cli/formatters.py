@@ -924,10 +924,22 @@ def format_metrics(data: dict) -> str:
     parts.append(f"{cross} cross-agent continuation{'s' if cross != 1 else ''}")
 
     claims_total = coord.get("total_claims", 0)
+    claims_done = coord.get("claims_done", 0)
+    claims_abandoned = coord.get("claims_abandoned", 0)
+    resolved_claims = claims_done + claims_abandoned
+    unresolved_claims = coord.get("claims_unresolved")
+    if unresolved_claims is None:
+        unresolved_claims = max(claims_total - resolved_claims, 0)
     rate = coord.get("claim_completion_rate")
-    rate_str = f"{int(rate * 100)}% completion" if rate is not None else "no claims resolved"
+    if rate is not None:
+        rate_str = f"{resolved_claims} resolved ({int(rate * 100)}% done)"
+    else:
+        rate_str = f"{resolved_claims} resolved"
     task_id_claims = coord.get("claims_with_task_id", 0)
-    parts.append(f"{claims_total} claims · {rate_str} · {task_id_claims} with task IDs")
+    parts.append(
+        f"{claims_total} claims · {rate_str} · "
+        f"{unresolved_claims} unresolved · {task_id_claims} with task IDs"
+    )
     parts.append("")
 
     # State quality
