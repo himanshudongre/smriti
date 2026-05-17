@@ -156,7 +156,7 @@ def _normalize_task(raw: object) -> Optional[CurrentTask]:
         if not text:
             return None
         status = raw.get("status") or "open"
-        intent = raw.get("intent_hint")
+        intent = raw.get("intent_hint") or raw.get("intent_type")
         return CurrentTask(
             text=text,
             id=(raw.get("id") or None),

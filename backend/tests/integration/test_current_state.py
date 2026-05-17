@@ -176,6 +176,31 @@ def test_current_open_tasks_grouped_by_intent(client):
     assert cur["counts"]["open_tasks"] == 3  # done task excluded
 
 
+def test_current_open_tasks_accept_legacy_intent_type(client):
+    """Demo data seeded before intent_hint should still group cleanly."""
+    repo_id = _create_repo(client, "Legacy Task Intent")
+    session_id = _create_session(client, repo_id)
+    _commit(
+        client,
+        repo_id,
+        session_id,
+        message="Has legacy task intent",
+        tasks=[
+            {
+                "text": "Implement middleware",
+                "intent_type": "implement",
+                "id": "middleware",
+                "status": "open",
+            },
+        ],
+    )
+
+    cur = _get_current(client, repo_id)
+
+    assert set(cur["open_tasks_by_intent"].keys()) == {"implement"}
+    assert cur["open_tasks_by_intent"]["implement"][0]["id"] == "middleware"
+
+
 def test_current_recent_milestones(client):
     """Milestone notes surface in recent_milestones; plain notes do not."""
     repo_id = _create_repo(client, "Milestones")

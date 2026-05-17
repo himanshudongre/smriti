@@ -73,8 +73,8 @@ One project, one Smriti Space, multiple agents. Each reads the state, declares i
 
 ## Getting started
 
-You will need: Python 3.11+ and Node 18+. Docker is only needed for
-Postgres/shared-team mode.
+You will need: Python 3.11+ and Node 20.19+ or Node 22.12+. Docker is
+only needed for Postgres/shared-team mode.
 
 ### 1. Clone and set up for solo/local mode
 
@@ -173,6 +173,10 @@ SessionStart hook, and prints the exact next steps to follow.
 **MCP config** (Claude Code, Cursor, Windsurf). `smriti init` prints a
 ready-to-paste MCP config block with the executable path and API URL already
 resolved for your machine — use what it prints. The shape:
+
+`smriti init` prints the exact config for your install. If you configure
+MCP manually, activate the Smriti venv first and use the absolute path from
+`which smriti-mcp` so the host does not pick up a stale executable.
 
 ```json
 {

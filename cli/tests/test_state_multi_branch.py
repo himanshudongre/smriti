@@ -529,6 +529,15 @@ def test_task_section_structured_with_intent():
     assert "- Add freshness tests [test]" in out
 
 
+def test_task_section_accepts_legacy_intent_type():
+    """Older demo/checkpoint data with intent_type still renders as structured."""
+    tasks = [
+        {"text": "Update docs", "intent_type": "docs"},
+    ]
+    out = _task_section(tasks)
+    assert "- Update docs [docs]" in out
+
+
 def test_task_section_structured_with_blocked_by():
     """Structured task with blocked_by renders inline marker."""
     tasks = [

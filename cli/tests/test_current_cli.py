@@ -146,6 +146,20 @@ def test_format_project_current_renders_contract_sections():
     assert "## Recent activity" in out
 
 
+def test_format_project_current_prefers_objective_for_direction():
+    payload = _current_payload()
+    payload["current_direction"] = {
+        "objective": "Add per-client rate limiting before launch.",
+        "headline": "Load test passes",
+        "summary": "Long backend-provided summary that may be preview-clipped.",
+    }
+
+    out = format_project_current(payload)
+
+    assert "Add per-client rate limiting before launch." in out
+    assert "Long backend-provided summary" not in out
+
+
 def test_cmd_current_prefers_backend_payload(capsys: pytest.CaptureFixture[str]):
     client = MagicMock(spec=SmritiClient)
     client.resolve_space.return_value = _space()
@@ -238,4 +252,3 @@ def test_cmd_current_falls_back_to_shipped_endpoints(capsys: pytest.CaptureFixtu
     client.get_space_state.assert_called_once_with("space-uuid")
     client.list_commits.assert_called_once_with("space-uuid")
     client.get_space_metrics.assert_called_once_with("space-uuid")
-

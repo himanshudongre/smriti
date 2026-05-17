@@ -171,9 +171,12 @@ def get_space_metrics(space_id: uuid.UUID, db: Session = Depends(get_db)):
         total_decisions += len(decisions)
         total_tasks += len(tasks)
 
-        # Structured tasks: at least one task is a dict with intent_hint
+        # Structured tasks: at least one task is a dict-shaped task entry.
+        # Intent hints are useful, but task IDs without intent hints are still
+        # structured tasks and should not make the human-facing metric look
+        # contradictory.
         has_structured = any(
-            isinstance(t, dict) and t.get("intent_hint")
+            isinstance(t, dict) and str(t.get("text") or "").strip()
             for t in tasks
         )
         if has_structured:

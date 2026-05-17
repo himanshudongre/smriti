@@ -78,9 +78,9 @@ _ASSUME_SINGLE_INSTANCE = "The API runs as a single instance for now"
 _ASSUME_MULTI_INSTANCE = "The API will scale to multiple instances within two quarters"
 
 
-def _task(task_id: str, text: str, intent_type: str, status: str) -> dict:
+def _task(task_id: str, text: str, intent_hint: str, status: str) -> dict:
     """A structured task entry — the shape the extractor and `state` expect."""
-    return {"id": task_id, "text": text, "intent_type": intent_type, "status": status}
+    return {"id": task_id, "text": text, "intent_hint": intent_hint, "status": status}
 
 
 # ── Main-branch checkpoints ─────────────────────────────────────────────────
@@ -109,8 +109,8 @@ MAIN_CHECKPOINTS: list[dict] = [
             "Do we limit per client IP, or per API key?",
         ],
         "tasks": [
-            _task("survey", "Survey rate-limiting algorithms and pick candidates", "explore", "open"),
-            _task("decide", "Decide the algorithm and what the limit is keyed on", "decide", "open"),
+            _task("survey", "Survey rate-limiting algorithms and pick candidates", "investigate", "open"),
+            _task("decide", "Decide the algorithm and what the limit is keyed on", "investigate", "open"),
             _task("middleware", "Build the rate-limit middleware", "implement", "open"),
         ],
         "entities": ["public API", "API gateway", "rate limiter"],
@@ -132,8 +132,8 @@ MAIN_CHECKPOINTS: list[dict] = [
         "assumptions": [_ASSUME_BURST, _ASSUME_SINGLE_INSTANCE],
         "open_questions": [],
         "tasks": [
-            _task("survey", "Survey rate-limiting algorithms and pick candidates", "explore", "done"),
-            _task("decide", "Decide the algorithm and what the limit is keyed on", "decide", "done"),
+            _task("survey", "Survey rate-limiting algorithms and pick candidates", "investigate", "done"),
+            _task("decide", "Decide the algorithm and what the limit is keyed on", "investigate", "done"),
             _task("middleware", "Build the rate-limit middleware", "implement", "open"),
             _task("loadtest", "Load-test burst and sustained traffic", "test", "open"),
         ],
@@ -169,8 +169,8 @@ MAIN_CHECKPOINTS: list[dict] = [
         "assumptions": [_ASSUME_BURST, _ASSUME_SINGLE_INSTANCE],
         "open_questions": [],
         "tasks": [
-            _task("survey", "Survey rate-limiting algorithms and pick candidates", "explore", "done"),
-            _task("decide", "Decide the algorithm and what the limit is keyed on", "decide", "done"),
+            _task("survey", "Survey rate-limiting algorithms and pick candidates", "investigate", "done"),
+            _task("decide", "Decide the algorithm and what the limit is keyed on", "investigate", "done"),
             _task("middleware", "Build the rate-limit middleware", "implement", "done"),
             _task("loadtest", "Load-test burst and sustained traffic", "test", "open"),
         ],
@@ -217,8 +217,8 @@ MAIN_CHECKPOINTS: list[dict] = [
         "assumptions": [_ASSUME_BURST, _ASSUME_SINGLE_INSTANCE],
         "open_questions": [],
         "tasks": [
-            _task("survey", "Survey rate-limiting algorithms and pick candidates", "explore", "done"),
-            _task("decide", "Decide the algorithm and what the limit is keyed on", "decide", "done"),
+            _task("survey", "Survey rate-limiting algorithms and pick candidates", "investigate", "done"),
+            _task("decide", "Decide the algorithm and what the limit is keyed on", "investigate", "done"),
             _task("middleware", "Build the rate-limit middleware", "implement", "done"),
             _task("loadtest", "Load-test burst and sustained traffic", "test", "done"),
             _task("document", "Document the 429 / Retry-After contract for API consumers", "docs", "open"),
@@ -259,9 +259,9 @@ FORK_CHECKPOINT: dict = {
     "assumptions": [_ASSUME_BURST, _ASSUME_MULTI_INSTANCE],
     "open_questions": ["Is ~3ms of added per-request latency acceptable at the edge?"],
     "tasks": [
-        _task("survey", "Survey rate-limiting algorithms and pick candidates", "explore", "done"),
-        _task("decide", "Decide the algorithm and what the limit is keyed on", "decide", "done"),
-        _task("redis-spike", "Prototype the Redis token-bucket store", "explore", "done"),
+        _task("survey", "Survey rate-limiting algorithms and pick candidates", "investigate", "done"),
+        _task("decide", "Decide the algorithm and what the limit is keyed on", "investigate", "done"),
+        _task("redis-spike", "Prototype the Redis token-bucket store", "investigate", "done"),
     ],
     "entities": ["rate limiter", "token bucket", "Redis", "distributed rate limiter"],
     "artifacts": [],
