@@ -26,6 +26,16 @@ def mock_client(monkeypatch):
     client.base_url = "http://localhost:8000"
     client.list_spaces.return_value = []
     monkeypatch.setattr(cli_main, "SmritiClient", lambda **kw: client)
+    monkeypatch.setattr(
+        cli_main,
+        "_smriti_hook_executable",
+        lambda: "/opt/smriti/bin/smriti",
+    )
+    monkeypatch.setattr(
+        cli_main,
+        "_smriti_mcp_executable",
+        lambda: "/opt/smriti/bin/smriti-mcp",
+    )
     return client
 
 
@@ -36,6 +46,42 @@ def test_init_parser_wiring():
     assert args.space == "my-project"
     assert args.description == "Test"
     assert args.func is cli_main.cmd_init
+
+
+def test_session_start_hook_command_shell_quotes(monkeypatch):
+    monkeypatch.setattr(
+        cli_main,
+        "_smriti_hook_executable",
+        lambda: "/Applications/Smriti Tools/bin/smriti",
+    )
+
+    command = cli_main._build_session_start_hook_command(
+        "my project",
+        "http://localhost:8000",
+    )
+
+    assert command.startswith(
+        "'/Applications/Smriti Tools/bin/smriti' --api-url "
+        "http://localhost:8000 state 'my project' --compact"
+    )
+    assert "backend/.venv/bin/smriti" not in command
+
+
+def test_smriti_session_start_detector_handles_quoted_executable():
+    entry = {
+        "matcher": "startup",
+        "hooks": [
+            {
+                "type": "command",
+                "command": (
+                    "'/Applications/Smriti Tools/bin/smriti' --api-url "
+                    "http://localhost:8000 state p --compact 2>/dev/null"
+                ),
+            }
+        ],
+    }
+
+    assert cli_main._is_smriti_session_start_entry(entry) is True
 
 
 def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
@@ -67,7 +113,13 @@ def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
     # SessionStart hook was generated
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     assert "SessionStart" in settings.get("hooks", {})
-    assert "test-project" in settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    assert command.startswith(
+        "/opt/smriti/bin/smriti --api-url "
+        "http://localhost:8000 state test-project --compact"
+    )
+    assert "backend/.venv/bin/smriti" not in command
+    assert "--preview" not in command
 
 
 def test_init_connects_existing_space(mock_client, tmp_path, monkeypatch):
@@ -142,6 +194,115 @@ def test_init_idempotent_second_run(mock_client, tmp_path, monkeypatch):
     # Hook still has exactly 3 SessionStart entries (not 6)
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     assert len(settings["hooks"]["SessionStart"]) == 3
+
+
+def test_init_updates_stale_smriti_session_start_hook(
+    mock_client, tmp_path, monkeypatch
+):
+    """Repo-relative / preview-mode hooks should be upgraded in place."""
+    monkeypatch.chdir(tmp_path)
+    mock_client.resolve_space.return_value = {"id": "uuid", "name": "p"}
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    settings_file = settings_dir / "settings.json"
+    settings_file.write_text(
+        json.dumps({
+            "hooks": {
+                "SessionStart": [
+                    {
+                        "matcher": "startup",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": (
+                                    "backend/.venv/bin/smriti state p --preview "
+                                    "2>/dev/null || echo old"
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            }
+        })
+    )
+
+    args = cli_main._build_parser().parse_args(["init", "p"])
+    args.api_url = None
+    cli_main.cmd_init(mock_client, args)
+
+    settings = json.loads(settings_file.read_text())
+    commands = [
+        entry["hooks"][0]["command"]
+        for entry in settings["hooks"]["SessionStart"]
+    ]
+    assert len(commands) == 3
+    assert all(
+        command.startswith(
+            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
+        )
+        for command in commands
+    )
+    assert all("backend/.venv/bin/smriti" not in command for command in commands)
+    assert all("--preview" not in command for command in commands)
+
+
+def test_init_preserves_unrelated_session_start_hooks(
+    mock_client, tmp_path, monkeypatch
+):
+    """User-managed SessionStart hooks should survive init."""
+    monkeypatch.chdir(tmp_path)
+    mock_client.resolve_space.return_value = {"id": "uuid", "name": "p"}
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    settings_file = settings_dir / "settings.json"
+    user_hook = {
+        "matcher": "startup",
+        "hooks": [{"type": "command", "command": "echo user hook"}],
+    }
+    settings_file.write_text(json.dumps({"hooks": {"SessionStart": [user_hook]}}))
+
+    args = cli_main._build_parser().parse_args(["init", "p"])
+    args.api_url = None
+    cli_main.cmd_init(mock_client, args)
+
+    settings = json.loads(settings_file.read_text())
+    entries = settings["hooks"]["SessionStart"]
+    assert entries[0] == user_hook
+    assert len(entries) == 4
+    assert any(
+        entry["hooks"][0]["command"].startswith(
+            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
+        )
+        for entry in entries[1:]
+    )
+
+
+def test_init_json_preserves_api_url_for_hooks_and_mcp(
+    mock_client, tmp_path, monkeypatch, capsys
+):
+    """Custom backend URLs should survive generated hooks and MCP hints."""
+    monkeypatch.chdir(tmp_path)
+    mock_client.base_url = "http://127.0.0.1:8999"
+    mock_client.resolve_space.return_value = {"id": "uuid", "name": "p"}
+
+    args = cli_main._build_parser().parse_args([
+        "--api-url",
+        "http://127.0.0.1:8999",
+        "init",
+        "p",
+        "--json",
+    ])
+    cli_main.cmd_init(mock_client, args)
+
+    payload = json.loads(capsys.readouterr().out)
+    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+
+    assert "--api-url http://127.0.0.1:8999" in command
+    assert any("/opt/smriti/bin/smriti-mcp" in step for step in payload["next_steps"])
+    assert any("http://127.0.0.1:8999" in step for step in payload["next_steps"])
 
 
 def test_init_merges_into_existing_settings_json(
