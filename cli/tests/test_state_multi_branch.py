@@ -15,12 +15,13 @@ These tests cover the digestibility guarantees the build rests on:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from smriti_cli import mcp_server
 from smriti_cli.formatters import (
     _format_active_branches_section,
     _format_divergence_signal_section,
+    _relative_time,
     _task_section,
     _normalize_task_item,
     format_state_brief,
@@ -72,6 +73,13 @@ def _base_commit():
 
 
 # ── Formatter-level tests ────────────────────────────────────────────────────
+
+
+def test_relative_time_handles_aware_and_naive_iso_timestamps():
+    two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
+
+    assert _relative_time(two_hours_ago.isoformat()) == "2h ago"
+    assert _relative_time(two_hours_ago.replace(tzinfo=None).isoformat()) == "2h ago"
 
 
 def test_format_state_brief_no_space_state_matches_pre_build():
