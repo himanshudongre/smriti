@@ -114,9 +114,11 @@ smriti/
 │   ├── pyproject.toml          Installable as `pip install -e ./cli`
 │   │                             → `smriti` + `smriti-mcp` on PATH
 │   ├── smriti_cli/
-│   │   ├── main.py             argparse dispatcher: init, doctor, space, state,
-│   │   │                         current, checkpoint, fork, restore, compare,
-│   │   │                         branch, claim, worktree, skills, metrics
+│   │   ├── main.py             argparse dispatcher: init, doctor, status, space,
+│   │   │                         state, current, checkpoint, fork, restore,
+│   │   │                         compare, branch, claim, worktree, skills, metrics
+│   │   ├── attachment.py       Project attachment: read/write `.smriti.json`,
+│   │   │                         the durable repo ↔ space binding
 │   │   ├── mcp_server.py       FastMCP server (21 tools, stdio transport)
 │   │   ├── client.py           SmritiClient HTTP wrapper (includes claims/worktrees)
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
