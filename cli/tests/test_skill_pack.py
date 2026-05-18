@@ -43,7 +43,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "2.3"
+    assert version == "2.4"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -118,6 +118,7 @@ _REQUIRED_PHRASES = [
     "20 checkpoints is producing noise",
     # Section 3 — the reflex
     "Reading current state from Smriti",
+    ".smriti.json",
     # Section 11 — anti-patterns
     "HANDOFF.md",
     "author_agent",
@@ -206,6 +207,39 @@ def test_render_contains_all_critical_content(target_key: str):
         f"phrases: {missing}. This usually means a template edit "
         f"dropped a critical section."
     )
+
+
+def test_codex_render_teaches_attached_repo_no_arg_workflow():
+    """Codex's CLI-native guide should prefer repo-attached no-arg commands."""
+    out = render("codex")
+
+    for phrase in [
+        "attached repo",
+        "smriti init <space>",
+        "smriti attach <space>",
+        "smriti state",
+        "smriti state --compact",
+        "smriti claim create --agent",
+        "smriti checkpoint create --extract",
+    ]:
+        assert phrase in out
+
+    for stale_example in [
+        "smriti state <project>",
+        "smriti state <project> --compact",
+        "smriti claim create <project>",
+        "smriti checkpoint create <project>",
+    ]:
+        assert stale_example not in out
+
+
+def test_claude_render_keeps_explicit_space_for_mcp_tools():
+    """MCP guidance still needs explicit space args instead of repo CWD binding."""
+    out = render("claude-code")
+
+    assert "space=\"<project>\"" in out
+    assert "repo-local `.smriti.json` attachment" in out
+    assert "smriti_state(space=\"<project>\")" in out
 
 
 def test_render_targets_share_anti_pattern_section():

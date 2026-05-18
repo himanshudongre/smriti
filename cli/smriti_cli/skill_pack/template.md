@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 2.3
+smriti_skill_pack_version: 2.4
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -51,12 +51,22 @@ At the start of every session where you are working on a Smriti-enabled
 project, your FIRST action is:
 
 ```
-{{mcp:smriti_state(space="<project>")}}{{cli:smriti state <project>}}
+{{mcp:smriti_state(space="<project>")}}{{cli:smriti state}}
 ```
 
 Before you read any file. Before you run any test. Before you plan
 anything. Before you answer the user's first prompt beyond "let me
 check the state first."
+
+{{mcp:When using MCP tools directly, keep passing `space="<project>"`.
+The MCP server may run from the host's arbitrary working directory, so
+it cannot rely on the repo-local `.smriti.json` attachment unless the
+host passes a project path separately.}}{{cli:CLI workflow: bind the repo once
+with `smriti init <space>` or `smriti attach <space>`. That writes
+`.smriti.json` at the repo root. After that, everyday commands run from
+anywhere inside the attached repo resolve the space automatically. If a repo is
+not attached yet, attach it first or pass the explicit `<space>` argument for
+that one command.}}
 
 The state brief is the minimum context you need to continue work
 without re-discovering decisions that were already made. Calling it
@@ -67,7 +77,7 @@ section with an author tag, and if any of them disagree with main on
 decisions you will see a `## Divergence signal` section.
 
 For session start, prefer `--compact` mode:
-{{mcp:`smriti_state(space="<project>", compact=True)`}}{{cli:`smriti state <project> --compact`}}
+{{mcp:`smriti_state(space="<project>", compact=True)`}}{{cli:`smriti state --compact`}}
 This omits artifact content to save tokens — artifact labels and a
 recovery command are still shown. If the state brief lists artifacts
 relevant to your task, retrieve them with
@@ -277,7 +287,7 @@ agents can see what you are about to do.
 **When to create a claim:**
 
 ```
-{{mcp:smriti_claim(space="<project>", scope="<one sentence>", agent="<your-agent>", intent_type="implement")}}{{cli:smriti claim create <project> --agent <your-agent> --scope "<one sentence>" --intent-type implement}}
+{{mcp:smriti_claim(space="<project>", scope="<one sentence>", agent="<your-agent>", intent_type="implement")}}{{cli:smriti claim create --agent <your-agent> --scope "<one sentence>" --intent-type implement}}
 ```
 
 Create the claim after you know what you are going to work on but
@@ -339,7 +349,7 @@ The reflex: when you start substantial work on a project where another
 agent might be active, open a worktree before your first edit.
 
 ```
-{{mcp:smriti_worktree_open(space="<project>", agent="<your-id>")}}{{cli:smriti worktree open <project> --agent <your-id>}}
+{{mcp:smriti_worktree_open(space="<project>", agent="<your-id>")}}{{cli:smriti worktree open --agent <your-id>}}
 ```
 
 This returns a path. Use that path as your working directory for the
@@ -350,7 +360,7 @@ filesystem state is invisible to you and yours to them.
 When you create your work claim, bind it to the worktree:
 
 ```
-{{mcp:smriti_claim(space="<project>", scope="...", agent="<your-id>", intent_type="implement", task_id="<task-id>", worktree_id="<worktree-id>")}}{{cli:smriti claim create <project> --agent <your-id> \
+{{mcp:smriti_claim(space="<project>", scope="...", agent="<your-id>", intent_type="implement", task_id="<task-id>", worktree_id="<worktree-id>")}}{{cli:smriti claim create --agent <your-id> \
     --scope "..." --intent-type implement \
     --task-id <task-id> --worktree <worktree-id>}}
 ```
@@ -423,7 +433,7 @@ The default branch name when you `smriti worktree open` is
 PR titles. Pass `--branch <name>` to use a custom branch name instead:
 
 ```
-smriti worktree open <space> --agent <id> --branch v3-feature-name
+smriti worktree open --agent <id> --branch v3-feature-name
 ```
 
 Use this when the worktree maps cleanly to a single feature/PR. Stick
@@ -436,7 +446,7 @@ If you have been working for more than a few minutes, check whether
 the project state has moved since you started — before you checkpoint.
 
 ```
-{{mcp:smriti_state(space="<project>", since="<your-base-checkpoint-id>", compact=True)}}{{cli:smriti state <project> --since <your-base-checkpoint-id> --compact}}
+{{mcp:smriti_state(space="<project>", since="<your-base-checkpoint-id>", compact=True)}}{{cli:smriti state --since <your-base-checkpoint-id> --compact}}
 ```
 
 Your base checkpoint ID is the HEAD you read at session start, or the
@@ -494,14 +504,14 @@ Each task can have:
 
 **Claim with task ID when available.** When you create a claim for a
 task that has an ID, reference it:
-{{mcp:`smriti_claim(space="<project>", scope="...", task_id="arch-docs", intent_type="docs")`}}{{cli:`smriti claim create <project> --agent <your-agent> --scope "..." --task-id arch-docs --intent-type docs`}}
+{{mcp:`smriti_claim(space="<project>", scope="...", task_id="arch-docs", intent_type="docs")`}}{{cli:`smriti claim create --agent <your-agent> --scope "..." --task-id arch-docs --intent-type docs`}}
 This makes your claim precisely traceable to a task, not just loosely
 matched by scope text.
 
 **Recheck after claiming.** If another agent might be starting at the
 same time (e.g., you were both launched together), re-read the state
 briefly after creating your claim:
-{{mcp:`smriti_state(space="<project>", compact=True)`}}{{cli:`smriti state <project> --compact`}}
+{{mcp:`smriti_state(space="<project>", compact=True)`}}{{cli:`smriti state --compact`}}
 Check `## Active work` for duplicate `task:` references. If another
 agent claimed the same task ID, abandon your claim and pick a
 different task. This catches near-simultaneous collisions within
@@ -573,7 +583,7 @@ and `extra="forbid"`. Latency overhead is ~0.3 ms per call.
     author_agent="claude-code",
 )
 ```}}{{cli:```
-cat <<'MD' | smriti checkpoint create <project> --extract --author-agent <your-agent-name>
+cat <<'MD' | smriti checkpoint create --extract --author-agent <your-agent-name>
 # Decided on Pydantic for the state validation layer
 
 After trying dataclass-based validation and hitting the injection
@@ -739,7 +749,7 @@ smriti_create_checkpoint(
     content="...",
 )
 ```}}{{cli:```
-cat fork.md | smriti checkpoint create <project> \
+cat fork.md | smriti checkpoint create \
     --extract --session <fork-session-id> --author-agent <your-agent-name>
 ```}}
 
@@ -988,7 +998,7 @@ tell you. Do not guess.
 
 ---
 
-*Smriti skill pack version {{primary_mode}}-2.2 — this file is
+*Smriti skill pack version {{primary_mode}}-2.4 — this file is
 authoritative for agent behaviour on this project. If you catch it
 contradicting itself or your observed behaviour of the tools, tell
 the human; the skill pack is versioned and meant to be updated.*
