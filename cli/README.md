@@ -28,6 +28,39 @@ CLI. For solo use, start the backend with `make dev-local`; for
 Postgres/shared-team use, start it with `make dev-postgres`. The CLI and
 MCP server keep talking to the same HTTP API either way.
 
+## Project attachment
+
+`smriti init <space>` attaches the current repo to a space by writing a
+small `.smriti.json` at the repo root:
+
+```json
+{
+  "space": "my-project",
+  "api_url": "http://localhost:8000",
+  "attached_at": "2026-05-19T01:00:00Z"
+}
+```
+
+Once a repo is attached, the `<space>` argument is **optional** on
+`state`, `current`, `metrics`, `checkpoint create/list`, `claim
+create/list`, and `worktree open/list`. The CLI walks up from the current
+directory, finds the nearest `.smriti.json`, and uses its space — so a
+session opened anywhere inside the repo stays connected without
+re-passing the space. An explicit `<space>` argument always overrides the
+attachment.
+
+`.smriti.json` is meant to be **committed**: the binding then travels with
+the repo, so a fresh clone, a teammate, or a second agent (Claude, Codex)
+opened in the project all attach to the same space automatically. Use
+different spaces for different repos and each repo stays bound to its own.
+
+`api_url` in the file is only a default — an explicit `--api-url` flag or
+`SMRITI_API_URL` always wins, so a committed file stays correct across
+machines.
+
+`smriti status` reports a repo's attachment, backend health, and open
+work — the quick day-two "am I still wired up?" check.
+
 ## MCP server
 
 Run Smriti as a local MCP server so agents inside Claude Code, Cursor, or Windsurf can read and write reasoning state natively — no subprocess-shelling to the `smriti` binary.
@@ -138,14 +171,16 @@ The installer is version-aware: it refuses to overwrite a destination whose inst
 ## Commands
 
 ```
-smriti init <space> [--description "..."]             # one-step agent onboarding
+smriti init <space> [--description "..."]             # one-step agent onboarding + attach repo
 smriti doctor                                          # backend/runtime diagnostics
+smriti status                                          # this repo's attachment, health, and open work
 smriti quickstart [--remove | --reset]                 # seed a demo space + guided walkthrough
 
 smriti space list
 smriti space create <name> [--description "..."]
 smriti space delete <space> [-y]
 
+# <space> is optional below once the repo is attached (see Project attachment).
 smriti state <space>                                     # multi-branch continuation brief (full artifacts by default)
 smriti state <space> --preview                           # truncate artifacts to a short preview
 smriti state <space> --main-only                         # legacy single-HEAD path (pre-V4 behaviour)

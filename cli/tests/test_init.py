@@ -48,22 +48,23 @@ def test_init_parser_wiring():
     assert args.func is cli_main.cmd_init
 
 
-def test_session_start_hook_command_shell_quotes(monkeypatch):
+def test_session_start_hook_command_resolves_space_from_attachment(monkeypatch):
     monkeypatch.setattr(
         cli_main,
         "_smriti_hook_executable",
         lambda: "/Applications/Smriti Tools/bin/smriti",
     )
 
-    command = cli_main._build_session_start_hook_command(
-        "my project",
-        "http://localhost:8000",
-    )
+    command = cli_main._build_session_start_hook_command()
 
+    # No explicit space and no --api-url: the hook resolves both from the
+    # project's .smriti.json attachment, so it is byte-identical across
+    # every project and survives re-attachment to a different space.
     assert command.startswith(
-        "'/Applications/Smriti Tools/bin/smriti' --api-url "
-        "http://localhost:8000 state 'my project' --compact"
+        "'/Applications/Smriti Tools/bin/smriti' state --compact"
     )
+    assert " state " in command  # the smriti-hook detector relies on this
+    assert "--api-url" not in command
     assert "backend/.venv/bin/smriti" not in command
 
 
@@ -87,6 +88,7 @@ def test_smriti_session_start_detector_handles_quoted_executable():
 def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
     """Init with a fresh project: creates space, installs both skill packs."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_main, "_attach_root", lambda: str(tmp_path))
 
     # Space doesn't exist — resolve fails, create succeeds
     from smriti_cli.client import SmritiError
@@ -100,8 +102,14 @@ def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
     args.api_url = None
     cli_main.cmd_init(mock_client, args)
 
-    # Space was created
-    mock_client.create_space.assert_called_once_with(name="test-project", description="")
+    # Space was created, bound to the project checkout
+    mock_client.create_space.assert_called_once_with(
+        name="test-project", description="", project_root=str(tmp_path)
+    )
+
+    # Project attachment file was written
+    attachment = json.loads((tmp_path / ".smriti.json").read_text())
+    assert attachment["space"] == "test-project"
 
     # Claude skill pack was installed
     assert (tmp_path / ".claude" / "skills" / "smriti" / "SKILL.md").exists()
@@ -110,14 +118,11 @@ def test_init_creates_space_and_skill_packs(mock_client, tmp_path, monkeypatch):
     assert (tmp_path / "AGENTS.md").exists()
     assert "smriti_skill_pack_version" in (tmp_path / "AGENTS.md").read_text()
 
-    # SessionStart hook was generated
+    # SessionStart hook was generated — space-less, resolves from attachment
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     assert "SessionStart" in settings.get("hooks", {})
     command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-    assert command.startswith(
-        "/opt/smriti/bin/smriti --api-url "
-        "http://localhost:8000 state test-project --compact"
-    )
+    assert command.startswith("/opt/smriti/bin/smriti state --compact")
     assert "backend/.venv/bin/smriti" not in command
     assert "--preview" not in command
 
@@ -238,13 +243,12 @@ def test_init_updates_stale_smriti_session_start_hook(
     ]
     assert len(commands) == 3
     assert all(
-        command.startswith(
-            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
-        )
+        command.startswith("/opt/smriti/bin/smriti state --compact")
         for command in commands
     )
     assert all("backend/.venv/bin/smriti" not in command for command in commands)
     assert all("--preview" not in command for command in commands)
+    assert all(" p " not in command for command in commands)
 
 
 def test_init_preserves_unrelated_session_start_hooks(
@@ -273,16 +277,21 @@ def test_init_preserves_unrelated_session_start_hooks(
     assert len(entries) == 4
     assert any(
         entry["hooks"][0]["command"].startswith(
-            "/opt/smriti/bin/smriti --api-url http://localhost:8000 state p --compact"
+            "/opt/smriti/bin/smriti state --compact"
         )
         for entry in entries[1:]
     )
 
 
-def test_init_json_preserves_api_url_for_hooks_and_mcp(
+def test_init_json_preserves_api_url_for_attachment_and_mcp(
     mock_client, tmp_path, monkeypatch, capsys
 ):
-    """Custom backend URLs should survive generated hooks and MCP hints."""
+    """Custom backend URLs should survive into the attachment and MCP hint.
+
+    The SessionStart hook no longer carries --api-url — the URL lives in
+    `.smriti.json` instead, and the CLI resolves it from there. This keeps
+    the hook identical across projects while still honouring a custom URL.
+    """
     monkeypatch.chdir(tmp_path)
     mock_client.base_url = "http://127.0.0.1:8999"
     mock_client.resolve_space.return_value = {"id": "uuid", "name": "p"}
@@ -299,8 +308,11 @@ def test_init_json_preserves_api_url_for_hooks_and_mcp(
     payload = json.loads(capsys.readouterr().out)
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
     command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    attachment = json.loads((tmp_path / ".smriti.json").read_text())
 
-    assert "--api-url http://127.0.0.1:8999" in command
+    # The hook is space-less and URL-less; the URL lives in the attachment.
+    assert "--api-url" not in command
+    assert attachment["api_url"] == "http://127.0.0.1:8999"
     assert any("/opt/smriti/bin/smriti-mcp" in step for step in payload["next_steps"])
     assert any("http://127.0.0.1:8999" in step for step in payload["next_steps"])
 
