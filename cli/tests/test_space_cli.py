@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from smriti_cli import attachment
 from smriti_cli import main as cli_main
 from smriti_cli.client import SmritiClient
 
@@ -195,3 +196,78 @@ def test_cmd_space_set_project_root_here_flag_resolves_cwd(tmp_path, monkeypatch
     cli_main.cmd_space_set_project_root(client, args)
 
     client.set_project_root.assert_called_once_with("space-uuid", str(tmp_path))
+
+
+# ── space delete: destructive-delete guard ───────────────────────────────────
+#
+# Incident: `smriti space delete <space> -y` cascade-deleted a populated space.
+# A non-empty or attached space must now require an explicit --force.
+
+
+def _delete_args(space="my-project", yes=False, force=False, json=False):
+    return argparse.Namespace(space=space, yes=yes, force=force, json=json)
+
+
+def test_space_delete_parser_has_force_flag():
+    parser = cli_main._build_parser()
+    args = parser.parse_args(["space", "delete", "my-project", "--force", "-y"])
+    assert args.force is True
+    assert args.yes is True
+    # --force defaults off
+    assert parser.parse_args(["space", "delete", "my-project"]).force is False
+
+
+def test_cmd_space_delete_empty_unattached_space_allows_yes(tmp_path, monkeypatch):
+    """Empty, unattached space: -y still deletes it (convenience retained)."""
+    monkeypatch.chdir(tmp_path)
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = _space_dict()
+    client.list_commits.return_value = []  # empty
+    cli_main.cmd_space_delete(client, _delete_args(yes=True))
+    client.delete_space.assert_called_once_with("space-uuid")
+
+
+def test_cmd_space_delete_nonempty_refused_without_force(tmp_path, monkeypatch, capsys):
+    """The incident path: -y alone must NOT delete a populated space."""
+    monkeypatch.chdir(tmp_path)
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = _space_dict()
+    client.list_commits.return_value = [{"id": "c1"}, {"id": "c2"}]  # non-empty
+    with pytest.raises(SystemExit):
+        cli_main.cmd_space_delete(client, _delete_args(yes=True, force=False))
+    client.delete_space.assert_not_called()
+    err = capsys.readouterr().err
+    assert "Refusing to delete" in err
+    assert "--force" in err
+
+
+def test_cmd_space_delete_nonempty_allowed_with_force(tmp_path, monkeypatch):
+    """A populated space deletes only with --force (in addition to -y)."""
+    monkeypatch.chdir(tmp_path)
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = _space_dict()
+    client.list_commits.return_value = [{"id": "c1"}, {"id": "c2"}]
+    cli_main.cmd_space_delete(client, _delete_args(yes=True, force=True))
+    client.delete_space.assert_called_once_with("space-uuid")
+
+
+def test_cmd_space_delete_attached_space_refused_without_force(tmp_path, monkeypatch):
+    """An attached space is force-gated even when it is empty."""
+    monkeypatch.chdir(tmp_path)
+    attachment.write_attachment(tmp_path, "my-project", "space-uuid")
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = _space_dict()
+    client.list_commits.return_value = []  # empty, but attached
+    with pytest.raises(SystemExit):
+        cli_main.cmd_space_delete(client, _delete_args(yes=True, force=False))
+    client.delete_space.assert_not_called()
+
+
+def test_cmd_space_delete_attached_space_allowed_with_force(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    attachment.write_attachment(tmp_path, "my-project", "space-uuid")
+    client = MagicMock(spec=SmritiClient)
+    client.resolve_space.return_value = _space_dict()
+    client.list_commits.return_value = []
+    cli_main.cmd_space_delete(client, _delete_args(yes=True, force=True))
+    client.delete_space.assert_called_once_with("space-uuid")

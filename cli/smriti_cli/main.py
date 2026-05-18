@@ -612,11 +612,45 @@ def cmd_space_delete(client: SmritiClient, args: argparse.Namespace) -> None:
     space = _resolve_space(client, args)
     commits = client.list_commits(space["id"])
     commit_count = len(commits)
+
+    # Is this the space the current repo is attached to?
+    record = attachment.read_attachment()
+    is_attached = bool(record) and (
+        record.get("space_id") == space["id"]
+        or record.get("space") == space["name"]
+    )
+
+    # Destructive-delete guard. `-y` skips the confirmation prompt, but it must
+    # NOT, on its own, delete a space that holds real work or is attached to a
+    # repo. Those need an explicit, separate --force signal — the same
+    # "name the stronger flag" shape as `checkpoint delete --cascade`.
+    blockers: list[str] = []
+    if commit_count > 0:
+        blockers.append(
+            f"it holds {commit_count} checkpoint(s); deletion cascades to all of "
+            f"them plus every session and turn, and cannot be undone"
+        )
+    if is_attached:
+        blockers.append(
+            "this repo is attached to it (.smriti.json); deleting it unbinds the repo"
+        )
+    if blockers and not args.force:
+        lines = [f"Refusing to delete space '{space['name']}' (`{space['id']}`):"]
+        lines += [f"  - {b}" for b in blockers]
+        lines.append("")
+        lines.append(
+            "  -y is not enough for a destructive delete like this. If you are "
+            "certain,\n  re-run with --force (required in addition to -y or the prompt)."
+        )
+        _fail("\n".join(lines))
+
     preview = (
         f"Delete space '{space['name']}' (`{space['id']}`)?\n"
         f"  This will permanently delete {commit_count} checkpoint(s) "
         f"and all sessions/turns under this space."
     )
+    if is_attached:
+        preview += "\n  This repo is attached to this space — deleting it unbinds the repo."
     if not _confirm(preview, args.yes):
         _fail("Cancelled.", code=0)
     client.delete_space(space["id"])
@@ -1915,6 +1949,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sp_delete.add_argument("space", help="Space name or UUID")
     sp_delete.add_argument(
         "-y", "--yes", action="store_true", help="Skip confirmation prompt"
+    )
+    sp_delete.add_argument(
+        "--force",
+        action="store_true",
+        help="Required to delete a non-empty or attached space (irreversible)",
     )
     sp_delete.add_argument("--json", action="store_true", help="Output structured JSON")
     sp_delete.set_defaults(func=cmd_space_delete)
