@@ -530,15 +530,60 @@ def test_create_checkpoint_extract_error(mock_client):
 # ── smriti_delete_space ────────────────────────────────────────────────
 
 
-def test_delete_space_happy_path(mock_client):
+def test_delete_space_requires_confirm_space(mock_client):
     mock_client.resolve_space.return_value = _space_dict()
     mock_client.list_commits.return_value = [_commit_dict(), _commit_dict()]
     mock_client.delete_space.return_value = None
 
     result = mcp_server.smriti_delete_space(space="my-project")
 
+    assert "Refusing to delete space 'my-project'" in result
+    assert "2 checkpoint" in result
+    assert 'confirm_space="my-project"' in result
+    mock_client.delete_space.assert_not_called()
+
+
+def test_delete_space_rejects_wrong_confirm_space(mock_client):
+    mock_client.resolve_space.return_value = _space_dict()
+    mock_client.list_commits.return_value = [_commit_dict()]
+    mock_client.delete_space.return_value = None
+
+    result = mcp_server.smriti_delete_space(
+        space="my-project",
+        confirm_space="other-project",
+    )
+
+    assert "Refusing to delete space 'my-project'" in result
+    assert 'confirm_space="my-project"' in result
+    mock_client.delete_space.assert_not_called()
+
+
+def test_delete_space_happy_path_with_confirmed_name(mock_client):
+    mock_client.resolve_space.return_value = _space_dict()
+    mock_client.list_commits.return_value = [_commit_dict(), _commit_dict()]
+    mock_client.delete_space.return_value = None
+
+    result = mcp_server.smriti_delete_space(
+        space="my-project",
+        confirm_space="my-project",
+    )
+
     assert "Deleted space 'my-project'" in result
     assert "2 checkpoint" in result  # commit count included
+    mock_client.delete_space.assert_called_once_with("space-uuid")
+
+
+def test_delete_space_allows_confirmed_uuid(mock_client):
+    mock_client.resolve_space.return_value = _space_dict()
+    mock_client.list_commits.return_value = []
+    mock_client.delete_space.return_value = None
+
+    result = mcp_server.smriti_delete_space(
+        space="space-uuid",
+        confirm_space="space-uuid",
+    )
+
+    assert "Deleted space 'my-project'" in result
     mock_client.delete_space.assert_called_once_with("space-uuid")
 
 

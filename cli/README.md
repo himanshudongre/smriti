@@ -59,7 +59,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 |---|---|
 | `smriti_list_spaces` | List all spaces |
 | `smriti_create_space` | Create a new space |
-| `smriti_delete_space` | Delete a space and all its checkpoints |
+| `smriti_delete_space` | Delete a space and all its checkpoints; requires `confirm_space` |
 | `smriti_state` | Multi-branch continuation brief (includes active work claims + divergence signal) |
 | `smriti_list_checkpoints` | List checkpoints in a space (optional branch filter) |
 | `smriti_show_checkpoint` | Print a specific checkpoint as markdown |
@@ -83,7 +83,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 
 **Notes:**
 - The MCP server talks to the same backend as the CLI. Keep the backend running.
-- Destructive tools (`smriti_delete_space`, `smriti_delete_checkpoint`) have no per-tool confirmation prompt — the MCP host's tool-approval UI is the gate.
+- Destructive tools do not open interactive prompts inside MCP. `smriti_delete_space` still requires an explicit `confirm_space` argument matching the resolved space name or UUID; checkpoint deletion relies on host approval plus the explicit `cascade=true` flag for subtree deletes.
 - `smriti_create_checkpoint` always uses the extract path. Agents pass freeform markdown and Smriti's background LLM extracts the structured fields. Pass `dry_run=True` to preview the extracted payload before committing.
 - `smriti_create_checkpoint` does NOT auto-capture `project_root` (unlike the CLI, which uses cwd). MCP servers run in the host's arbitrary working directory, so cwd would plant garbage paths on every checkpoint. Pass `project_root="/absolute/path"` explicitly if you want that field populated.
 - **Protocol version.** The `mcp` SDK negotiates the protocol version on its own during the `initialize` handshake — you get whatever the installed `mcp` package and your host agree on, and that's fine. No Smriti code pins a version.

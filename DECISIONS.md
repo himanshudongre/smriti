@@ -229,11 +229,12 @@ Design decisions made at ship time:
   megatools, no hidden helpers. `smriti_state`, `smriti_list_checkpoints`,
   `smriti_fork`, etc. map 1:1 onto what the CLI exposes so docs and agent
   prompts translate directly.
-- **Destructive tools have no per-tool confirmation prompt.** The MCP host's
-  tool-approval UI is already the gate — adding a second confirmation layer
-  inside the tool itself would be redundant, and agents can't interact with
-  prompt dialogs from inside an MCP tool call anyway. (The CLI still has
-  `-y` because a terminal has no equivalent approval UI.)
+- **MCP destructive tools do not use interactive prompts.** Agents cannot
+  answer prompt dialogs from inside an MCP tool call, so destructive safety has
+  to be expressed as tool arguments plus the host's approval UI. Catastrophic
+  space deletion requires an explicit `confirm_space` argument matching the
+  resolved space name or UUID; checkpoint subtree deletion uses the explicit
+  `cascade=true` argument.
 - **`smriti_create_checkpoint` is extract-only.** No JSON stdin mode. The
   round-4 verdict was that once the extractor exists, hand-written JSON is
   never the right path for an agent. MCP agents pass freeform markdown and

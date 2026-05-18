@@ -450,22 +450,30 @@ def smriti_create_checkpoint(
 
 
 @mcp.tool()
-def smriti_delete_space(space: str) -> str:
+def smriti_delete_space(space: str, confirm_space: str = "") -> str:
     """Delete a Smriti space and everything it contains.
 
     Cascades to every checkpoint, session, and turn under the space.
-    This is irreversible. The MCP host's tool-approval gate is the
-    only safety check — there is no per-tool confirmation prompt
-    (unlike the CLI's `-y` flag, because the MCP tool-call approval
-    already serves that purpose).
+    This is irreversible. Because MCP tools cannot open an interactive
+    prompt, callers must pass `confirm_space` matching the resolved
+    space name or UUID in the same tool call.
 
     Args:
         space: Space name or UUID.
+        confirm_space: Must exactly match the resolved space name or UUID.
     """
     client = _client()
     try:
         s = client.resolve_space(space)
         commits = client.list_commits(s["id"])
+        if confirm_space not in {s["name"], s["id"]}:
+            return (
+                f"Refusing to delete space '{s['name']}' (`{s['id']}`).\n"
+                f"This would permanently delete {len(commits)} checkpoint(s), "
+                "sessions, turns, claims, and related project state.\n"
+                "Re-run only if you are certain, passing "
+                f'confirm_space="{s["name"]}" or confirm_space="{s["id"]}".\n'
+            )
         client.delete_space(s["id"])
     except SmritiError as e:
         _raise_from(e)

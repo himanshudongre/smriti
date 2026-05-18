@@ -375,11 +375,13 @@ Surfaces:
   run the result through an existing formatter, return markdown. Feature
   parity with the CLI modulo three deliberate differences: (1) MCP does not
   auto-capture `project_root` from cwd because the MCP server runs in the
-  host's arbitrary working directory, (2) destructive tools have no per-tool
-  confirmation prompt — the host's tool-approval UI is the gate, (3) the
-  `smriti_install_skill` tool returns the rendered skill pack markdown rather
-  than writing a file, because the MCP server has no business planting files
-  in the host's arbitrary cwd. Shares the formatters with the CLI, so both
+  host's arbitrary working directory, (2) destructive tools have no interactive
+  prompt, so high-risk operations use explicit tool arguments such as
+  `confirm_space` for space deletion and `cascade=true` for subtree deletion
+  alongside the host's approval UI, (3) the `smriti_install_skill` tool returns
+  the rendered skill pack markdown rather than writing a file, because the MCP
+  server has no business planting files in the host's arbitrary cwd. Shares the
+  formatters with the CLI, so both
   transports produce byte-identical output for the same backend response.
 - **Skill pack** (`cli/smriti_cli/skill_pack/`, CLI subcommand
   `smriti skills install`, MCP tool `smriti_install_skill`) — the agent-
