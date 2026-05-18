@@ -224,7 +224,7 @@ def test_cmd_space_delete_empty_unattached_space_allows_yes(tmp_path, monkeypatc
     client.resolve_space.return_value = _space_dict()
     client.list_commits.return_value = []  # empty
     cli_main.cmd_space_delete(client, _delete_args(yes=True))
-    client.delete_space.assert_called_once_with("space-uuid")
+    client.delete_space.assert_called_once_with("space-uuid", force=False)
 
 
 def test_cmd_space_delete_nonempty_refused_without_force(tmp_path, monkeypatch, capsys):
@@ -248,7 +248,7 @@ def test_cmd_space_delete_nonempty_allowed_with_force(tmp_path, monkeypatch):
     client.resolve_space.return_value = _space_dict()
     client.list_commits.return_value = [{"id": "c1"}, {"id": "c2"}]
     cli_main.cmd_space_delete(client, _delete_args(yes=True, force=True))
-    client.delete_space.assert_called_once_with("space-uuid")
+    client.delete_space.assert_called_once_with("space-uuid", force=True)
 
 
 def test_cmd_space_delete_attached_space_refused_without_force(tmp_path, monkeypatch):
@@ -270,4 +270,4 @@ def test_cmd_space_delete_attached_space_allowed_with_force(tmp_path, monkeypatc
     client.resolve_space.return_value = _space_dict()
     client.list_commits.return_value = []
     cli_main.cmd_space_delete(client, _delete_args(yes=True, force=True))
-    client.delete_space.assert_called_once_with("space-uuid")
+    client.delete_space.assert_called_once_with("space-uuid", force=True)

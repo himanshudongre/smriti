@@ -252,7 +252,7 @@ def test_seed_rolls_back_a_half_built_space_on_failure():
     with pytest.raises(SmritiError):
         seed_demo_space(client)
     # the partially-created space is removed so a retry starts clean
-    client.delete_space.assert_called_once_with("demo-space-id")
+    client.delete_space.assert_called_once_with("demo-space-id", force=True)
 
 
 # ── build_guide ──────────────────────────────────────────────────────────────
@@ -290,7 +290,7 @@ def test_remove_deletes_a_marked_demo_space():
     }
     result = remove_demo_space(client)
     assert result["removed"] is True
-    client.delete_space.assert_called_once_with("demo-space-id")
+    client.delete_space.assert_called_once_with("demo-space-id", force=True)
 
 
 def test_remove_refuses_a_space_without_the_demo_marker():
@@ -372,7 +372,7 @@ def test_cmd_quickstart_remove_deletes_the_demo_space():
         "description": DEMO_SPACE_DESCRIPTION,
     }
     cli_main.cmd_quickstart(client, _args("--remove", "-y"))
-    client.delete_space.assert_called_once_with("demo-space-id")
+    client.delete_space.assert_called_once_with("demo-space-id", force=True)
 
 
 def test_cmd_quickstart_reset_removes_then_reseeds():
@@ -392,5 +392,5 @@ def test_cmd_quickstart_reset_removes_then_reseeds():
         SmritiError("not found"),
     ]
     cli_main.cmd_quickstart(client, _args("--reset", "-y"))
-    client.delete_space.assert_called_once_with("old-demo-id")
+    client.delete_space.assert_called_once_with("old-demo-id", force=True)
     client.create_space.assert_called_once()

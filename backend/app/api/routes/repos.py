@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -169,11 +169,42 @@ def get_latest_commit(repo_id: uuid.UUID, branch: str = "main", db: Session = De
 
 
 @router.delete("/{repo_id}", status_code=204)
-def delete_repo(repo_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
-    """Delete a space and cascade to all its commits, sessions, and turns."""
+def delete_repo(
+    repo_id: uuid.UUID,
+    force: bool = Query(
+        False,
+        description="Required to delete a space that still holds checkpoints",
+    ),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete a space and cascade to all its commits, sessions, and turns.
+
+    Refuses with 409 if the space still holds checkpoints, unless force=true
+    is passed. An empty space deletes without force."""
     repo = db.get(RepoModel, repo_id)
     if not repo or repo.user_id != DEMO_USER_ID:
         raise HTTPException(status_code=404, detail="Repo not found")
+
+    checkpoint_count = db.scalar(
+        select(func.count())
+        .select_from(CommitModel)
+        .where(CommitModel.repo_id == repo_id)
+    )
+    if checkpoint_count and not force:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"Cannot delete space '{repo.name}': it still holds "
+                    f"{checkpoint_count} checkpoint(s). Deletion cascades to every "
+                    f"checkpoint, session, and turn under it and cannot be undone. "
+                    f"Re-send with ?force=true to delete the space and all its contents."
+                ),
+                "checkpoint_count": checkpoint_count,
+                "requires_force": True,
+            },
+        )
+
     db.delete(repo)
     db.commit()
     return Response(status_code=204)

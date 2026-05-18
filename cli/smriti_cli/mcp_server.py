@@ -474,7 +474,7 @@ def smriti_delete_space(space: str, confirm_space: str = "") -> str:
                 "Re-run only if you are certain, passing "
                 f'confirm_space="{s["name"]}" or confirm_space="{s["id"]}".\n'
             )
-        client.delete_space(s["id"])
+        client.delete_space(s["id"], force=True)
     except SmritiError as e:
         _raise_from(e)
     return f"Deleted space '{s['name']}' and its {len(commits)} checkpoint(s).\n"

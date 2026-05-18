@@ -436,7 +436,9 @@ def seed_demo_space(client: SmritiClient) -> dict:
         return _populate(client, space_id)
     except Exception:
         try:
-            client.delete_space(space_id)
+            # force=True: this is quickstart tearing down its own
+            # half-built demo space, which may already hold checkpoints.
+            client.delete_space(space_id, force=True)
         except SmritiError:
             pass  # best-effort rollback; surface the original error
         raise
@@ -479,7 +481,9 @@ def remove_demo_space(client: SmritiClient) -> dict:
             "reason": "not-a-demo-space",
             "space_id": space["id"],
         }
-    client.delete_space(space["id"])
+    # force=True: the is_demo_space marker check above is quickstart's
+    # explicit gate; the seeded demo space holds checkpoints.
+    client.delete_space(space["id"], force=True)
     return {"removed": True, "space_id": space["id"]}
 
 

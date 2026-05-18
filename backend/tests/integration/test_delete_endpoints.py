@@ -70,7 +70,8 @@ def test_delete_space_cascades_commits(client):
     c1 = _commit(client, repo_id, session_id, "first")
     c2 = _commit(client, repo_id, session_id, "second")
 
-    r = client.delete(f"/api/v2/repos/{repo_id}")
+    # Populated space — needs force=true now that the backend guards deletes.
+    r = client.delete(f"/api/v2/repos/{repo_id}?force=true")
     assert r.status_code == 204, r.text
 
     assert client.get(f"/api/v2/repos/{repo_id}").status_code == 404
@@ -110,6 +111,46 @@ def test_delete_space_cross_user_returns_404(client, db_session):
 
     r = client.delete(f"/api/v2/repos/{other_id}")
     assert r.status_code == 404
+
+
+# ── 3b. Space delete non-empty guard ─────────────────────────────────────────
+
+
+def test_delete_populated_space_refuses_without_force(client):
+    repo_id = _create_repo(client, "Guarded")
+    session_id = _create_session(client, repo_id)
+    c1 = _commit(client, repo_id, session_id, "real work")
+
+    r = client.delete(f"/api/v2/repos/{repo_id}")
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert detail["requires_force"] is True
+    assert detail["checkpoint_count"] == 1
+    assert "force=true" in detail["message"]
+
+    # The refusal is non-destructive: the space and its checkpoint survive.
+    assert client.get(f"/api/v2/repos/{repo_id}").status_code == 200
+    assert client.get(f"/api/v2/commits/{c1['id']}").status_code == 200
+
+
+def test_delete_populated_space_with_force_succeeds(client):
+    repo_id = _create_repo(client, "Force-Delete")
+    session_id = _create_session(client, repo_id)
+    c1 = _commit(client, repo_id, session_id, "real work")
+
+    r = client.delete(f"/api/v2/repos/{repo_id}?force=true")
+    assert r.status_code == 204, r.text
+
+    assert client.get(f"/api/v2/repos/{repo_id}").status_code == 404
+    assert client.get(f"/api/v2/commits/{c1['id']}").status_code == 404
+
+
+def test_delete_empty_space_succeeds_without_force(client):
+    repo_id = _create_repo(client, "Empty")
+
+    r = client.delete(f"/api/v2/repos/{repo_id}")
+    assert r.status_code == 204, r.text
+    assert client.get(f"/api/v2/repos/{repo_id}").status_code == 404
 
 
 # ── 4. Checkpoint leaf delete succeeds ───────────────────────────────────────

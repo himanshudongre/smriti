@@ -570,7 +570,7 @@ def test_delete_space_happy_path_with_confirmed_name(mock_client):
 
     assert "Deleted space 'my-project'" in result
     assert "2 checkpoint" in result  # commit count included
-    mock_client.delete_space.assert_called_once_with("space-uuid")
+    mock_client.delete_space.assert_called_once_with("space-uuid", force=True)
 
 
 def test_delete_space_allows_confirmed_uuid(mock_client):
@@ -584,7 +584,7 @@ def test_delete_space_allows_confirmed_uuid(mock_client):
     )
 
     assert "Deleted space 'my-project'" in result
-    mock_client.delete_space.assert_called_once_with("space-uuid")
+    mock_client.delete_space.assert_called_once_with("space-uuid", force=True)
 
 
 def test_delete_space_unknown_space(mock_client):

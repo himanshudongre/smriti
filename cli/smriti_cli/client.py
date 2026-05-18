@@ -114,8 +114,9 @@ class SmritiClient:
             json={"project_root": path},
         )
 
-    def delete_space(self, space_id: str) -> None:
-        self._request("DELETE", f"/api/v2/repos/{space_id}")
+    def delete_space(self, space_id: str, force: bool = False) -> None:
+        params = {"force": "true"} if force else None
+        self._request("DELETE", f"/api/v2/repos/{space_id}", params=params)
 
     def resolve_space(self, name_or_id: str) -> dict:
         """Look up a space by UUID or by name. Returns the full space dict.

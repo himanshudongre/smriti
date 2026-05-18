@@ -653,7 +653,7 @@ def cmd_space_delete(client: SmritiClient, args: argparse.Namespace) -> None:
         preview += "\n  This repo is attached to this space — deleting it unbinds the repo."
     if not _confirm(preview, args.yes):
         _fail("Cancelled.", code=0)
-    client.delete_space(space["id"])
+    client.delete_space(space["id"], force=args.force)
     if args.json:
         _print_json(
             {"deleted": True, "space_id": space["id"], "commits_deleted": commit_count}
