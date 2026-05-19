@@ -114,15 +114,16 @@ smriti/
 │   ├── pyproject.toml          Installable as `pip install -e ./cli`
 │   │                             → `smriti` + `smriti-mcp` on PATH
 │   ├── smriti_cli/
-│   │   ├── main.py             argparse dispatcher: init, doctor, space, state,
-│   │   │                         current, checkpoint, fork, restore, compare,
-│   │   │                         branch, claim, worktree, skills, metrics
+│   │   ├── main.py             argparse dispatcher: init, attach, doctor,
+│   │   │                         quickstart, space, state, current,
+│   │   │                         checkpoint, fork, restore, compare, branch,
+│   │   │                         claim, worktree, skills, metrics
 │   │   ├── mcp_server.py       FastMCP server (21 tools, stdio transport)
 │   │   ├── client.py           SmritiClient HTTP wrapper (includes claims/worktrees)
 │   │   ├── formatters.py       Continuation-oriented markdown renderers
 │   │   │                         (multi-branch, active claims, divergence)
 │   │   └── skill_pack/         Agent skill pack source and renderer
-│   │       ├── template.md     Single source of truth (v2.3, 15 sections)
+│   │       ├── template.md     Single source of truth (v2.4, 15 sections)
 │   │       ├── renderer.py     Pure-function render + versioned install
 │   │       └── targets.py      Target configs (claude-code, codex)
 │   └── tests/                  CLI + MCP tests (151 tests)

@@ -587,7 +587,7 @@ decide. No scheduler, no assignment, no orchestrator.
 **Backend capabilities manifest.** The `/health` endpoint returns `git_sha`
 and a `capabilities` list (`claims`, `structured_tasks`, `task_ids`,
 `checkpoint_notes`, `branch_disposition`, `freshness`, `compact_state`,
-`worktrees`, `worktree_binding`).
+`worktrees`, `worktree_binding`, `activation_health`).
 Agents probe this when a 404 or missing section suggests the backend is
 running stale code. The capabilities list is hardcoded in `main.py` and
 updated when new features ship.
@@ -603,6 +603,17 @@ drift data (path, branch, dirty file count, ahead/behind vs `origin/main`, and
 last commit). This keeps worktree usage visible exactly where agents already
 look for coordination state — `## Active work` — while preserving solo-agent
 claims that do not need a worktree.
+
+**Repo-state drift detection.** The CLI records the working repo's git HEAD and
+branch on every checkpoint it creates — stored under the commit's `context_blob`
+via the V4 commit endpoint's `repo_state` field. On a later `smriti state`, the
+CLI inspects the local git repo and compares it against that recorded state,
+appending a `## Repo state` section: branch / HEAD / root, working-tree health
+(dirty, untracked, detached HEAD), and — the trust signal — how far the repo has
+moved since the checkpoint (N commits ahead, diverged, or taken on a different
+branch). The comparison is entirely client-side and read-only: no fetch, no
+reconciliation. The backend cannot see the user's working tree, so it only
+stores what the CLI captures; computing the drift is the CLI's job.
 
 ---
 

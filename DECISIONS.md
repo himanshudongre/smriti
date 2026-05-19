@@ -623,6 +623,37 @@ demand from existing data, with no new schema. It is deliberately a read-only
 aggregate, not a new primitive: it surfaces what checkpoints, claims, and notes
 already record, rather than introducing a new kind of state.
 
+### Why repo-state drift detection lives in the CLI, not the backend
+
+`smriti state` compares the working git repo against the HEAD and branch the
+latest checkpoint recorded. That comparison runs entirely in the CLI: the CLI
+reads local git, and the backend only stores the `repo_state` the CLI captured
+on each checkpoint.
+
+The backend cannot see the user's working tree — it is an HTTP service that may
+run on another machine. Any drift verdict it produced would be
+authoritative-but-blind. The same reasoning that keeps worktree drift a
+per-request git probe keeps repo-state drift client-side: git is the only honest
+source, and only the CLI stands in the repo.
+
+Checkpoints created before this feature, or by the MCP server (which has no repo
+to inspect), record no `repo_state` and are left uncompared — the feature
+degrades to silence, never to a wrong answer.
+
+### Why destructive Space deletion is gated, not prevented
+
+Deleting a Space cascades to every checkpoint, session, and turn under it. A
+destructive-operations incident — `smriti space delete <space> -y` wiping a
+fully populated Space — showed a single confirmation flag was not enough.
+
+The gate is an explicit, separate force signal at every layer that can delete a
+Space: `--force` on the CLI (orthogonal to `-y`), an echo-back `confirm_space`
+argument on the MCP tool (an MCP tool cannot open an interactive prompt, so the
+confirmation has to be a tool argument), and `force=true` on `DELETE
+/api/v2/repos/{id}` so the backend refuses a populated-Space delete no matter
+which client calls it. Deletion stays possible — it just cannot happen by
+accident; an empty Space still deletes without the extra flag.
+
 ---
 
 ## Open questions and deferred decisions

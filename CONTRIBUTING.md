@@ -135,7 +135,7 @@ EXPECTED_OUTCOMES at minimum.
 
 Smriti has three agent-facing surfaces beyond the chat UI:
 
-- **CLI** (`cli/smriti_cli/main.py`) — `smriti` command, 14 commands
+- **CLI** (`cli/smriti_cli/main.py`) — `smriti` command, 16 commands
 - **MCP server** (`cli/smriti_cli/mcp_server.py`) — `smriti-mcp` command, 21 tools
 - **Skill pack** (`cli/smriti_cli/skill_pack/`) — versioned instruction files for Claude Code and Codex
 
