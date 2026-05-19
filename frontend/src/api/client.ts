@@ -431,9 +431,18 @@ export async function reviewCheckpoint(checkpointId: string): Promise<import('..
 
 // ── Delete endpoints ─────────────────────────────────────────────────────────
 
-/** Delete a space and cascade to all its checkpoints, sessions, and turns. */
-export async function deleteRepo(repoId: string): Promise<void> {
-  return requestV2<void>(`/repos/${repoId}`, { method: 'DELETE' });
+/**
+ * Delete a space and cascade to all its checkpoints, sessions, and turns.
+ * The backend refuses with 409 unless force=true is passed for a space that
+ * still holds checkpoints, so callers must confirm with the user first, then
+ * pass { force: true }.
+ */
+export async function deleteRepo(
+  repoId: string,
+  opts?: { force?: boolean },
+): Promise<void> {
+  const qs = opts?.force ? '?force=true' : '';
+  return requestV2<void>(`/repos/${repoId}${qs}`, { method: 'DELETE' });
 }
 
 /**

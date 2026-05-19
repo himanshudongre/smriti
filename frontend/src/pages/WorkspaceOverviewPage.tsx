@@ -430,7 +430,10 @@ export function WorkspaceOverviewPage() {
           body="This will permanently delete the space, all of its checkpoints, sessions, and turns. This cannot be undone."
           onClose={() => setDeleteTarget(null)}
           onConfirm={async () => {
-            await deleteRepo(deleteTarget.id);
+            // force=true: the ConfirmDeleteModal above is the user's
+            // explicit confirmation, which the backend's non-empty
+            // delete guard requires.
+            await deleteRepo(deleteTarget.id, { force: true });
             setDeleteTarget(null);
             await refreshWorkspace();
           }}
