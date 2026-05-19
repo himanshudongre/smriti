@@ -550,6 +550,26 @@ def _format_repo_state_section(repo_state: dict | None) -> str:
         project_root = _pretty_path(repo_state.get("project_root")) or "unknown"
         lines.append(f"- project root: differs from this space (`{project_root}`)")
 
+    checkpoint = repo_state.get("checkpoint")
+    if checkpoint:
+        relation = checkpoint.get("relation")
+        if relation == "ahead":
+            rel = f"repo is {checkpoint.get('ahead') or 0} commit(s) ahead"
+        elif relation == "behind":
+            rel = f"repo is {checkpoint.get('behind') or 0} commit(s) behind"
+        elif relation == "diverged":
+            rel = "repo history has diverged from it"
+        elif relation == "unknown":
+            rel = "checkpoint commit not found in this repo"
+        else:
+            rel = "repo unchanged since it"
+        ckpt_line = (
+            f"- vs last checkpoint `{checkpoint.get('head_short') or 'unknown'}`: {rel}"
+        )
+        if checkpoint.get("branch_changed") and checkpoint.get("branch"):
+            ckpt_line += f" — checkpoint on branch `{checkpoint['branch']}`"
+        lines.append(ckpt_line)
+
     signals = repo_state.get("signals") or []
     if signals:
         lines.append("### Attention")

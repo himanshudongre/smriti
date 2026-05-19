@@ -282,6 +282,11 @@ class ManualCommitRequest(BaseModel):
     artifacts: list[dict] = Field(default_factory=list)
     author_agent: Optional[str] = None
     project_root: Optional[str] = None
+    # Git provenance the CLI captures at checkpoint time: {head, head_short,
+    # branch}. Lets repo-state drift detection compare the working repo
+    # against where it was when this checkpoint was recorded. Empty for
+    # clients that cannot inspect a repo (e.g. the MCP server).
+    repo_state: dict = Field(default_factory=dict)
 
 
 class CommitResponse(BaseModel):
@@ -301,6 +306,7 @@ class CommitResponse(BaseModel):
     open_questions: list
     entities: list
     artifacts: list
+    context_blob: dict = Field(default_factory=dict)
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -782,6 +788,10 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
 
     commit_hash = _generate_commit_hash(str(repo_id), payload.message)
 
+    # Git provenance for repo-state drift detection. Namespaced under
+    # "repo_state" so context_blob stays open for other uses.
+    context_blob = {"repo_state": payload.repo_state} if payload.repo_state else {}
+
     commit = CommitModel(
         repo_id=repo_id,
         commit_hash=commit_hash,
@@ -805,6 +815,7 @@ def manual_commit(payload: ManualCommitRequest, db: Session = Depends(get_db)):
         entities=payload.entities,
         artifacts=payload.artifacts,
         metadata_={"session_id": str(session_id)},
+        context_blob=context_blob,
     )
     db.add(commit)
     repo.updated_at = _utcnow()

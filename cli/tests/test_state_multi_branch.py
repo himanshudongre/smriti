@@ -961,3 +961,185 @@ def _worktree_claim(dirty_files: int, dirty_paths: list[str]) -> dict:
         "base_commit_hash": "abc1234",
         "claimed_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── repo-state drift: checkpoint-relative comparison ──────────────────────────
+
+
+def _commit_with_repo_state(head, head_short="", branch="main"):
+    """A head-checkpoint dict carrying recorded git provenance, shaped like
+    what the V4 state endpoint returns to `smriti state`."""
+    return {
+        "context_blob": {
+            "repo_state": {
+                "head": head,
+                "head_short": head_short or head[:7],
+                "branch": branch,
+            }
+        }
+    }
+
+
+def test_compare_to_checkpoint_none_when_unrecorded():
+    # Checkpoints created before this feature, or by the MCP server, carry no
+    # recorded git state — the comparison is skipped, never faked.
+    assert cli_main._compare_to_checkpoint(None, "/repo", "abc123", "main") is None
+    assert cli_main._compare_to_checkpoint({}, "/repo", "abc123", "main") is None
+    assert cli_main._compare_to_checkpoint(
+        {"context_blob": {}}, "/repo", "abc123", "main"
+    ) is None
+
+
+def test_compare_to_checkpoint_in_sync():
+    commit = _commit_with_repo_state("abc123def", branch="main")
+    result = cli_main._compare_to_checkpoint(commit, "/repo", "abc123def", "main")
+    assert result["relation"] == "in_sync"
+    assert result["branch_changed"] is False
+    assert result["signals"] == []
+
+
+def test_compare_to_checkpoint_ahead_flags_stale(monkeypatch):
+    commit = _commit_with_repo_state("oldsha", branch="main")
+    # "oldsha..HEAD" -> 3 commits ahead; "HEAD..oldsha" -> 0 behind.
+    monkeypatch.setattr(
+        cli_main, "_git_rev_count",
+        lambda cwd, rng: 3 if rng.endswith("..HEAD") else 0,
+    )
+    result = cli_main._compare_to_checkpoint(commit, "/repo", "newsha", "main")
+    assert result["relation"] == "ahead"
+    assert result["ahead"] == 3
+    assert {s["kind"] for s in result["signals"]} == {"ahead_of_checkpoint"}
+    assert any("stale" in s["message"] for s in result["signals"])
+
+
+def test_compare_to_checkpoint_diverged(monkeypatch):
+    commit = _commit_with_repo_state("oldsha", branch="main")
+    monkeypatch.setattr(cli_main, "_git_rev_count", lambda cwd, rng: 2)
+    result = cli_main._compare_to_checkpoint(commit, "/repo", "newsha", "main")
+    assert result["relation"] == "diverged"
+    assert {s["kind"] for s in result["signals"]} == {"diverged_from_checkpoint"}
+
+
+def test_compare_to_checkpoint_unknown_when_commit_missing(monkeypatch):
+    commit = _commit_with_repo_state("missingsha", branch="main")
+    monkeypatch.setattr(cli_main, "_git_rev_count", lambda cwd, rng: None)
+    result = cli_main._compare_to_checkpoint(commit, "/repo", "currentsha", "main")
+    assert result["relation"] == "unknown"
+    assert {s["kind"] for s in result["signals"]} == {"checkpoint_commit_missing"}
+
+
+def test_compare_to_checkpoint_flags_branch_change():
+    commit = _commit_with_repo_state("abc123", branch="main")
+    # Same HEAD, but the repo is now on a different branch than the checkpoint.
+    result = cli_main._compare_to_checkpoint(commit, "/repo", "abc123", "feature-x")
+    assert result["relation"] == "in_sync"
+    assert result["branch_changed"] is True
+    signal = next(
+        s for s in result["signals"] if s["kind"] == "checkpoint_branch_changed"
+    )
+    assert "main" in signal["message"]
+
+
+def test_build_repo_state_includes_checkpoint_comparison(monkeypatch):
+    monkeypatch.setattr(
+        cli_main, "_git_context",
+        lambda cwd=None: {
+            "git_root": "/repo", "git_sha": "newsha",
+            "git_sha_short": "newsha1", "branch": "main",
+        },
+    )
+    monkeypatch.setattr(cli_main, "_git_ahead_behind", lambda cwd: (0, 0))
+    monkeypatch.setattr(cli_main, "_git_dirty_count", lambda cwd: 0)
+    monkeypatch.setattr(cli_main, "_git_porcelain_count", lambda cwd, prefix: 0)
+    monkeypatch.setattr(
+        cli_main, "_git_rev_count",
+        lambda cwd, rng: 4 if rng.endswith("..HEAD") else 0,
+    )
+    commit = _commit_with_repo_state("oldsha", branch="main")
+    repo_state = cli_main._build_repo_state({"project_root": "/repo"}, commit)
+
+    assert repo_state is not None
+    assert repo_state["checkpoint"]["relation"] == "ahead"
+    assert repo_state["checkpoint"]["ahead"] == 4
+    # The checkpoint drift signal is merged into the section's signal list.
+    assert any(s["kind"] == "ahead_of_checkpoint" for s in repo_state["signals"])
+
+
+def test_build_repo_state_checkpoint_none_without_commit(monkeypatch):
+    monkeypatch.setattr(
+        cli_main, "_git_context",
+        lambda cwd=None: {
+            "git_root": "/repo", "git_sha": "sha",
+            "git_sha_short": "sha1", "branch": "main",
+        },
+    )
+    monkeypatch.setattr(cli_main, "_git_ahead_behind", lambda cwd: (0, 0))
+    monkeypatch.setattr(cli_main, "_git_dirty_count", lambda cwd: 0)
+    monkeypatch.setattr(cli_main, "_git_porcelain_count", lambda cwd, prefix: 0)
+    repo_state = cli_main._build_repo_state({"project_root": "/repo"})
+    assert repo_state["checkpoint"] is None
+
+
+def test_format_repo_state_section_renders_checkpoint_line():
+    out = _format_repo_state_section({
+        "git_root": "/repo", "branch": "main", "detached": False,
+        "head_short": "newsha1", "upstream_known": False,
+        "project_root_matches": None,
+        "checkpoint": {
+            "head_short": "oldsha1", "branch": "main", "relation": "ahead",
+            "ahead": 3, "behind": 0, "branch_changed": False, "signals": [],
+        },
+        "signals": [],
+    })
+    assert "vs last checkpoint `oldsha1`" in out
+    assert "repo is 3 commit(s) ahead" in out
+
+
+def test_format_repo_state_section_checkpoint_in_sync_and_branch_change():
+    out = _format_repo_state_section({
+        "git_root": "/repo", "branch": "feature", "detached": False,
+        "head_short": "sha1", "upstream_known": False,
+        "project_root_matches": None,
+        "checkpoint": {
+            "head_short": "sha1", "branch": "main", "relation": "in_sync",
+            "ahead": 0, "behind": 0, "branch_changed": True, "signals": [],
+        },
+        "signals": [],
+    })
+    assert "repo unchanged since it" in out
+    assert "checkpoint on branch `main`" in out
+
+
+def test_checkpoint_repo_state_captures_head_and_branch(monkeypatch):
+    monkeypatch.setattr(
+        cli_main, "_git_context",
+        lambda cwd=None: {
+            "git_root": "/repo", "git_sha": "fullsha123",
+            "git_sha_short": "fullsha", "branch": "main",
+        },
+    )
+    assert cli_main._checkpoint_repo_state() == {
+        "head": "fullsha123", "head_short": "fullsha", "branch": "main",
+    }
+
+
+def test_checkpoint_repo_state_empty_outside_git(monkeypatch):
+    monkeypatch.setattr(
+        cli_main, "_git_context",
+        lambda cwd=None: {
+            "git_root": None, "git_sha": None,
+            "git_sha_short": None, "branch": None,
+        },
+    )
+    assert cli_main._checkpoint_repo_state() == {}
+
+
+def test_checkpoint_repo_state_detached_head_records_no_branch(monkeypatch):
+    monkeypatch.setattr(
+        cli_main, "_git_context",
+        lambda cwd=None: {
+            "git_root": "/repo", "git_sha": "sha",
+            "git_sha_short": "sha1", "branch": "HEAD",
+        },
+    )
+    assert cli_main._checkpoint_repo_state()["branch"] is None

@@ -162,6 +162,24 @@ def _git_context(cwd: str | os.PathLike[str] | None = None) -> dict:
     }
 
 
+def _checkpoint_repo_state() -> dict:
+    """Git HEAD/branch of the current repo, recorded on a checkpoint so later
+    `smriti state` runs can detect how far the repo has drifted since it.
+
+    Empty when not inside a git repo (or for clients with no repo to inspect).
+    """
+    info = _git_context()
+    head = info.get("git_sha")
+    if not head:
+        return {}
+    branch = info.get("branch")
+    return {
+        "head": head,
+        "head_short": info.get("git_sha_short"),
+        "branch": None if branch == "HEAD" else branch,
+    }
+
+
 def _git_porcelain_count(cwd: str | os.PathLike[str] | None, prefix: str) -> int:
     out = _git_output_at(cwd, "status", "--porcelain")
     if not out:
@@ -202,12 +220,112 @@ def _paths_same(a: str | None, b: str | None) -> bool | None:
         return False
 
 
-def _build_repo_state(space: dict) -> dict | None:
+def _git_rev_count(cwd: str | os.PathLike[str] | None, rev_range: str) -> int | None:
+    """Count commits in a local git range (e.g. "A..B"). None when the range
+    cannot be resolved — typically because one side is not in this repo."""
+    out = _git_output_at(cwd, "rev-list", "--count", rev_range)
+    if out is None:
+        return None
+    try:
+        return int(out)
+    except ValueError:
+        return None
+
+
+def _compare_to_checkpoint(
+    commit: dict | None,
+    git_root: str,
+    current_head: str | None,
+    current_branch: str | None,
+) -> dict | None:
+    """Compare the working repo against the git HEAD/branch the latest
+    checkpoint recorded.
+
+    Returns a render-ready dict plus drift signals, or None when the checkpoint
+    carries no recorded git state — checkpoints created before this feature, or
+    by the MCP server, have none.
+    """
+    recorded = ((commit or {}).get("context_blob") or {}).get("repo_state") or {}
+    ckpt_head = recorded.get("head")
+    if not ckpt_head:
+        return None
+
+    ckpt_branch = recorded.get("branch")
+    branch_changed = bool(
+        ckpt_branch and current_branch and ckpt_branch != current_branch
+    )
+
+    ahead: int | None = 0
+    behind: int | None = 0
+    if current_head and ckpt_head == current_head:
+        relation = "in_sync"
+    else:
+        ahead = _git_rev_count(git_root, f"{ckpt_head}..HEAD")
+        behind = _git_rev_count(git_root, f"HEAD..{ckpt_head}")
+        if ahead is None or behind is None:
+            relation = "unknown"  # checkpoint commit not in this repo's history
+        elif ahead and behind:
+            relation = "diverged"
+        elif ahead:
+            relation = "ahead"
+        elif behind:
+            relation = "behind"
+        else:
+            relation = "in_sync"
+
+    signals: list[dict[str, str]] = []
+    if relation == "ahead":
+        signals.append({
+            "kind": "ahead_of_checkpoint",
+            "message": (
+                f"repo is {ahead} commit(s) ahead of the last checkpoint — "
+                "recorded state may be stale"
+            ),
+            "severity": "attention",
+        })
+    elif relation == "diverged":
+        signals.append({
+            "kind": "diverged_from_checkpoint",
+            "message": (
+                "repo history has diverged from the last checkpoint — "
+                "recorded state may be stale"
+            ),
+            "severity": "attention",
+        })
+    elif relation == "unknown":
+        signals.append({
+            "kind": "checkpoint_commit_missing",
+            "message": "the last checkpoint's commit is not in this repo's history",
+            "severity": "attention",
+        })
+    if branch_changed:
+        signals.append({
+            "kind": "checkpoint_branch_changed",
+            "message": (
+                f"the last checkpoint was taken on a different branch (`{ckpt_branch}`)"
+            ),
+            "severity": "attention",
+        })
+
+    return {
+        "head_short": recorded.get("head_short") or ckpt_head[:7],
+        "branch": ckpt_branch,
+        "relation": relation,
+        "ahead": ahead,
+        "behind": behind,
+        "branch_changed": branch_changed,
+        "signals": signals,
+    }
+
+
+def _build_repo_state(space: dict, commit: dict | None = None) -> dict | None:
     """Inspect the caller's local git repo for state/drift rendering.
 
     This is intentionally read-only and cheap: no fetch, no network, no merge
     base search beyond local refs. Remote freshness is represented only by the
     current upstream ahead/behind counters already present in the local clone.
+    When the latest checkpoint recorded its git state, the result also carries
+    a checkpoint-relative comparison (see `_compare_to_checkpoint`).
     """
     info = _git_context()
     git_root = info.get("git_root")
@@ -261,6 +379,14 @@ def _build_repo_state(space: dict) -> dict | None:
             "severity": "info",
         })
 
+    # Checkpoint-relative drift: how far the working repo has moved since the
+    # latest checkpoint recorded its git HEAD/branch.
+    checkpoint = _compare_to_checkpoint(
+        commit, git_root, info.get("git_sha"), None if detached else branch
+    )
+    if checkpoint:
+        signals.extend(checkpoint["signals"])
+
     return {
         "git_root": git_root,
         "branch": None if detached else branch,
@@ -274,6 +400,7 @@ def _build_repo_state(space: dict) -> dict | None:
         "upstream_known": ahead is not None and behind is not None,
         "project_root": canonical_root,
         "project_root_matches": root_matches,
+        "checkpoint": checkpoint,
         "signals": signals,
     }
 
@@ -823,7 +950,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
     full_artifacts = not args.preview and not args.compact
     compact = args.compact
     show_stats = getattr(args, "stats", False)
-    repo_state = _build_repo_state(space)
+    repo_state = _build_repo_state(space, commit)
     if args.json:
         payload = {"space": space, "head": head, "commit": commit}
         if repo_state is not None:
@@ -1118,6 +1245,13 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
         commit_payload["project_root"] = project_root
     if author_agent is not None:
         commit_payload["author_agent"] = author_agent
+
+    # Record local git HEAD/branch so later `smriti state` runs can detect
+    # how far the repo has drifted since this checkpoint. Best-effort: empty
+    # outside a git repo, which the backend stores as no repo_state.
+    repo_state = _checkpoint_repo_state()
+    if repo_state:
+        commit_payload["repo_state"] = repo_state
 
     commit = client.create_chat_commit(commit_payload)
 

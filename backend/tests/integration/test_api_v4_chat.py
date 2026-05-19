@@ -288,6 +288,50 @@ def test_manual_commit_author_agent_falls_back_to_session_provider(client):
     assert payload["project_root"] is None
 
 
+def test_manual_commit_records_repo_state(client):
+    """Git provenance passed as repo_state is stored in the commit's
+    context_blob and survives the V4 state round trip — the path
+    `smriti state` reads for repo-state drift detection."""
+    repo_id = _create_repo(client, "Repo State Round Trip")
+    s = client.post(f"/api/v4/chat/spaces/{repo_id}/sessions", json={
+        "provider": "openrouter", "model": "mock",
+    })
+    session_id = s.json()["id"]
+
+    repo_state = {"head": "abc123def456", "head_short": "abc123d", "branch": "main"}
+    commit_r = client.post("/api/v4/chat/commit", json={
+        "repo_id": repo_id,
+        "session_id": session_id,
+        "message": "Checkpoint with git provenance",
+        "repo_state": repo_state,
+    })
+    assert commit_r.status_code == 201, commit_r.text
+    assert commit_r.json()["context_blob"] == {"repo_state": repo_state}
+
+    # The V4 state endpoint feeds `smriti state` — repo_state must survive it.
+    state_r = client.get(f"/api/v4/chat/spaces/{repo_id}/state")
+    assert state_r.status_code == 200, state_r.text
+    assert state_r.json()["commit"]["context_blob"]["repo_state"] == repo_state
+
+
+def test_manual_commit_without_repo_state_has_empty_context_blob(client):
+    """A commit created without git provenance carries an empty context_blob;
+    drift detection treats this as 'no recorded git state'."""
+    repo_id = _create_repo(client, "No Repo State")
+    s = client.post(f"/api/v4/chat/spaces/{repo_id}/sessions", json={
+        "provider": "openrouter", "model": "mock",
+    })
+    session_id = s.json()["id"]
+
+    commit_r = client.post("/api/v4/chat/commit", json={
+        "repo_id": repo_id,
+        "session_id": session_id,
+        "message": "No git provenance",
+    })
+    assert commit_r.status_code == 201, commit_r.text
+    assert commit_r.json()["context_blob"] == {}
+
+
 def test_head_endpoint(client):
     repo_id = _create_repo(client, "Head Repo")
 
