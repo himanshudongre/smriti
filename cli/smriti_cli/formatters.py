@@ -410,6 +410,7 @@ def format_state_brief(
     compact: bool = False,
     stats: bool = False,
     space_state: dict | None = None,
+    repo_state: dict | None = None,
 ) -> str:
     """A continuation-oriented markdown brief for the current project state.
 
@@ -498,6 +499,7 @@ def format_state_brief(
         parts.append(
             _format_divergence_signal_section(space_state.get("divergence"))
         )
+    parts.append(_format_repo_state_section(repo_state))
 
     result = "\n".join(p for p in parts if p).rstrip() + "\n"
 
@@ -511,6 +513,57 @@ def format_state_brief(
             result += _format_compact_stats_footer(None, compact=False)
 
     return result
+
+
+def _format_repo_state_section(repo_state: dict | None) -> str:
+    if not repo_state:
+        return ""
+
+    branch = repo_state.get("branch")
+    detached = bool(repo_state.get("detached"))
+    branch_label = "detached HEAD" if detached else (branch or "unknown")
+    head = repo_state.get("head_short")
+    if not head:
+        raw_head = repo_state.get("head")
+        head = _short_hash(raw_head) if raw_head else "unknown"
+    root = _pretty_path(repo_state.get("git_root")) or "unknown"
+
+    status_bits = [
+        f"branch `{branch_label}`",
+        f"HEAD `{head}`",
+        f"root `{root}`",
+    ]
+
+    if repo_state.get("upstream_known"):
+        ahead = int(repo_state.get("ahead") or 0)
+        behind = int(repo_state.get("behind") or 0)
+        status_bits.append(f"upstream +{ahead}/-{behind}")
+    else:
+        status_bits.append("upstream unknown")
+
+    lines = ["## Repo state", " · ".join(status_bits)]
+
+    root_match = repo_state.get("project_root_matches")
+    if root_match is True:
+        lines.append("- project root: matches this space")
+    elif root_match is False:
+        project_root = _pretty_path(repo_state.get("project_root")) or "unknown"
+        lines.append(f"- project root: differs from this space (`{project_root}`)")
+
+    signals = repo_state.get("signals") or []
+    if signals:
+        lines.append("### Attention")
+        for signal in signals:
+            if isinstance(signal, dict):
+                severity = signal.get("severity") or "attention"
+                message = signal.get("message") or signal.get("kind") or str(signal)
+                lines.append(f"- [{severity}] {message}")
+            else:
+                lines.append(f"- {signal}")
+    else:
+        lines.append("- clean: no local repo drift signals")
+
+    return "\n".join(lines) + "\n"
 
 
 def _direction_text(value) -> str:

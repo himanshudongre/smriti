@@ -17,10 +17,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from smriti_cli import main as cli_main
 from smriti_cli import mcp_server
 from smriti_cli.formatters import (
     _format_active_branches_section,
     _format_divergence_signal_section,
+    _format_repo_state_section,
     _relative_time,
     _task_section,
     _normalize_task_item,
@@ -217,6 +219,133 @@ def test_format_divergence_signal_empty_pairs_elided():
 
 def test_format_active_branches_empty_returns_empty():
     assert _format_active_branches_section([]) == ""
+
+
+def test_format_repo_state_section_clean_repo():
+    out = _format_repo_state_section(
+        {
+            "git_root": "/tmp/project",
+            "branch": "main",
+            "detached": False,
+            "head_short": "abc1234",
+            "dirty_files": 0,
+            "untracked_files": 0,
+            "ahead": 0,
+            "behind": 0,
+            "upstream_known": True,
+            "project_root": "/tmp/project",
+            "project_root_matches": True,
+            "signals": [],
+        }
+    )
+
+    assert "## Repo state" in out
+    assert "branch `main`" in out
+    assert "HEAD `abc1234`" in out
+    assert "upstream +0/-0" in out
+    assert "project root: matches this space" in out
+    assert "clean: no local repo drift signals" in out
+
+
+def test_format_repo_state_section_attention_signals():
+    out = _format_repo_state_section(
+        {
+            "git_root": "/tmp/other",
+            "branch": None,
+            "detached": True,
+            "head_short": "def5678",
+            "dirty_files": 2,
+            "untracked_files": 1,
+            "ahead": 3,
+            "behind": 4,
+            "upstream_known": True,
+            "project_root": "/tmp/project",
+            "project_root_matches": False,
+            "signals": [
+                {
+                    "severity": "attention",
+                    "message": "current git root differs from this space's project_root",
+                },
+                {
+                    "severity": "attention",
+                    "message": "2 tracked file(s) have uncommitted changes",
+                },
+            ],
+        }
+    )
+
+    assert "branch `detached HEAD`" in out
+    assert "upstream +3/-4" in out
+    assert "project root: differs from this space" in out
+    assert "### Attention" in out
+    assert "current git root differs" in out
+    assert "uncommitted changes" in out
+
+
+def test_format_state_brief_appends_repo_state():
+    out = format_state_brief(
+        _base_space(),
+        _base_head(),
+        _base_commit(),
+        repo_state={
+            "git_root": "/tmp/project",
+            "branch": "main",
+            "detached": False,
+            "head_short": "abc1234",
+            "upstream_known": False,
+            "project_root_matches": None,
+            "signals": [],
+        },
+    )
+
+    assert "## Repo state" in out
+    assert "upstream unknown" in out
+
+
+def test_build_repo_state_flags_practical_drift(monkeypatch):
+    monkeypatch.setattr(
+        cli_main,
+        "_git_context",
+        lambda cwd=None: {
+            "git_root": "/tmp/actual",
+            "git_sha": "abcdef123456",
+            "git_sha_short": "abcdef1",
+            "branch": "feature",
+        },
+    )
+    monkeypatch.setattr(cli_main, "_git_ahead_behind", lambda cwd: (2, 1))
+    monkeypatch.setattr(cli_main, "_git_dirty_count", lambda cwd: 3)
+    monkeypatch.setattr(cli_main, "_git_porcelain_count", lambda cwd, prefix: 1)
+
+    repo_state = cli_main._build_repo_state({"project_root": "/tmp/expected"})
+
+    assert repo_state is not None
+    assert repo_state["git_root"] == "/tmp/actual"
+    assert repo_state["ahead"] == 2
+    assert repo_state["behind"] == 1
+    assert repo_state["dirty_files"] == 3
+    assert repo_state["untracked_files"] == 1
+    kinds = {signal["kind"] for signal in repo_state["signals"]}
+    assert "project_root_mismatch" in kinds
+    assert "dirty_worktree" in kinds
+    assert "untracked_files" in kinds
+    assert "behind_upstream" in kinds
+    assert "ahead_upstream" in kinds
+
+
+def test_build_repo_state_returns_none_outside_git(monkeypatch):
+    monkeypatch.setattr(
+        cli_main,
+        "_git_context",
+        lambda cwd=None: {
+            "git_root": None,
+            "git_sha": None,
+            "git_sha_short": None,
+            "branch": None,
+        },
+    )
+
+    assert cli_main._build_repo_state({"project_root": "/tmp/expected"}) is None
 
 
 def test_format_active_branches_multiple_branches_one_line_each():

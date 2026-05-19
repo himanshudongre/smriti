@@ -162,6 +162,122 @@ def _git_context(cwd: str | os.PathLike[str] | None = None) -> dict:
     }
 
 
+def _git_porcelain_count(cwd: str | os.PathLike[str] | None, prefix: str) -> int:
+    out = _git_output_at(cwd, "status", "--porcelain")
+    if not out:
+        return 0
+    return sum(1 for line in out.splitlines() if line.startswith(prefix))
+
+
+def _git_dirty_count(cwd: str | os.PathLike[str] | None) -> int:
+    out = _git_output_at(cwd, "status", "--porcelain")
+    if not out:
+        return 0
+    return sum(1 for line in out.splitlines() if not line.startswith("??"))
+
+
+def _git_ahead_behind(cwd: str | os.PathLike[str] | None) -> tuple[int | None, int | None]:
+    out = _git_output_at(cwd, "rev-list", "--left-right", "--count", "@{upstream}...HEAD")
+    if not out:
+        return None, None
+    parts = out.split()
+    if len(parts) != 2:
+        return None, None
+    try:
+        # With "@{upstream}...HEAD", the left side is commits only on upstream
+        # (local is behind) and the right side is commits only on HEAD (local is ahead).
+        behind = int(parts[0])
+        ahead = int(parts[1])
+    except ValueError:
+        return None, None
+    return ahead, behind
+
+
+def _paths_same(a: str | None, b: str | None) -> bool | None:
+    if not a or not b:
+        return None
+    try:
+        return Path(a).expanduser().resolve() == Path(b).expanduser().resolve()
+    except OSError:
+        return False
+
+
+def _build_repo_state(space: dict) -> dict | None:
+    """Inspect the caller's local git repo for state/drift rendering.
+
+    This is intentionally read-only and cheap: no fetch, no network, no merge
+    base search beyond local refs. Remote freshness is represented only by the
+    current upstream ahead/behind counters already present in the local clone.
+    """
+    info = _git_context()
+    git_root = info.get("git_root")
+    if not git_root:
+        return None
+
+    ahead, behind = _git_ahead_behind(git_root)
+    branch = info.get("branch")
+    detached = branch == "HEAD"
+    canonical_root = space.get("project_root")
+    root_matches = _paths_same(git_root, canonical_root)
+
+    dirty = _git_dirty_count(git_root)
+    untracked = _git_porcelain_count(git_root, "??")
+
+    signals: list[dict[str, str]] = []
+    if root_matches is False:
+        signals.append({
+            "kind": "project_root_mismatch",
+            "message": "current git root differs from this space's project_root",
+            "severity": "attention",
+        })
+    if dirty:
+        signals.append({
+            "kind": "dirty_worktree",
+            "message": f"{dirty} tracked file(s) have uncommitted changes",
+            "severity": "attention",
+        })
+    if untracked:
+        signals.append({
+            "kind": "untracked_files",
+            "message": f"{untracked} untracked file(s) present",
+            "severity": "attention",
+        })
+    if detached:
+        signals.append({
+            "kind": "detached_head",
+            "message": "repository is on a detached HEAD",
+            "severity": "attention",
+        })
+    if behind:
+        signals.append({
+            "kind": "behind_upstream",
+            "message": f"local branch is {behind} commit(s) behind upstream",
+            "severity": "attention",
+        })
+    if ahead:
+        signals.append({
+            "kind": "ahead_upstream",
+            "message": f"local branch is {ahead} commit(s) ahead of upstream",
+            "severity": "info",
+        })
+
+    return {
+        "git_root": git_root,
+        "branch": None if detached else branch,
+        "detached": detached,
+        "head": info.get("git_sha"),
+        "head_short": info.get("git_sha_short"),
+        "dirty_files": dirty,
+        "untracked_files": untracked,
+        "ahead": ahead,
+        "behind": behind,
+        "upstream_known": ahead is not None and behind is not None,
+        "project_root": canonical_root,
+        "project_root_matches": root_matches,
+        "signals": signals,
+    }
+
+
 def _is_smriti_source_root(path: str | None) -> bool:
     if not path:
         return False
@@ -707,8 +823,11 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
     full_artifacts = not args.preview and not args.compact
     compact = args.compact
     show_stats = getattr(args, "stats", False)
+    repo_state = _build_repo_state(space)
     if args.json:
         payload = {"space": space, "head": head, "commit": commit}
+        if repo_state is not None:
+            payload["repo_state"] = repo_state
         if space_state is not None:
             payload["active_branches"] = space_state["active_branches"]
             payload["active_claims"] = space_state["active_claims"]
@@ -722,6 +841,7 @@ def cmd_state(client: SmritiClient, args: argparse.Namespace) -> None:
                 compact=compact,
                 stats=show_stats,
                 space_state=space_state,
+                repo_state=repo_state,
             ),
             end="",
         )
