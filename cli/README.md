@@ -79,7 +79,7 @@ Restart the host and the `smriti_*` tools appear in the tool picker.
 | `smriti_worktree_close` | Close a worktree and remove it from disk |
 | `smriti_install_skill` | Return the Smriti agent skill pack for a host (`claude-code` / `codex`) |
 
-**Example.** In a Claude Code session with Smriti MCP connected, ask *"show me the current state of my-project"*. The agent calls `smriti_state(space="my-project")`, the MCP server hits the backend, pipes the result through the same `format_state_brief` formatter the CLI uses, and returns the continuation brief you'd otherwise get from `smriti state my-project` at the terminal — directly inside the chat context.
+**Example.** In a Claude Code session with Smriti MCP connected, ask *"show me the current state of my-project"*. The agent calls `smriti_state(space="my-project")`, the MCP server hits the backend, pipes the result through the same `format_state_brief` formatter the CLI uses, and returns the continuation brief you'd otherwise get from `smriti state` inside an attached repo — directly inside the chat context.
 
 **Notes:**
 - The MCP server talks to the same backend as the CLI. Keep the backend running.
@@ -145,23 +145,23 @@ smriti quickstart [--remove | --reset]                 # seed a demo space + gui
 
 smriti space list
 smriti space create <name> [--description "..."]
-smriti space delete <space> [-y]
+smriti space delete <space> [-y] [--force]              # --force required for non-empty/attached spaces
 
-smriti state <space>                                     # multi-branch continuation brief (full artifacts by default)
-smriti state <space> --preview                           # truncate artifacts to a short preview
-smriti state <space> --main-only                         # legacy single-HEAD path (pre-V4 behaviour)
-smriti state <space> --json                              # structured output
-smriti current <space>                                   # compact Project Current State surface
-smriti current <space> --json                            # structured current-state payload
+smriti state [<space>]                                   # continuation brief + repo-state drift signals
+smriti state [<space>] --preview                         # truncate artifacts to a short preview
+smriti state [<space>] --main-only                       # legacy single-HEAD path (pre-V4 behaviour)
+smriti state [<space>] --json                            # structured output, including repo_state in git repos
+smriti current [<space>]                                 # compact Project Current State surface
+smriti current [<space>] --json                          # structured current-state payload
 
-smriti claim create <space> --agent <name> --scope "..." # declare work intent before starting
-smriti claim create <space> --agent <name> --scope "..." --intent-type review
-smriti claim create <space> --agent <name> --scope "..." --task-id impl-1  # reference a specific task ID
+smriti claim create [<space>] --agent <name> --scope "..." # declare work intent before starting
+smriti claim create [<space>] --agent <name> --scope "..." --intent-type review
+smriti claim create [<space>] --agent <name> --scope "..." --task-id impl-1  # reference a specific task ID
 smriti claim done <claim-id>                             # mark a claim as done
 smriti claim abandon <claim-id>                          # mark a claim as abandoned
-smriti claim list <space>                                # list active claims
+smriti claim list [<space>]                              # list active claims
 
-smriti metrics <space>                                   # project-level KPIs
+smriti metrics [<space>]                                 # project-level KPIs
 
 smriti skills list                                       # list skill pack targets and template version
 smriti skills show <target>                              # print rendered skill pack to stdout
@@ -172,20 +172,20 @@ smriti fork <checkpoint-id> [--branch <name>]            # new session from chec
 smriti restore <checkpoint-id>                           # brief of a specific checkpoint
 smriti compare <checkpoint-a> <checkpoint-b>             # structured diff
 
-smriti worktree open <space> --agent <name>              # open a git worktree for an agent
-smriti worktree list <space>                             # list worktrees with git drift
+smriti worktree open [<space>] --agent <name>            # open a git worktree for an agent
+smriti worktree list [<space>]                           # list worktrees with git drift
 smriti worktree show <id-or-prefix>                      # show one worktree
 smriti worktree close <id-or-prefix>                     # close and remove a worktree
 
-smriti checkpoint create <space>                         # reads JSON from stdin
-smriti checkpoint create <space> --from-json <path>      # from JSON file
-smriti checkpoint create <space> --extract               # reads markdown, LLM extracts schema fields
-smriti checkpoint create <space> --extract --dry-run     # preview the extracted payload without committing
-smriti checkpoint create <space> --session <session-id>  # attach to existing session
-smriti checkpoint create <space> --author-agent claude-code
-smriti checkpoint create <space> --project-root /path    # override cwd auto-capture
+smriti checkpoint create [<space>]                       # reads JSON from stdin
+smriti checkpoint create [<space>] --from-json <path>    # from JSON file
+smriti checkpoint create [<space>] --extract             # reads markdown, LLM extracts schema fields
+smriti checkpoint create [<space>] --extract --dry-run   # preview the extracted payload without committing
+smriti checkpoint create [<space>] --session <session-id> # attach to existing session
+smriti checkpoint create [<space>] --author-agent claude-code
+smriti checkpoint create [<space>] --project-root /path  # override cwd auto-capture
 smriti checkpoint show <checkpoint-id>
-smriti checkpoint list <space>
+smriti checkpoint list [<space>]
 smriti checkpoint review <checkpoint-id>
 smriti checkpoint delete <checkpoint-id> [--cascade] [-y]
 ```
@@ -197,9 +197,10 @@ commands (`state`, `current`, `metrics`, `claim`, `checkpoint`, `branch`,
 `worktree`): run them with no space and the CLI resolves the attached space,
 walking up from the working directory the way git finds `.git`. Pass an
 explicit `<space>` to override. `smriti space delete` always requires an
-explicit space.
+explicit space, and `--force` is required in addition to `-y` for non-empty or
+attached spaces.
 
-`smriti state` shows full artifact content by default — flip to `--preview` for the truncated brief.
+`smriti state` shows full artifact content by default — flip to `--preview` for the truncated brief. When run inside a git repo, it also appends `## Repo state`: branch, HEAD, git root, upstream ahead/behind when known, project-root match, and attention signals for dirty files, untracked files, detached HEAD, or drift from the checkpoint's recorded git state.
 
 `smriti checkpoint create` auto-captures the current working directory as the checkpoint's `project_root` so cross-agent handoffs know where the project actually lives on disk. Pass `--project-root /absolute/path` to override or `--no-project-root` to skip. Tag the checkpoint with an explicit `--author-agent <name>` (like `claude-code` or `codex-local`); without it, the backend falls back to the session's active provider.
 
@@ -207,10 +208,10 @@ explicit space.
 
 ```bash
 # Extract and commit in one step
-cat /tmp/r3_agent_a_output.md | smriti checkpoint create my-project --extract --author-agent codex-A
+cat /tmp/r3_agent_a_output.md | smriti checkpoint create --extract --author-agent codex-A
 
 # Preview what would be extracted, without committing
-cat /tmp/r3_agent_a_output.md | smriti checkpoint create my-project --extract --dry-run
+cat /tmp/r3_agent_a_output.md | smriti checkpoint create --extract --dry-run
 ```
 
 `--extract` reads stdin as freeform markdown, sends it to `POST /api/v5/checkpoint/extract`, and uses the returned fields to build the commit payload. `--dry-run` prints the extracted payload as JSON and exits without creating a checkpoint. `--extract` and `--from-json` are mutually exclusive.
@@ -231,17 +232,17 @@ The pattern is always:
 ### 1. Orient
 
 ```bash
-smriti state my-project
+smriti state
 ```
 
-From an MCP host, the agent calls `smriti_state(space="my-project")`. Either way you get the same markdown brief — objective, summary, decisions, assumptions, tasks, open questions, and full artifact content — rendered into the agent's context. This is the minimum set of facts the next agent needs to continue work.
+Inside an attached repo, the CLI resolves the space from `.smriti.json`. From an MCP host, the agent calls `smriti_state(space="my-project")` because MCP tools still pass the space explicitly. Either way you get the same markdown brief — objective, summary, decisions, assumptions, tasks, open questions, artifact content, and repo-state drift signals when the CLI can inspect git — rendered into the agent's context. This is the minimum set of facts the next agent needs to continue work.
 
-**Multi-branch by default.** If other agents are working on the same project on different branches, `smriti state` appends a concise `## Active branches` section listing up to 5 recent non-main branches (one line per branch, with author attribution), and a `## Divergence signal` section when any active branch disagrees with main on decisions. Both sections are elided cleanly when the project has no fork activity, so single-agent projects see output identical to the pre-V4 format. The divergence signal caps at the top 3 conflicting decisions per side per branch and points at `smriti compare` for the full diff — it stays digestible even on busy projects. Pass `--main-only` (CLI) or `main_only=True` (MCP) to fall back to the legacy single-HEAD view when a script needs the old shape.
+**Multi-branch + repo-state by default.** If other agents are working on the same project on different branches, `smriti state` appends a concise `## Active branches` section listing up to 5 recent non-main branches (one line per branch, with author attribution), and a `## Divergence signal` section when any active branch disagrees with main on decisions. When the CLI is run inside a git repo, it also appends `## Repo state` so the state brief can warn about dirty files, untracked files, detached HEAD, project-root mismatch, upstream ahead/behind, or local git history drifting from the latest checkpoint's recorded git state. These sections are elided cleanly when there is nothing useful to show. Pass `--main-only` (CLI) or `main_only=True` (MCP) to fall back to the legacy single-HEAD view when a script needs the old shape.
 
 For a list of past checkpoints (with full UUIDs so you can feed them back into fork / compare / restore):
 
 ```bash
-smriti checkpoint list my-project
+smriti checkpoint list
 ```
 
 MCP equivalent: `smriti_list_checkpoints(space="my-project")`.
@@ -251,7 +252,7 @@ MCP equivalent: `smriti_list_checkpoints(space="my-project")`.
 In early rounds of dogfood, agents had to hand-write JSON payloads. From V3 onward, the preferred path is freeform markdown through the LLM extractor — pass the same kind of note you'd leave a teammate and Smriti pulls out the structured fields:
 
 ```bash
-cat <<'MD' | smriti checkpoint create my-project --extract --author-agent claude-code
+cat <<'MD' | smriti checkpoint create --extract --author-agent claude-code
 # Decided on Pydantic for the state validation layer
 
 After trying dataclass-based validation and hitting the injection-attack
@@ -270,7 +271,7 @@ MD
 `--extract` posts the markdown to `/api/v5/checkpoint/extract`, gets back the structured fields, and commits. Add `--dry-run` to preview the extraction without writing anything:
 
 ```bash
-cat /tmp/handoff.md | smriti checkpoint create my-project --extract --dry-run
+cat /tmp/handoff.md | smriti checkpoint create --extract --dry-run
 ```
 
 The CLI auto-captures `$(pwd)` as the checkpoint's `project_root` so the next agent knows where the project lives on disk. Override with `--project-root /absolute/path` or skip with `--no-project-root`. Tag the author with `--author-agent claude-code` / `--author-agent codex-local` so space history attributes each checkpoint to the agent that wrote it.
@@ -287,7 +288,7 @@ Surfaces possible contradictions, hidden assumptions, already-resolved open ques
 
 ### 3. Hand off to the next agent
 
-A second agent (different process, different model family, different session) starts fresh. It runs `smriti state my-project` — or calls `smriti_state` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
+A second agent (different process, different model family, different session) starts fresh. It runs `smriti state` inside the attached repo — or calls `smriti_state(space="my-project")` from inside its MCP host — and receives the same brief the first agent just wrote. There is no prose handoff, no pasting markdown between windows, no re-explaining. The agent picks up where the previous one left off and continues working.
 
 This is the core loop. Rounds 3 through 5 of dogfood testing exercised exactly this pattern across Claude Code ↔ Codex handoffs, same-family Codex ↔ Codex handoffs, and a round 5 end-to-end test that drove every MCP tool then defined from a host-less Python client. The shape holds.
 
@@ -300,7 +301,7 @@ Sometimes an agent wants to try a different direction without losing the main li
 smriti fork <C1-checkpoint-id> --branch alternative-design
 
 # Output gives you a new session UUID. Write a checkpoint into it:
-cat alternative.md | smriti checkpoint create my-project \
+cat alternative.md | smriti checkpoint create \
     --extract --session <fork-session-id> --author-agent codex-local
 
 # Compare the two branches
@@ -321,7 +322,7 @@ MCP equivalents: `smriti_fork(checkpoint_id="<C1>", branch="alternative-design")
 If you have been working for more than a few minutes, check whether the project state has moved since you started — before you checkpoint:
 
 ```bash
-smriti state my-project --since <your-base-checkpoint-id> --compact
+smriti state --since <your-base-checkpoint-id> --compact
 ```
 
 Your base checkpoint ID is the HEAD you read at session start. If state is unchanged, proceed. If state has changed, the output lists the new checkpoints so you can decide whether to reconcile, fork, or continue.
