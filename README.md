@@ -234,7 +234,7 @@ backend.
         "hooks": [
           {
             "type": "command",
-            "command": "smriti state my-project --compact 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev-local'"
+            "command": "smriti state --compact 2>/dev/null || echo 'Smriti backend not reachable. Start it with: make dev-local'"
           }
         ]
       }
@@ -243,7 +243,7 @@ backend.
 }
 ```
 
-`smriti init` already writes this hook into `.claude/settings.json`, with the `smriti` path resolved for your machine — the block above is what it generates. With the hook in place, the state brief is injected automatically at session start; the agent doesn't need to remember to call `smriti_state`.
+`smriti init` already writes this hook into `.claude/settings.json`, with the `smriti` path resolved for your machine — the block above is what it generates. The hook is space-agnostic — `smriti state --compact` resolves the space from the repo's `.smriti.json`, so one hook works in every project. With the hook in place, the state brief is injected automatically at session start; the agent doesn't need to remember to call `smriti_state`.
 
 ---
 
