@@ -1,0 +1,56 @@
+# Deploy the website/ landing page to GitHub Pages.
+#
+# One-time manual setup on GitHub (cannot be done from a workflow file):
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+#
+# After that, every push to main that touches website/ (or this workflow
+# itself) auto-publishes. The first deploy can also be kicked off
+# manually from the Actions tab (the workflow_dispatch trigger below).
+# The published URL appears as the environment URL on the workflow run
+# and will be https://<owner>.github.io/<repo>/ by default.
+
+name: Deploy website to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Minimum permissions the official Pages actions need.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One concurrent deploy at a time. Finish in-progress runs rather than
+# canceling them so a deploy already underway isn't truncated.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Static landing page is self-contained under website/.
+          # No build step — pure HTML + CSS, no framework.
+          path: ./website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
