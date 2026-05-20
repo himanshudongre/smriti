@@ -1,198 +1,103 @@
 # Smriti
 
-A shared reasoning-state backend that lets multiple coding agents coordinate on the same project — without an orchestrator.
+**Code has Git. Multi-agent reasoning does not.**
+
+Smriti is version control for project reasoning state — versioned, structured, branchable snapshots of *what was decided*, *what's still open*, and *what each agent is doing right now*. So multiple coding agents can coordinate on the same codebase without overwriting each other's thinking.
+
+When you run multiple coding agents on the same project — Claude Code and Codex, or two Claude Code sessions — they share no state. Each agent starts from scratch, re-discovers decisions already made, and occasionally duplicates work another agent is already doing. The standard workaround is `HANDOFF.md` / `NOTES.md`. That works until reasoning needs to branch, be compared, be restored, or be validated against the actual repo. Smriti gives reasoning state the same primitives Git gives code — plus the coordination primitives Git doesn't have.
 
 ---
 
-## What Smriti does
+## The Git analogy
 
-When you run multiple coding agents on the same project — Claude Code and Codex, or two Claude Code sessions — they have no shared state. Each agent starts from scratch, re-discovers decisions already made, and occasionally duplicates work another agent is already doing. The current workaround is markdown handoff files (`HANDOFF.md`, `NOTES.md`), which break the moment reasoning branches or two agents need to work in parallel.
+Git preserves *code history*: what changed, when, by whom, on which branch. Smriti preserves *project reasoning*: what was decided, what's still open, what each agent is doing right now, and how the recorded state compares to the live repo.
 
-Smriti replaces that with a structured reasoning-state layer. Agents read the current state at session start, declare what they're working on, and checkpoint their thinking at meaningful inflection points. The state is structured — decisions, assumptions, tasks, open questions, artifacts — not prose. It's branchable, comparable, restorable, and visible to every agent working on the project.
+| Code (Git)              | Reasoning state (Smriti)                                                  |
+|-------------------------|---------------------------------------------------------------------------|
+| commit                  | **checkpoint** — structured snapshot of reasoning state                    |
+| branch                  | **fork** from any checkpoint to explore an alternative                     |
+| diff                    | `smriti compare` — structured diff of two checkpoints                      |
+| revert / checkout       | `smriti restore` — return to a clean, isolated checkpoint                  |
+| working-tree drift      | **repo-state drift** — flags when the repo has moved past the checkpoint   |
+| —                       | **active claims** — advisory coordination so agents see each other coming  |
+| —                       | **freshness checks** — "has state moved since my base?" before checkpointing |
+| —                       | **structured tasks + IDs** — collision detection at the task level         |
 
----
-
-## Built with Smriti
-
-The entire coordination substrate was developed with Claude Code and Codex working in parallel on the same codebase, coordinating through Smriti's own state. Current project metrics (`smriti metrics smriti-dev`):
-
-- **117 checkpoints** across **2 agents** (Claude Code: 70, Codex: 47)
-- **61 cross-agent continuations** — checkpoints where a different agent picked up where the previous one left off
-- **77 work claims** at **96% completion** — nearly every declared intent finished
-- **7 milestones** marking proven coordination proofs
-
-The strongest proof: two agents started near-simultaneously, read the same task surface (4 tasks with stable IDs and intent hints), and independently picked different complementary tasks — one chose `[test]`, the other chose `[implement]` — without any human routing. No orchestrator. No task queue. Just structured metadata on the shared state.
+The first five rows extend the Git analogy. The last three are coordination primitives Git doesn't have — because Git is built for one human committing serial code, and Smriti is built for multiple agents writing reasoning state in parallel.
 
 ---
 
-## How it works
+## Why markdown handoffs aren't enough
 
-### Four surfaces on the same core
+Markdown notes (`HANDOFF.md`, `NOTES.md`, etc.) can store free-form context — and for a solo developer working on one model, often that's enough. They start breaking the moment more than one agent needs to coordinate.
 
-1. **A CLI** (`smriti`) — how a coding agent reads and writes reasoning state from a shell tool loop.
-2. **An MCP server** (`smriti-mcp`) — the same surface wrapped as 21 MCP tools for Claude Code, Cursor, and Windsurf.
-3. **An agent skill pack** — a versioned instruction file (`.claude/skills/smriti/SKILL.md` or `AGENTS.md`) that teaches the agent when to checkpoint, when not to, how to detect drift, and how to select complementary work. Install once per project.
-4. **A chat UI** — how a human reads, steers, and debugs the shared state. Dashboard with checkpoint timeline, active claims, milestone markers, and needs-attention signals.
+Markdown can store notes. It cannot reliably provide:
 
-```bash
-smriti state my-project                                    # what every agent reads first
-smriti metrics my-project                                  # project-level coordination KPIs
-cat notes.md | smriti checkpoint create my-project --extract  # structured checkpoint from freeform markdown
-smriti claim create my-project --agent claude-code \
-    --scope "Add freshness endpoint" --task-id impl-1      # declare intent with task reference
-smriti compare <id-a> <id-b>                               # structured diff of two checkpoints
-```
+- **Active claims** — who is working on what right now, with a TTL
+- **Freshness checks** — has the state moved since my base, before I checkpoint?
+- **Task IDs tied to claims** — collision detection at the task level when agents pick up work
+- **Repo-state drift detection** — recorded state vs the live repo, with N-commits-ahead / branch-mismatch surfacing
+- **Branchable, comparable, restorable reasoning** — `smriti fork`, `smriti compare`, `smriti restore`
+- **A current-state surface** — one well-defined brief multiple agents read at session start
 
-### Coordination primitives
-
-One project, one Smriti Space, multiple agents. Each reads the state, declares intent, does work, and checkpoints. The following primitives make this reliable:
-
-- **Structured checkpoints** — decisions, assumptions, tasks, open questions, artifacts. Not prose summaries. Structured fields that agents can read and act on.
-- **Work claims** — agents declare intent before starting. Claims are advisory (not locks), expire after a TTL, and carry an `intent_type` (implement, review, test, docs, investigate). Other agents see active claims and avoid collision.
-- **Structured tasks with intent hints** — checkpoint tasks carry optional `intent_hint`, `blocked_by`, `status` (open/done), and stable `id` slugs. Agents self-select complementary work from the task list.
-- **Task-referenced claims** — claims can reference a specific task ID (`--task-id impl-1`), enabling precise collision detection when agents start near-simultaneously.
-- **Freshness checks** (`--since`) — agents detect whether the state has moved since their base before checkpointing.
-- **Repo-state drift detection** — `smriti state` compares the working git repo against the HEAD and branch the latest checkpoint recorded, flagging when the repo has moved on (commits ahead of the checkpoint, a different branch, a dirty tree). The reasoning state stops being "trust me" — it tells you when it may be stale.
-- **Branch disposition** — branches are explicitly marked `integrated`, `abandoned`, or `active` so the state brief stays clean.
-- **Checkpoint notes** — additive annotations (note, milestone, noise) on existing checkpoints without modifying the immutable reasoning state.
-- **Backend capabilities** (`/health`) — the backend advertises its feature surface so agents can detect stale backends. `smriti doctor` diagnoses backend reachability and runtime/code mismatches.
-- **Compact mode** (`--compact`) — artifact content omitted for token efficiency; labels and recovery instructions preserved.
-- **Project metrics** (`smriti metrics <space>`) — coordination, state quality, and branch lifecycle KPIs computed on demand from existing data.
-- **Project Current State** (`smriti current <space>`) — a compact, packaged snapshot of where a project is right now: current direction, counts, attention signals, active work, recent milestones, open tasks by intent, and recent activity. Founder- and agent-facing; also rendered as a panel in the chat UI.
-- **Worktrees** (`smriti worktree open/list/show/close`) — first-class git worktree primitive so multiple agents can work on the same project without sharing one checkout. Each agent gets its own working tree and staging index, eliminating the cross-agent commit pollution failure mode that motivated the feature. Claims can be bound to a worktree (`smriti claim create --worktree <id>`); the state brief surfaces per-claim working-tree drift (branch, dirty count, ahead/behind vs origin/main, last commit) so agents can see what other agents are editing without asking. The skill pack teaches the reflex.
-- **Destructive-action guards** — deleting a Space that still holds checkpoints requires an explicit `--force` (CLI), an echo-back `confirm_space` argument (MCP tool), or `force=true` (API). Real reasoning state cannot be wiped by a single careless flag.
-
----
-
-## What Smriti is not
-
-- **Not an orchestrator.** Smriti describes state. It does not assign tasks, schedule work, or route agents. Agents make their own decisions from shared metadata.
-- **Not a task manager.** Tasks live inside checkpoints as structured fields. There is no separate task table, no Jira-like lifecycle, no assignment system.
-- **Not a memory database.** Smriti stores structured reasoning snapshots at inflection points, not a running log of everything an agent said or saw.
-- **Not production infrastructure (yet).** Single demo user, no auth, no multi-tenancy. Works for solo builders running multi-agent workflows.
+The fundamental difference: markdown is *prose*. Smriti is *structured, versioned, queryable state*. Markdown describes what you were thinking; Smriti lets the next session pick up where you left off — without re-reading prose, without two agents redoing the same work, without lying about the repo.
 
 ---
 
 ## Getting started
 
-You will need: Python 3.11+ and Node 20.19+ or Node 22.12+. Docker is
-only needed for Postgres/shared-team mode.
+The core coordination loop runs entirely on a local SQLite file — **no Docker, no API keys, no cloud required.** API keys come in only for the optional LLM-assisted features (more below).
 
-### 1. Clone and set up for solo/local mode
+You'll need Python 3.11+ and Node 20.19+ / 22.12+.
+
+### 1. Install (local-first)
 
 ```bash
 git clone https://github.com/himanshudongre/smriti
 cd smriti
-
-cp .env.example .env
-# Edit .env to add your API keys (OpenAI, Anthropic, or both).
-# Leave keys commented out to use mock mode (no real LLM calls).
-#
-# Using Ollama or another local model? Set these instead:
-#   SMRITI_GENERIC_API_URL=http://localhost:11434/v1
-#   SMRITI_GENERIC_MODEL=llama3.1:8b
-# See .env.example for details.
-
-make setup-local                 # backend venv + CLI + frontend, no Docker
-```
-
-Local mode uses SQLite at `~/.smriti/smriti.db` by default. Override it
-with `SMRITI_LOCAL_DB_PATH=/path/to/smriti.db` if you want the database
-somewhere else.
-
-`make setup-local` installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries are installed into the backend venv at `backend/.venv/bin/`. To use them from your shell:
-
-```bash
+make setup-local              # backend venv + CLI + frontend, no Docker
+make dev-local                # backend on http://localhost:8000 (keep running)
 source backend/.venv/bin/activate
 ```
 
-### 2. Start the backend and frontend
+`make setup-local` creates a `.env` from the example, installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries live in `backend/.venv/bin/` — `source backend/.venv/bin/activate` puts them on your PATH.
+
+Local mode stores state in SQLite at `~/.smriti/smriti.db`. For a shared/team setup with Postgres, see [Shared / team mode](#shared--team-mode-postgres) below.
+
+For the chat UI, run `make dev-frontend` in a separate terminal and open http://localhost:5173.
+
+### 2. Confirm install — `smriti doctor`
 
 ```bash
-make dev-local        # backend on http://localhost:8000 (keep running)
-make dev-frontend     # frontend on http://localhost:5173 (separate terminal)
+smriti doctor
 ```
 
-**For the chat UI only, you're done.** Open http://localhost:5173.
+Backend reachable, CLI/backend versions aligned, provider status. If anything's off, doctor tells you what.
 
-### Shared/team mode with Postgres
-
-Postgres remains the stronger shared/team mode. Use it when you want an
-explicit database service, Docker-backed state, or a closer path toward a
-hosted deployment.
+### 3. See Smriti at work — `smriti quickstart`
 
 ```bash
-cp .env.example .env
-# In .env, set:
-#   SMRITI_DB_MODE=postgres
-#   DATABASE_URL=postgresql://smriti:smriti@localhost:5432/smriti
-
-make setup-postgres              # starts Docker Postgres and runs migrations
-make dev-postgres                # backend on http://localhost:8000
-make dev-frontend                # frontend on http://localhost:5173
+smriti quickstart
 ```
 
-If `DATABASE_URL` is explicitly set to a Postgres URL, Smriti preserves
-Postgres behavior.
+Seeds a `smriti-demo` Space — one finished mini-project (a rate-limiting feature built by two agents, with a branch explored and dropped) — and prints a ~3-minute guided walkthrough. Works without API keys (mock-mode extraction). Clean up with `smriti quickstart --remove`.
 
-### 3. See Smriti work — do this first
+### 4. Attach your own project — `smriti init`
 
-Before connecting your own project, watch Smriti work on a project that
-already has reasoning state in it. This is the fastest way to understand what
-it is for — and it keeps you from opening to an empty space.
-
-In a new terminal:
+`cd` into the project you want to attach. `smriti init` writes project-local files (skill packs, SessionStart hook, attachment record) into the current directory, so it attaches whichever project you're standing in — running it in the wrong directory attaches the wrong project.
 
 ```bash
-source backend/.venv/bin/activate
-
-smriti doctor                  # confirm the backend and CLI are healthy
-smriti quickstart              # seed a demo space, then print a guided walkthrough
-```
-
-`smriti quickstart` seeds `smriti-demo` — one small, finished project (a
-rate-limiting feature built by two agents, with a branch explored and then
-dropped) — and prints a short, guided ~3-minute walkthrough of it. It shows
-the real shape of a Smriti project instead of an empty space, and it works in
-mock mode with no API key. Clean it up afterward with `smriti quickstart --remove`.
-
-### 4. Connect your own project (coding agents)
-
-Now point Smriti at a real project. In the same terminal where you activated
-the venv (step 3):
-
-```bash
-cd /path/to/your-project       # your own project — NOT the Smriti repo
+cd /path/to/your-project       # your own project, not the Smriti repo
 smriti init my-project
 ```
 
-Run `smriti init` from **inside your own project's directory**. It writes the
-skill pack and the `SessionStart` hook into the current directory, so running
-it from the Smriti repo would wire up Smriti's own repo by mistake. It creates
-the space, installs the Claude Code and Codex skill packs, configures the
-SessionStart hook, and prints the exact next steps to follow.
+`smriti init`:
+- creates a Space named `my-project`
+- installs the Claude Code and Codex skill packs into the project
+- writes the SessionStart hook for Claude Code
+- writes `.smriti.json` at the repo root, binding this repo to the Space
 
-It also **attaches** the repo to that space — a small `.smriti.json` file at
-the repo root. From then on, `smriti` commands run inside the repo resolve the
-space automatically: `smriti state`, `smriti current`, `smriti claim …` need no
-space argument, and a Claude or Codex session opened anywhere in the repo
-connects to the right space on its own. Use `smriti attach <space>` to attach a
-repo (or re-point one) without the full `init`.
-
-Once attached, the everyday commands need no `<space>` argument — run them from
-anywhere inside the repo:
-
-```bash
-smriti state                   # the continuation brief — read first each session
-smriti current                 # compact snapshot: direction, attention, open work
-smriti metrics                 # project coordination KPIs
-```
-
-**MCP config** (Claude Code, Cursor, Windsurf). `smriti init` prints a
-ready-to-paste MCP config block with the executable path and API URL already
-resolved for your machine — use what it prints. If you configure MCP manually
-instead, activate the Smriti venv first and use the absolute path from
-`which smriti-mcp` so the host does not pick up a stale executable. The shape:
+The MCP config block `smriti init` prints is ready to paste into Claude Code, Cursor, or Windsurf. The shape:
 
 ```json
 {
@@ -205,25 +110,23 @@ instead, activate the Smriti venv first and use the absolute path from
 }
 ```
 
-Use the resolved path from `smriti init` rather than a bare `"smriti-mcp"` — a
-bare command name only works if `smriti-mcp` is on the MCP host's PATH, which
-it usually is not for a venv install.
+Use the resolved path from `smriti init` rather than a bare `"smriti-mcp"` — a bare command name only works if it's on the MCP host's PATH, which a venv install usually isn't.
 
-**Skill pack** (teaches the agent when and why to use Smriti). `smriti init`
-already installs both — run these only to reinstall or upgrade:
+Use `smriti attach <space>` to bind (or re-bind) a repo to an existing Space without the full `init`.
+
+### 5. Daily workflow — no `<space>` needed
+
+Inside an attached repo, the everyday commands resolve the Space from `.smriti.json`:
 
 ```bash
-smriti skills install claude-code     # → .claude/skills/smriti/SKILL.md
-smriti skills install codex           # → AGENTS.md (commit it)
+smriti state                   # continuation brief — read first each session
+smriti current                 # compact snapshot: direction, attention, open work
+smriti metrics                 # project coordination KPIs
 ```
 
-**Runtime model.** In solo/local mode, Smriti stores state in a SQLite
-file and the backend runs locally via `make dev-local`. In shared/team
-mode, Postgres runs in Docker and the backend runs via `make dev-postgres`.
-Agents are clients of `http://localhost:8000` — they do not manage the
-backend.
+The SessionStart hook `smriti init` wrote will inject `smriti state --compact` at the start of each Claude Code session. The hook is space-agnostic — one hook works in every attached project.
 
-### 5. Auto-inject state at session start (Claude Code)
+The exact hook block (what `smriti init` writes into `.claude/settings.json`):
 
 ```json
 {
@@ -243,23 +146,92 @@ backend.
 }
 ```
 
-`smriti init` already writes this hook into `.claude/settings.json`, with the `smriti` path resolved for your machine — the block above is what it generates. The hook is space-agnostic — `smriti state --compact` resolves the space from the repo's `.smriti.json`, so one hook works in every project. With the hook in place, the state brief is injected automatically at session start; the agent doesn't need to remember to call `smriti_state`.
+### Shared / team mode (Postgres)
+
+Postgres remains the stronger shared/team backend — an explicit database service, Docker-backed state, and the closer path toward a hosted deployment.
+
+```bash
+cp -n .env.example .env
+# In .env, set:
+#   SMRITI_DB_MODE=postgres
+#   DATABASE_URL=postgresql://smriti:smriti@localhost:5432/smriti
+
+make setup-postgres              # starts Docker Postgres and runs migrations
+make dev-postgres                # backend on http://localhost:8000
+make dev-frontend                # frontend on http://localhost:5173
+```
 
 ---
 
-## The single-user story
+## What you get
 
-Smriti started here. Before multi-agent coordination, the problem was simpler: you spend 30 minutes figuring something out, reach a clean decision, and then switch models, come back later, or try a different approach — and you have to reconstruct everything from scratch.
+The primitives that turn "shared state" from a phrase into something that actually works for multiple agents:
 
-That's still a real problem, and Smriti still solves it:
+- **Versioned reasoning.** Every checkpoint is a structured snapshot — objective, decisions, assumptions, tasks (with intent hints and IDs), open questions, entities, artifacts. Fork from any checkpoint to explore an alternative; `smriti compare` for a structured diff; `smriti restore` to return to a clean state. Pre-restore turns are excluded from context at the data layer, not just hidden.
+- **Active work claims.** Agents declare intent before starting. Claims are advisory (not locks), time-bounded, and visible to every other agent via the state brief. Two agents see each other coming.
+- **Structured tasks + IDs.** Checkpoint tasks carry optional `intent_hint`, `blocked_by`, `status` (open/done), and stable `id` slugs. Agents pick complementary work from the task list; claims can reference a specific task ID (`--task-id impl-1`) for precise collision detection when two agents start near-simultaneously.
+- **Freshness checks** (`--since`). "Has the state moved since my base?" — checked before checkpointing, so an agent never writes on top of stale assumptions.
+- **Repo-state drift detection.** `smriti state` compares the working git repo against the HEAD and branch the latest checkpoint recorded, surfacing dirty trees, detached HEAD, project-root mismatch, and N-commits-ahead-of-the-checkpoint signals. The reasoning state stops being "trust me" — it tells you when it may be stale.
+- **Project Current State** (`smriti current`). A compact, packaged snapshot of where a project is right now: current direction, attention signals, active work, open tasks by intent, recent milestones, recent activity. Founder- and agent-facing.
+- **Worktrees.** First-class git worktree primitive so multiple agents work on the same project without sharing one checkout. Each agent gets its own working tree; claims can bind to a worktree, and the state brief surfaces per-claim drift (branch, dirty count, ahead/behind vs `origin/main`).
+- **Backend capability manifest + `smriti doctor`.** `/health` advertises the backend's feature surface so agents can detect a stale backend running old code; `smriti doctor` diagnoses backend reachability, runtime/code mismatches, and provider status.
+- **Destructive-action guards.** Deleting a Space that still holds checkpoints requires an explicit `--force` (CLI), an echo-back `confirm_space` argument (MCP), or `force=true` (API). Real reasoning state cannot be wiped by one careless flag.
 
-- **Restore to a clean state** — when a conversation drifts or gets polluted with bad context, restore to an earlier checkpoint. Pre-restore turns are excluded from context at the data layer.
-- **Branch your thinking** — fork from any checkpoint to explore a different direction. The original path stays untouched.
-- **Compare where reasoning diverged** — structured diff of any two checkpoints showing exactly which decisions differ.
-- **Review checkpoint consistency** — surface contradictions, hidden assumptions, resolved questions.
-- **Switch models without losing state** — Smriti owns the state. The model is a rendering engine.
+---
 
-The multi-agent coordination layer grew from this foundation. Agents have the same drift and recovery problems as humans, but worse — they can't ask clarifying questions about stale context, and two of them can silently overwrite each other's work.
+## Four surfaces, one core
+
+1. **CLI** (`smriti`) — how a coding agent reads and writes reasoning state from a shell tool loop.
+2. **MCP server** (`smriti-mcp`) — the same surface as 21 MCP tools for Claude Code, Cursor, Windsurf.
+3. **Agent skill pack** — versioned instructions teaching agents *when* to checkpoint (and critically *when not to*), when to fork, how to detect drift, and how to pick complementary work. Install once per project.
+4. **Chat UI** — how a human reads, steers, and debugs shared state.
+
+---
+
+## What Smriti is not
+
+- **Not an orchestrator.** Smriti describes state. It does not assign tasks, schedule work, or route agents. Agents make their own decisions from shared metadata.
+- **Not a task manager.** Tasks live inside checkpoints as structured fields. No separate task table, no Jira-like lifecycle, no assignment system.
+- **Not a memory database.** Smriti stores structured reasoning snapshots at inflection points, not a running log of everything an agent said or saw.
+- **Not markdown.** `HANDOFF.md` / `NOTES.md` handoffs work until you need claims, freshness, branching, drift detection, or coordination at all.
+- **Not production infrastructure (yet).** Single demo user, no auth, no multi-tenancy. Works for solo builders running multi-agent workflows.
+
+---
+
+## API keys (optional)
+
+**The core coordination loop runs without API keys.** Setup, `smriti doctor`, `smriti quickstart`, `smriti state` / `current` / `metrics`, claims, attachments, repo-state drift detection, hand-written checkpoints, and the chat UI's read-only dashboards (timeline, checkpoints, claims, drift signals) all work with no key.
+
+API keys are only needed for the LLM-assisted features:
+
+- `smriti checkpoint create --extract` — extract structured fields from freeform markdown
+- Checkpoint draft and consistency review (`smriti checkpoint review`)
+- The chat UI's send loop — where the agent actually responds to your messages
+
+Smriti supports OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible provider (Ollama, LM Studio, vLLM) via the generic provider slot. Set keys in `.env` when you want those features for real:
+
+```
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+OPENROUTER_API_KEY=...
+SMRITI_GENERIC_API_URL=http://localhost:11434/v1   # for Ollama / LM Studio / vLLM
+SMRITI_GENERIC_MODEL=llama3.1:8b
+```
+
+Without a key set, the LLM-assisted paths return deterministic placeholder content so the mechanics still work — handy for trying the coordination loop end-to-end. Add a key when you want real extraction.
+
+---
+
+## Built with Smriti
+
+The coordination substrate was built using Claude Code and Codex working in parallel on the same codebase, coordinating through Smriti's own state. `smriti metrics smriti-dev`:
+
+- **117 checkpoints** across **2 agents** (Claude Code: 70, Codex: 47)
+- **61 cross-agent continuations** — checkpoints where a different agent picked up where the previous one left off
+- **77 work claims** at **96% completion** — nearly every declared intent finished
+- **7 milestones** marking proven coordination proofs
+
+The strongest proof: two agents started near-simultaneously, read the same task surface (4 tasks with stable IDs and intent hints), and independently picked different complementary tasks — one chose `[test]`, the other chose `[implement]` — without any human routing. No orchestrator. No task queue. Just structured metadata on shared state.
 
 ---
 
@@ -287,32 +259,19 @@ The multi-agent coordination layer grew from this foundation. Agents have the sa
 
 ## Core concepts
 
-### Space
-
-A container for a line of work. Holds checkpoints and sessions. One project, one Space.
-
-### Checkpoint
-
-A structured snapshot of reasoning state: title, objective, summary, decisions, assumptions, tasks (with intent hints and IDs), open questions, entities, artifacts. Created manually at inflection points — not after every small step.
-
-### Session
-
-A live conversation runtime inside a Space. Can be forked from any checkpoint.
-
-### Claim
-
-A lightweight, time-bounded declaration that an agent is working on something. Advisory, not a lock. Carries `intent_type` and optional `task_id`.
-
----
+- **Space** — a container for a line of work. Holds checkpoints and sessions. One project, one Space.
+- **Checkpoint** — a structured snapshot of reasoning state (title, objective, summary, decisions, assumptions, tasks with intent hints and IDs, open questions, entities, artifacts). Created at inflection points — not after every small step.
+- **Session** — a live conversation runtime inside a Space. Can be forked from any checkpoint.
+- **Claim** — a lightweight, time-bounded declaration that an agent is working on something. Advisory, not a lock. Carries `intent_type` and optional `task_id`.
 
 ## Context modes
 
 - **FRESH** — blank state, no context
 - **HEAD** — latest checkpoint + recent turns
-- **RESTORED** — specific checkpoint restored, pre-restore turns excluded at the data layer
+- **RESTORED** — specific checkpoint restored; pre-restore turns excluded at the data layer
 - **FORKED** — checkpoint base + separate branch
 
-Restored mode is where isolation works. Earlier conversation is not hidden or summarized — it is excluded.
+Restored mode is where isolation actually works. Earlier conversation is not hidden or summarized — it is excluded.
 
 ---
 
@@ -325,32 +284,11 @@ Restored mode is where isolation works. Earlier conversation is not hidden or su
 
 ---
 
-## Provider setup
-
-Smriti supports OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible provider (Ollama, LM Studio, vLLM) via the generic provider slot.
-
-Set API keys in `.env`:
-
-```
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-OPENROUTER_API_KEY=...
-```
-
-**Mock mode.** With no API keys set, Smriti runs in mock mode. Setup, the chat
-UI, the CLI, `smriti quickstart`, and the whole coordination flow work
-normally — but the LLM-backed paths (`smriti checkpoint create --extract`,
-checkpoint draft, and review) return deterministic placeholder content instead
-of real extraction. Mock mode is good for trying the mechanics; add an API key
-when you want real structured checkpoints pulled from freeform notes.
-
 ## Tech stack
 
 FastAPI · SQLAlchemy · PostgreSQL / SQLite · React + TypeScript + Vite
 
----
-
-## Docker
+## Docker (Postgres mode helpers)
 
 ```bash
 make up       # start all services
@@ -358,12 +296,6 @@ make logs     # follow logs
 make down     # stop all services
 ```
 
----
-
 ## Try the demo
 
-The fastest way to see Smriti work is `smriti quickstart` — it seeds a demo
-space and prints a guided walkthrough (see Getting started, step 3).
-
-For a deeper single-user walkthrough, `demos/branching-reasoning-demo/` covers
-the checkpoint / fork / compare workflow step by step.
+The fastest way to see Smriti work is `smriti quickstart` (Getting started, step 3). For a deeper single-user walkthrough — checkpoint / fork / compare — see `demos/branching-reasoning-demo/`.
