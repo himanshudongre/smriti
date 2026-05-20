@@ -4,216 +4,544 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smriti — Version control for project reasoning state</title>
-  <meta name="description" content="Code has Git. Multi-agent reasoning does not. Smriti is version control for project reasoning state, so multiple coding agents can coordinate on the same codebase without overwriting each other's thinking.">
-  <meta name="theme-color" content="#0c0c10">
+  <meta name="description" content="Code has Git. Multi-agent reasoning does not. Smriti is version control for project reasoning state — versioned, structured, branchable snapshots so multiple coding agents can coordinate on the same codebase without overwriting each other's thinking.">
+  <meta name="theme-color" content="#0a0a0e">
   <meta property="og:title" content="Smriti — Version control for project reasoning state">
-  <meta property="og:description" content="Code has Git. Multi-agent reasoning does not. Smriti is version control for project reasoning state, so multiple coding agents can coordinate on the same codebase.">
+  <meta property="og:description" content="Code has Git. Multi-agent reasoning does not. Smriti is version control for project reasoning state — so multiple coding agents can coordinate on the same codebase without overwriting each other's thinking.">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <!-- ═══════════════════════════ Header ═══════════════════════════ -->
   <header class="site-header">
     <div class="container header-row">
-      <a class="brand" href="/">Smriti</a>
+      <a class="brand" href="/" aria-label="Smriti">
+        <svg class="brand-mark" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+          <circle cx="6"  cy="6"  r="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="16" cy="6"  r="2.5" stroke="currentColor" stroke-width="1.5" fill="currentColor"/>
+          <circle cx="6"  cy="16" r="2.5" stroke="currentColor" stroke-width="1.5" fill="currentColor"/>
+          <circle cx="16" cy="16" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="6"  y1="6"  x2="16" y2="6"  stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.5"/>
+          <line x1="6"  y1="16" x2="16" y2="16" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.5"/>
+          <line x1="6"  y1="6"  x2="6"  y2="16" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.5"/>
+          <line x1="16" y1="6"  x2="16" y2="16" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.5"/>
+        </svg>
+        <span>Smriti</span>
+      </a>
       <nav>
+        <a href="#how">How it works</a>
+        <a href="#coordination">Coordination</a>
         <a href="#try">Try it</a>
-        <a href="https://github.com/himanshudongre/smriti">GitHub</a>
+        <a class="nav-cta" href="https://github.com/himanshudongre/smriti">GitHub</a>
       </nav>
     </div>
   </header>
 
   <main>
 
-    <!-- ───── Hero ───── -->
+    <!-- ═══════════════════════════ Hero ═══════════════════════════ -->
     <section class="hero">
-      <div class="container">
-        <h1>Code has Git.<br><span class="hero-em">Multi-agent reasoning does not.</span></h1>
-        <p class="hero-sub">Smriti is version control for project reasoning state — versioned, structured, branchable snapshots of <em>what was decided</em>, <em>what's still open</em>, and <em>what each agent is doing right now</em>. So multiple coding agents can coordinate on the same codebase without overwriting each other's thinking.</p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" href="#try">Try it in 5 minutes</a>
-          <a class="btn btn-secondary" href="https://github.com/himanshudongre/smriti">View on GitHub</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ───── Problem ───── -->
-    <section class="section problem">
-      <div class="container">
-        <h2>The problem</h2>
-        <p class="lede">Run Claude Code and Codex on the same project — or two Claude Code sessions — and they share no state. Each agent starts from scratch, re-discovers decisions already made, and occasionally duplicates work another agent is already doing.</p>
-        <p>The standard workaround is <code>HANDOFF.md</code> / <code>NOTES.md</code>. That works until reasoning needs to branch, be compared, be restored, or be validated against the actual repo. Markdown is prose; it stops working the moment more than one agent needs to coordinate.</p>
-      </div>
-    </section>
-
-    <!-- ───── The Git analogy ───── -->
-    <section class="section analogy">
-      <div class="container">
-        <h2>The Git analogy</h2>
-        <p>Git preserves <em>code history</em>: what changed, when, by whom, on which branch. Smriti preserves <em>project reasoning</em>: what was decided, what's still open, what each agent is doing right now, and how the recorded state compares to the live repo.</p>
-        <div class="analogy-table">
-          <table>
-            <thead>
-              <tr><th>Code (Git)</th><th>Reasoning state (Smriti)</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>commit</td><td><strong>checkpoint</strong> — structured snapshot of reasoning state</td></tr>
-              <tr><td>branch</td><td><strong>fork</strong> from any checkpoint to explore an alternative</td></tr>
-              <tr><td>diff</td><td><code>smriti compare</code> — structured diff of two checkpoints</td></tr>
-              <tr><td>revert / checkout</td><td><code>smriti restore</code> — return to a clean checkpoint</td></tr>
-              <tr><td>working-tree drift</td><td><strong>repo-state drift</strong> — flags when the repo has moved past the checkpoint</td></tr>
-              <tr><td>—</td><td><strong>active claims</strong> — advisory coordination so agents see each other coming</td></tr>
-              <tr><td>—</td><td><strong>freshness checks</strong> — "has state moved since my base?" before checkpointing</td></tr>
-              <tr><td>—</td><td><strong>structured tasks + IDs</strong> — collision detection at the task level</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="caption">The first five rows extend the Git analogy. The last three are coordination primitives Git doesn't have — because Git is built for one human committing serial code, and Smriti is built for multiple agents writing reasoning state in parallel.</p>
-      </div>
-    </section>
-
-    <!-- ───── How it works ───── -->
-    <section class="section how">
-      <div class="container">
-        <h2>How it works</h2>
-        <ol class="how-steps">
-          <li>
-            <h3>1. Attach the repo</h3>
-            <p><code>smriti init my-project</code> creates a Space, installs the Claude Code and Codex skill packs into the project directory, writes the SessionStart hook, and drops a <code>.smriti.json</code> at the repo root. Per-project — attach once, multiple repos isolate cleanly.</p>
-          </li>
-          <li>
-            <h3>2. Agents read state first</h3>
-            <p>At session start, the agent reads the current state brief — objective, decisions, assumptions, tasks, open questions, artifacts — plus the <code>## Repo state</code> section comparing the working repo to the HEAD and branch the last checkpoint recorded.</p>
-          </li>
-          <li>
-            <h3>3. Declare claims before working</h3>
-            <p>The agent calls <code>smriti claim</code> with a scope before starting work. Claims are advisory, time-bounded, and visible in every other agent's state brief. Two agents see each other coming.</p>
-          </li>
-          <li>
-            <h3>4. Checkpoint at inflection points</h3>
-            <p>At a real decision or handoff the agent writes a structured checkpoint. The next session — same agent or a different one — reads it as if it had been there for the work.</p>
-          </li>
-        </ol>
-        <p>Inside an attached repo, the everyday commands resolve the Space automatically — no <code>&lt;space&gt;</code> argument needed:</p>
-<pre><code>smriti state                   # continuation brief — read first each session
-smriti current                 # compact snapshot: direction, attention, open work
-smriti metrics                 # project coordination KPIs</code></pre>
-      </div>
-    </section>
-
-    <!-- ───── What Smriti is not ───── -->
-    <section class="section not">
-      <div class="container">
-        <h2>What Smriti is not</h2>
-        <div class="not-grid">
-          <div class="not-item">
-            <h3>Not markdown</h3>
-            <p><code>HANDOFF.md</code> / <code>NOTES.md</code> work until you need claims, freshness, branching, drift detection, or coordination at all.</p>
+      <div class="container hero-grid">
+        <div>
+          <h1>Code has Git.<span class="hero-em">Multi-agent reasoning does not.</span></h1>
+          <p class="hero-sub">Smriti is version control for project reasoning state. Versioned, structured, branchable snapshots of <strong>what was decided</strong>, <strong>what's still open</strong>, and <strong>what each agent is doing right now</strong> — so multiple coding agents coordinate on the same codebase without overwriting each other's thinking.</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#coordination">See how it works</a>
+            <a class="btn btn-secondary" href="https://github.com/himanshudongre/smriti">View on GitHub →</a>
           </div>
-          <div class="not-item">
-            <h3>Not memory</h3>
-            <p>Smriti stores <em>structured snapshots at inflection points</em>, not a running log of everything an agent said or saw. State is queryable, not narrative.</p>
-          </div>
-          <div class="not-item">
-            <h3>Not an orchestrator</h3>
-            <p>Smriti describes state. It does not assign tasks, schedule work, or route agents. Agents make their own decisions from shared metadata.</p>
+          <div class="hero-meta">
+            <span><span class="dot"></span> Local-first · no API keys required</span>
+            <span>Open source · MIT</span>
           </div>
         </div>
-        <h3 class="subhead">What markdown can't reliably provide</h3>
-        <ul class="constraints">
-          <li><strong>Active claims</strong> — who is working on what right now, with a TTL</li>
-          <li><strong>Freshness checks</strong> — has the state moved since my base before I checkpoint?</li>
-          <li><strong>Task IDs tied to claims</strong> — collision detection at the task level</li>
-          <li><strong>Repo-state drift detection</strong> — recorded state vs the live repo, with N-commits-ahead / branch-mismatch surfacing</li>
-          <li><strong>Branchable, comparable, restorable reasoning</strong> — <code>smriti fork</code>, <code>smriti compare</code>, <code>smriti restore</code></li>
-          <li><strong>A current-state surface</strong> — one well-defined brief multiple agents read at session start</li>
-        </ul>
-      </div>
-    </section>
 
-    <!-- ───── Built with Smriti ───── -->
-    <section class="section proof">
-      <div class="container">
-        <h2>Built with Smriti</h2>
-        <p>The coordination substrate was built with Claude Code and Codex working in parallel on the same codebase, coordinating through Smriti's own state. <code>smriti metrics smriti-dev</code>:</p>
-        <div class="metrics">
-          <div class="metric"><span class="metric-value">117</span><span class="metric-label">checkpoints</span></div>
-          <div class="metric"><span class="metric-value">70 / 47</span><span class="metric-label">Claude Code / Codex</span></div>
-          <div class="metric"><span class="metric-value">61</span><span class="metric-label">cross-agent continuations</span></div>
-          <div class="metric"><span class="metric-value">77</span><span class="metric-label">claims, 96% completion</span></div>
-          <div class="metric"><span class="metric-value">7</span><span class="metric-label">milestones</span></div>
+        <!-- Ambient hero diagram: two agent timelines crossing through shared checkpoints -->
+        <div class="hero-diagram" aria-hidden="true">
+          <svg viewBox="0 0 880 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Two agent timelines threaded through shared checkpoints">
+            <!-- Lane labels -->
+            <text class="lane-label" x="0" y="59">claude-code</text>
+            <text class="lane-label" x="0" y="129">codex</text>
+
+            <!-- Dashed lane lines -->
+            <line class="lane-line" x1="120" y1="55"  x2="860" y2="55"/>
+            <line class="lane-line" x1="120" y1="125" x2="860" y2="125"/>
+
+            <!-- Vertical threads on shared checkpoints -->
+            <line class="lane-line" x1="340" y1="55" x2="340" y2="125" stroke-dasharray="2 3"/>
+            <line class="lane-line" x1="620" y1="55" x2="620" y2="125" stroke-dasharray="2 3"/>
+
+            <!-- Agent paths through nodes -->
+            <path class="agent-line claude" d="M 200 55 L 340 55 L 620 55 L 760 55"/>
+            <path class="agent-line codex"  d="M 340 125 L 480 125 L 620 125"/>
+
+            <!-- Nodes -->
+            <!-- n1 claude only -->
+            <circle class="checkpoint" cx="200" cy="55" r="6"/>
+            <!-- n2 shared -->
+            <circle class="checkpoint shared" cx="340" cy="55"  r="6"/>
+            <circle class="checkpoint shared" cx="340" cy="125" r="6"/>
+            <!-- n3 codex only -->
+            <circle class="checkpoint" cx="480" cy="125" r="6" stroke="#8ba0c7"/>
+            <!-- n4 shared (pulses) -->
+            <circle class="pulse" cx="620" cy="55" r="6"/>
+            <circle class="checkpoint shared" cx="620" cy="55"  r="6"/>
+            <circle class="checkpoint shared" cx="620" cy="125" r="6"/>
+            <!-- n5 claude only -->
+            <circle class="checkpoint" cx="760" cy="55" r="6"/>
+          </svg>
         </div>
-        <p class="proof-text">The strongest proof: two agents started near-simultaneously, read the same task surface (four tasks with stable IDs and intent hints), and independently picked different complementary tasks — one chose <code>[test]</code>, the other chose <code>[implement]</code> — without any human routing. No orchestrator. No task queue. Just structured metadata on shared state.</p>
       </div>
     </section>
 
-    <!-- ───── Screenshots ───── -->
-    <section class="section screenshots">
+    <!-- ═══════════════ The missing primitive (Git ↔ Smriti) ═══════════════ -->
+    <section class="section reveal">
       <div class="container">
-        <h2>What it looks like</h2>
-        <figure>
-          <img src="assets/lineage-dashboard.png" alt="Smriti dashboard — project timeline with checkpoint cards, author badges, and attention signals">
-          <figcaption>Project timeline — checkpoint cards with author attribution, note indicators, and needs-attention signals.</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/cli-state-and-metrics.png" alt="Smriti CLI — output of smriti state --compact and smriti metrics">
-          <figcaption>What every agent reads at session start (<code>smriti state --compact</code>) and the project health KPIs (<code>smriti metrics</code>).</figcaption>
-        </figure>
-        <figure>
-          <img src="assets/checkpoint-detail.png" alt="Smriti checkpoint detail with structured tasks and a milestone note">
-          <figcaption>A structured checkpoint — tasks with intent badges and stable IDs, plus a founder milestone note.</figcaption>
-        </figure>
+        <p class="section-eyebrow">The missing primitive</p>
+        <h2>Git tracks code history.<br>Nothing tracks reasoning history.</h2>
+        <p class="lede">A single human committing serial code has Git. Multiple agents writing reasoning state in parallel have nothing. Smriti closes the gap with the same primitives, plus three Git was never built to have.</p>
+
+        <div class="primitive-map" aria-label="Comparison of Git primitives and Smriti primitives">
+
+          <!-- Header row -->
+          <div class="pm-header pm-header-git">Code · Git</div>
+          <div class="pm-header pm-header-gutter"></div>
+          <div class="pm-header pm-header-smriti">Reasoning · Smriti</div>
+
+          <!-- Row 1: commit ↔ checkpoint -->
+          <div class="pm-cell git">commit</div>
+          <div class="pm-cell gutter"><span class="pm-connector"></span></div>
+          <div class="pm-cell smriti">
+            <span class="term">checkpoint</span>
+            <span class="desc">Structured snapshot of reasoning state at an inflection point.</span>
+          </div>
+
+          <!-- Row 2: branch ↔ fork -->
+          <div class="pm-cell git">branch</div>
+          <div class="pm-cell gutter"><span class="pm-connector"></span></div>
+          <div class="pm-cell smriti">
+            <span class="term">fork</span>
+            <span class="desc">Branch from any checkpoint to explore an alternative without losing the trunk.</span>
+          </div>
+
+          <!-- Row 3: diff ↔ compare -->
+          <div class="pm-cell git">diff</div>
+          <div class="pm-cell gutter"><span class="pm-connector"></span></div>
+          <div class="pm-cell smriti">
+            <span class="term">compare</span>
+            <span class="desc">Structured diff of two checkpoints — decisions, tasks, claims.</span>
+          </div>
+
+          <!-- Row 4: revert ↔ restore -->
+          <div class="pm-cell git">revert</div>
+          <div class="pm-cell gutter"><span class="pm-connector"></span></div>
+          <div class="pm-cell smriti">
+            <span class="term">restore</span>
+            <span class="desc">Return to a clean checkpoint when an experiment goes sideways.</span>
+          </div>
+
+          <!-- Row 5: working-tree drift ↔ repo-state drift -->
+          <div class="pm-cell git">working-tree drift</div>
+          <div class="pm-cell gutter"><span class="pm-connector"></span></div>
+          <div class="pm-cell smriti">
+            <span class="term">repo-state drift</span>
+            <span class="desc">Flag when the live repo has moved past the checkpoint base.</span>
+          </div>
+
+          <!-- Row 6: — ↔ active claims (unmapped) -->
+          <div class="pm-cell git empty">—</div>
+          <div class="pm-cell gutter"></div>
+          <div class="pm-cell smriti unmapped">
+            <span class="term">active claims</span>
+            <span class="desc">Advisory, time-bounded — agents see each other coming.</span>
+          </div>
+
+          <!-- Row 7: — ↔ freshness checks (unmapped) -->
+          <div class="pm-cell git empty">—</div>
+          <div class="pm-cell gutter"></div>
+          <div class="pm-cell smriti unmapped">
+            <span class="term">freshness checks</span>
+            <span class="desc">"Has shared state moved since my base?" before checkpointing.</span>
+          </div>
+
+          <!-- Row 8: — ↔ structured tasks + IDs (unmapped) -->
+          <div class="pm-cell git empty">—</div>
+          <div class="pm-cell gutter"></div>
+          <div class="pm-cell smriti unmapped">
+            <span class="term">structured tasks + IDs</span>
+            <span class="desc">Stable identifiers so two agents can talk about the same work.</span>
+          </div>
+
+          <div class="pm-footer">
+            <span class="swatch"></span>
+            The last three have no Git equivalent. Git is built for one human committing serial code. Smriti is built for multiple agents writing reasoning state in parallel.
+          </div>
+
+        </div>
       </div>
     </section>
 
-    <!-- ───── Try it ───── -->
-    <section class="section try" id="try">
+    <!-- ═══════════════ Why markdown collapses ═══════════════ -->
+    <section class="section reveal">
       <div class="container">
-        <h2>Try it in 5 minutes</h2>
-        <p>The core coordination loop runs entirely on a local SQLite file. <strong>No Docker, no API keys, no cloud required.</strong> API keys come in only for optional LLM-assisted features (extract, draft, review).</p>
-        <p class="muted">You'll need Python 3.11+ and Node 20.19+ / 22.12+.</p>
-        <ol class="try-steps">
-          <li>
-            <h3>1. Install</h3>
+        <p class="section-eyebrow">Why <code>HANDOFF.md</code> isn't enough</p>
+        <h2>Markdown is prose.<br>Coordination is structure.</h2>
+        <p class="lede">A shared markdown file works until two agents need to edit it at once, ask "is my base still current?", or compare two takes on the same decision. The moment coordination needs to be queried, branched, or validated against the repo, prose stops working.</p>
+
+        <div class="collapse-grid">
+
+          <div class="collapse-card">
+            <div class="panel-header">
+              <span class="filename">
+                <span class="dots"><span></span><span></span><span></span></span>
+                HANDOFF.md
+              </span>
+              <span>prose</span>
+            </div>
+            <div class="panel-body">
+              <span class="line heading"># Current work</span>
+              <span class="line">- Status: refactoring rate-limit middleware</span>
+              <span class="line">- Owner: ?</span>
+              <span class="line">- Base: main, but unsure if still current</span>
+              <span class="line">&nbsp;</span>
+              <span class="line heading">## In progress</span>
+              <span class="line from-claude">- [claude-code] writing the guard logic</span>
+              <span class="line from-codex struck">- [codex] writing the guard logic too</span>
+              <span class="line from-codex">- [codex] (no idea claude was on this)</span>
+              <span class="line">&nbsp;</span>
+              <span class="line heading">## Open</span>
+              <span class="line">- need tests</span>
+              <span class="line">- need someone to update the README</span>
+            </div>
+            <div class="panel-footer bad">
+              <strong>What broke:</strong> two agents picked the same task. No claim, no freshness check, no shared task ID. Last write wins.
+            </div>
+          </div>
+
+          <div class="collapse-card">
+            <div class="panel-header">
+              <span class="filename">
+                <span class="dots"><span></span><span></span><span></span></span>
+                checkpoint
+              </span>
+              <span>structured</span>
+            </div>
+            <div class="panel-body">
+              <span class="line field"><span class="key">objective:</span> close deletion-safety thread</span>
+              <span class="line field"><span class="key">decisions:</span></span>
+              <span class="line field indent-1">- require <span class="val">force=true</span> for non-empty deletes</span>
+              <span class="line field indent-1">- 409 if claim is unresolved</span>
+              <span class="line field"><span class="key">in_progress:</span></span>
+              <span class="line field indent-1">- <span class="val">[implement]</span> deletion-safety-guard <span class="id">id=t-2</span></span>
+              <span class="line field indent-1">- <span class="val">[test]</span> deletion-safety-tests <span class="id">id=t-1</span></span>
+              <span class="line field"><span class="key">active_claims:</span></span>
+              <span class="line field indent-1">- claude-code → t-2, ttl 4h</span>
+              <span class="line field indent-1">- codex → t-1, ttl 4h</span>
+              <span class="line field"><span class="key">repo_state:</span></span>
+              <span class="line field indent-1">head=<span class="id">5d00ba9</span> branch=main ahead=0</span>
+            </div>
+            <div class="panel-footer good">
+              <strong>What's preserved:</strong> queryable fields, stable IDs, active claims, repo state. Two agents see each other.
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ What Smriti is ═══════════════ -->
+    <section class="section reveal" id="how">
+      <div class="container">
+        <p class="section-eyebrow">What Smriti is</p>
+        <h2>A coordination substrate, not a notebook.</h2>
+
+        <div class="is-grid">
+          <div>
+            <p>Smriti is a small backend, a CLI, an MCP server, and skill packs for Claude Code and Codex. It records <strong>structured snapshots</strong> at inflection points — not a running log of everything an agent saw — and exposes them as a queryable state brief every agent reads at session start.</p>
+            <p>One Space per project. Per-project attachment via <code>.smriti.json</code>. Local SQLite by default; Postgres for shared/team workflows. No orchestrator. No router. No assignment logic. Agents read the same structured state and decide for themselves.</p>
+            <p>The hard part isn't storing reasoning — it's making it <em>self-validating against the live repo</em> and <em>safe for parallel writers</em>. That's the work.</p>
+          </div>
+
+          <div class="checkpoint-card" aria-label="Example structured checkpoint">
+            <div class="cp-header">
+              <span class="cp-id">checkpoint · 5d00ba9</span>
+              <span class="cp-meta">
+                <span>claude-code</span>
+                <span>30m ago</span>
+              </span>
+            </div>
+            <div class="cp-body">
+
+              <div class="cp-field">
+                <span class="label">objective</span>
+                <span class="value">Ship Pages deploy for the static landing page.</span>
+              </div>
+
+              <div class="cp-field">
+                <span class="label">decisions</span>
+                <ul class="cp-list" style="display:grid;gap:0.3rem;">
+                  <li><span class="value">Use GitHub Actions source, not legacy branch-folder.</span></li>
+                  <li><span class="value">Keep <code>.nojekyll</code> as a forward-compatible marker.</span></li>
+                </ul>
+              </div>
+
+              <div class="cp-field">
+                <span class="label">in_progress</span>
+                <ul class="cp-list">
+                  <li>
+                    <span class="badge implement">implement</span>
+                    <span>publish via Pages</span>
+                    <span class="id">id=website-deploy-target</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="cp-field">
+                <span class="label">active_claims</span>
+                <div class="cp-claim">
+                  <span class="agent claude">claude-code</span>
+                  <span class="value muted">website-deploy-target · ttl 4h</span>
+                </div>
+              </div>
+
+              <div class="cp-field">
+                <span class="label">repo_state</span>
+                <span class="cp-repo">
+                  head=<span class="ok">5d00ba9</span> · branch=<span class="ok">main</span> · ahead=<span class="ok">0</span>
+                </span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ Centerpiece: Multi-agent coordination ═══════════════ -->
+    <section class="section reveal" id="coordination">
+      <div class="container">
+        <p class="section-eyebrow">Multi-agent coordination — protocol, not orchestration</p>
+        <h2>Two agents. Same task pool.<br>Complementary work — no orchestrator.</h2>
+        <p class="lede">Each agent reads the shared state, sees the others' active claims, and picks something complementary. The "routing logic" is structured metadata, not a queue manager.</p>
+
+        <div class="theatre" data-theatre>
+          <div class="theatre-frame">
+
+            <div class="theatre-pool">
+              <span class="pool-label">task pool</span>
+              <div class="theatre-tasks">
+                <div class="task-chip" data-task="t-1">
+                  <span class="chip-intent test">test</span>
+                  <span>deletion-safety-tests</span>
+                  <span class="chip-id">t-1</span>
+                </div>
+                <div class="task-chip" data-task="t-2">
+                  <span class="chip-intent implement">implement</span>
+                  <span>deletion-safety-guard</span>
+                  <span class="chip-id">t-2</span>
+                </div>
+                <div class="task-chip" data-task="t-3">
+                  <span class="chip-intent doc">doc</span>
+                  <span>update-quickstart</span>
+                  <span class="chip-id">t-3</span>
+                </div>
+                <div class="task-chip" data-task="t-4">
+                  <span class="chip-intent investigate">investigate</span>
+                  <span>failing-build</span>
+                  <span class="chip-id">t-4</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="theatre-lanes">
+              <div class="lane claude" data-lane="claude">
+                <div class="lane-id">
+                  <span class="agent-dot"></span>
+                  <span>claude-code</span>
+                </div>
+                <div class="lane-track">
+                  <div class="lane-claim">
+                    <span class="chip-intent implement">implement</span>
+                    <span class="scope">deletion-safety-guard</span>
+                    <span class="ttl">ttl 4h</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="lane codex" data-lane="codex">
+                <div class="lane-id">
+                  <span class="agent-dot"></span>
+                  <span>codex</span>
+                </div>
+                <div class="lane-track">
+                  <div class="lane-claim">
+                    <span class="chip-intent test">test</span>
+                    <span class="scope">deletion-safety-tests</span>
+                    <span class="ttl">ttl 4h</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="theatre-caption">
+            <span class="step-text" data-step-text>Same task pool. No orchestrator. <span class="muted">Watch each agent read the pool, claim something, and route around the other's claim.</span></span>
+            <div class="controls">
+              <span class="step-counter" data-step-counter>0 / 5</span>
+              <button class="btn btn-ghost" type="button" data-theatre-replay aria-label="Replay coordination demo">↻ Replay</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="caption">This is the actual pattern that built this site. Same task pool, two agents, complementary picks, no human routing. <code>smriti metrics smriti-dev</code> below shows the cumulative coordination cost — 87 claims, 97% completion, 67 cross-agent continuations.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════ Drift & trust ═══════════════ -->
+    <section class="section reveal">
+      <div class="container">
+        <p class="section-eyebrow">Drift &amp; trust</p>
+        <h2>Reasoning state stays honest about the repo.</h2>
+        <p class="lede">A reasoning snapshot is only useful if it tracks the code it's reasoning about. Every checkpoint records the repo HEAD and branch. Every state brief compares it back to the live repo — and surfaces the drift before another agent acts on stale ground.</p>
+
+        <div class="drift-grid">
+
+          <div class="drift-diagram">
+            <div class="label">repo timeline</div>
+            <svg viewBox="0 0 460 130" preserveAspectRatio="xMidYMid meet" aria-label="Repo timeline showing checkpoint base, two commits, and current HEAD">
+              <line x1="40" y1="65" x2="420" y2="65" stroke="#3a3a45" stroke-width="1" stroke-dasharray="2 3"/>
+
+              <circle cx="60"  cy="65" r="9" fill="#0a0a0e" stroke="#f5c773" stroke-width="2"/>
+              <circle cx="60"  cy="65" r="3" fill="#f5c773"/>
+
+              <circle cx="200" cy="65" r="5" fill="#3a3a45"/>
+              <circle cx="290" cy="65" r="5" fill="#3a3a45"/>
+
+              <circle cx="380" cy="65" r="9" fill="#0a0a0e" stroke="#d8a35a" stroke-width="2"/>
+              <circle cx="380" cy="65" r="3" fill="#d8a35a"/>
+
+              <path d="M 75 50 Q 220 30, 365 50" fill="none" stroke="#d8a35a" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
+
+              <text x="60"  y="100" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#9090a0">abc1234</text>
+              <text x="60"  y="116" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#60606a">checkpoint</text>
+
+              <text x="200" y="100" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#60606a">def5678</text>
+              <text x="290" y="100" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#60606a">9a1b2c3</text>
+
+              <text x="380" y="100" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#9090a0">f4e5d6c</text>
+              <text x="380" y="116" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#60606a">main HEAD</text>
+
+              <text x="225" y="22" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#d8a35a" font-weight="600">+2 commits ahead</text>
+            </svg>
+          </div>
+
+          <div class="drift-state">
+            <div class="panel-header">smriti state my-project (excerpt)</div>
+            <div class="panel-body">
+              <div class="heading">## Repo state</div>
+              <div class="field">branch <span class="key">main</span> · HEAD <span class="key">f4e5d6c</span> · upstream <span class="ahead">+2/-0</span></div>
+              <div class="field">- recorded checkpoint: <span class="key">abc1234</span></div>
+              <div class="field">- repo is <span class="ahead">2 commits ahead</span> of checkpoint base</div>
+              <div class="field">- branch: <span class="ok">matches</span></div>
+              <div class="field">- working tree: <span class="ok">clean</span></div>
+              <div class="field">&nbsp;</div>
+              <div class="field"><span class="warn">→ reconcile before checkpointing</span></div>
+            </div>
+          </div>
+
+        </div>
+
+        <p class="caption">The drift signal isn't an alert popup — it's part of the state brief every agent reads at session start. If you and the recorded state disagree, you see it before you act on it.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════ Built with Smriti ═══════════════ -->
+    <section class="section reveal">
+      <div class="container">
+        <p class="section-eyebrow">Built with Smriti</p>
+        <h2>The substrate was built on itself.</h2>
+        <p class="lede">Claude Code and Codex co-built this project end-to-end through Smriti's own state. Real numbers from the project Space, as of today:</p>
+
+        <div class="built-cli" aria-label="smriti metrics output">
+          <div class="panel-header">
+            <span>terminal</span>
+            <span>smriti-dev</span>
+          </div>
+          <div class="panel-body">
+            <div class="cmd"><span class="prompt">$</span><span class="accent">smriti metrics</span> smriti-dev</div>
+            <div class="out-header"># smriti-dev — project metrics</div>
+
+            <div class="out-section">## Coordination</div>
+            <div class="out-row"><span class="num">129</span> checkpoints · <span class="num">2</span> agents (claude-code: <span class="num">79</span>, codex-local: <span class="num-alt">50</span>)</div>
+            <div class="out-row"><span class="num">67</span> cross-agent continuations</div>
+            <div class="out-row"><span class="num">87</span> claims · <span class="num">97%</span> completion · <span class="num">48</span> with task IDs</div>
+
+            <div class="out-section">## State quality</div>
+            <div class="out-row"><span class="num">3.2</span> decisions/checkpoint · <span class="num">1.8</span> tasks/checkpoint</div>
+            <div class="out-row"><span class="num">66</span> with structured tasks · <span class="num">64</span> with task IDs</div>
+            <div class="out-row"><span class="num">7</span> milestones · 1 noise label</div>
+
+            <div class="out-section">## Branches</div>
+            <div class="out-row"><span class="num">0</span> active · <span class="num">0</span> integrated · <span class="num">0</span> abandoned</div>
+          </div>
+        </div>
+
+        <p class="built-note">The 67 cross-agent continuations are the headline. Each is a moment where one agent ended a session, the other started, read the shared state, and continued the same thread <em>as if it had been there for the work</em>.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════ Try it ═══════════════ -->
+    <section class="section reveal" id="try">
+      <div class="container">
+        <p class="section-eyebrow">Try it</p>
+        <h2>Up and running in minutes.</h2>
+        <p class="lede"><strong>No Docker, no API keys, no cloud required.</strong> The core coordination loop runs on a local SQLite file. API keys come in only for optional LLM-assisted features.</p>
+
+        <div class="try-grid">
+
+          <div class="try-block">
+            <div class="block-header">
+              <h3>Install</h3>
+              <span class="marker">terminal 1</span>
+            </div>
+            <div class="block-body">
 <pre><code>git clone https://github.com/himanshudongre/smriti
 cd smriti
-make setup-local              # backend venv + CLI + frontend, no Docker</code></pre>
-            <p>Start the backend in one terminal and keep it running:</p>
-<pre><code>make dev-local                # backend on http://localhost:8000</code></pre>
-            <p>In a second terminal, activate the CLI before running <code>smriti</code> commands:</p>
+make setup-local
+make dev-local         # backend, leave running</code></pre>
+            </div>
+          </div>
+
+          <div class="try-block">
+            <div class="block-header">
+              <h3>Run</h3>
+              <span class="marker">terminal 2</span>
+            </div>
+            <div class="block-body">
 <pre><code>cd smriti
-source backend/.venv/bin/activate</code></pre>
-          </li>
-          <li>
-            <h3>2. Confirm — <code>smriti doctor</code></h3>
-<pre><code>smriti doctor</code></pre>
-            <p>Backend reachable, CLI/backend versions aligned, providers configured. If anything's off, doctor tells you what.</p>
-          </li>
-          <li>
-            <h3>3. See it work — <code>smriti quickstart</code></h3>
-<pre><code>smriti quickstart</code></pre>
-            <p>Seeds a demo Space (a rate-limit feature built by two agents, with a branch explored and dropped) and prints a guided ~3-minute walkthrough. Works without API keys.</p>
-          </li>
-          <li>
-            <h3>4. Attach your own project</h3>
-<pre><code>cd /path/to/your-project
-smriti init my-project</code></pre>
-            <p>Writes the skill packs, the SessionStart hook, and <code>.smriti.json</code> into the project directory, binding the repo to the new Space.</p>
-          </li>
-          <li>
-            <h3>5. Daily workflow — no <code>&lt;space&gt;</code> needed</h3>
-<pre><code>smriti state                   # continuation brief
-smriti current                 # compact snapshot
-smriti metrics                 # coordination KPIs</code></pre>
-          </li>
-        </ol>
+source backend/.venv/bin/activate
+
+smriti doctor          # verify install
+smriti quickstart      # seeded demo Space + 3-min walkthrough</code></pre>
+              <p class="note">After the walkthrough, <code>cd</code> into any of your own projects and run <code>smriti init my-project</code> to attach it. One Space per project.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="try-footer">
+          <span class="reqs">requires Python 3.11+ &nbsp;·&nbsp; Node 20.19+ / 22.12+</span>
+          <a href="https://github.com/himanshudongre/smriti#getting-started" class="btn btn-ghost">Full setup guide →</a>
+        </div>
       </div>
     </section>
 
-    <!-- ───── CTA ───── -->
-    <section class="section cta">
-      <div class="container">
-        <h2>Try it. Star it. Build with it.</h2>
+    <!-- ═══════════════ CTA ═══════════════ -->
+    <section class="cta">
+      <div class="container container-narrow">
+        <h2>Build with the missing primitive.</h2>
         <p>Smriti is open source. It works today for solo builders running multi-agent workflows.</p>
         <div class="cta-buttons">
           <a class="btn btn-primary" href="https://github.com/himanshudongre/smriti">Star on GitHub</a>
@@ -225,9 +553,16 @@ smriti metrics                 # coordination KPIs</code></pre>
   </main>
 
   <footer class="site-footer">
-    <div class="container">
-      <p>Smriti — open source · <a href="https://github.com/himanshudongre/smriti">GitHub</a></p>
+    <div class="container footer-row">
+      <p>Smriti — version control for project reasoning state. <a href="https://github.com/himanshudongre/smriti">Open source</a>.</p>
+      <div class="footer-meta">
+        <span>local-first</span>
+        <span>MIT</span>
+        <span><a href="https://github.com/himanshudongre/smriti">GitHub →</a></span>
+      </div>
     </div>
   </footer>
+
+  <script src="script.js" defer></script>
 </body>
 </html>
