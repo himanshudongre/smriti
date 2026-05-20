@@ -56,11 +56,22 @@ You'll need Python 3.11+ and Node 20.19+ / 22.12+.
 git clone https://github.com/himanshudongre/smriti
 cd smriti
 make setup-local              # backend venv + CLI + frontend, no Docker
-make dev-local                # backend on http://localhost:8000 (keep running)
-source backend/.venv/bin/activate
 ```
 
 `make setup-local` creates a `.env` from the example, installs the backend, the CLI (`smriti` + `smriti-mcp`), and the frontend. The CLI binaries live in `backend/.venv/bin/` — `source backend/.venv/bin/activate` puts them on your PATH.
+
+Start the backend in one terminal and keep it running:
+
+```bash
+make dev-local                # backend on http://localhost:8000
+```
+
+In a second terminal, activate the CLI before running `smriti` commands:
+
+```bash
+cd smriti
+source backend/.venv/bin/activate
+```
 
 Local mode stores state in SQLite at `~/.smriti/smriti.db`. For a shared/team setup with Postgres, see [Shared / team mode](#shared--team-mode-postgres) below.
 
