@@ -114,6 +114,8 @@ Use the resolved path from `smriti init` rather than a bare `"smriti-mcp"` — a
 
 Use `smriti attach <space>` to bind (or re-bind) a repo to an existing Space without the full `init`.
 
+**Multiple projects.** Attachment is per-project-directory, not global. Everything `smriti init` writes — `.smriti.json`, the SessionStart hook in `.claude/settings.json`, and the skill packs (`.claude/skills/smriti/SKILL.md` and `AGENTS.md`) — lives *inside the project directory*. Run `smriti init` once per project; the files for `~/code/project-a` and `~/code/project-b` never see each other. A Claude Code or Codex session opened in `~/code/project-a` automatically lands on space `project-a`; the same agent opened in `~/code/project-b` lands on `project-b`. The MCP server registration (the JSON block above) is machine-wide but stateless — every MCP call passes `space="..."` explicitly, so the server has no "current space" of its own.
+
 ### 5. Daily workflow — no `<space>` needed
 
 Inside an attached repo, the everyday commands resolve the Space from `.smriti.json`:
