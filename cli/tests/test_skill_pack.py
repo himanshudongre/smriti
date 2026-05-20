@@ -43,7 +43,7 @@ def test_load_template_nonempty():
 
 def test_get_version_parses_frontmatter():
     version = get_version()
-    assert version == "2.4"
+    assert version == "2.5"
 
 
 def test_get_version_raises_when_frontmatter_missing():
@@ -189,6 +189,12 @@ _REQUIRED_PHRASES = [
     "reuse the same id",
     # Section 14 — two-sentence summary
     "session start",
+    # Section 3.2 — repo-state drift detection (v2.5)
+    "Repo state",
+    "ahead of the last checkpoint",
+    "checkpoint taken on a different branch",
+    # Section 3.5 — smriti doctor (v2.5)
+    "smriti doctor",
 ]
 
 

@@ -1,5 +1,5 @@
 ---
-smriti_skill_pack_version: 2.4
+smriti_skill_pack_version: 2.5
 title: Smriti — how to use it well
 target: {{display_name}}
 ---
@@ -130,7 +130,28 @@ The state brief tells you what was decided and what tasks were
 flagged. It does NOT tell you whether those tasks have already been
 completed in the codebase. Another agent may have finished the work
 and committed it after the checkpoint was written. Before you start
-implementing anything from the state brief's tasks, reconcile:
+implementing anything from the state brief's tasks, reconcile.
+
+**Start with `## Repo state` in the state brief.** When you run
+`{{mcp:smriti_state}}{{cli:smriti state}}` inside a git repo, the brief
+appends a `## Repo state` section that compares the working repo
+against the git HEAD and branch the latest checkpoint recorded. The
+signals to look for inline:
+
+- *"repo is N commit(s) ahead of the last checkpoint — recorded state
+  may be stale"* — the repo has moved past the checkpoint; the manual
+  checks below tell you what to do next.
+- *"checkpoint taken on a different branch (`X`)"* — the brief was
+  recorded on a different git branch than you're on now.
+- *"repo history has diverged from the last checkpoint"* — the recorded
+  HEAD is no longer an ancestor of the current repo HEAD.
+- *"repo unchanged since the last checkpoint"* — no drift; the recorded
+  state still matches the repo.
+
+If `## Repo state` is silent (older checkpoint with no recorded git
+state, MCP-created checkpoint, or you're not inside a git repo) or its
+signals suggest the repo has moved past the checkpoint, fall back to
+the manual checks:
 
 1. **Check recent commits.** Run `git log --oneline -10` (or your
    host's equivalent). Do any of them address the task you are about
@@ -246,9 +267,13 @@ findings, branch is [disposition]."**
 The Smriti backend is a shared service started by the human. You
 are a client of it. You do not own it.
 
-- Your first `{{mcp:smriti_state}}{{cli:smriti state}}` call will
-  fail with a clear connection error if the backend is not running.
-  That is your reachability check — no separate health probe needed.
+- **Use `{{mcp:smriti doctor}}{{cli:smriti doctor}}` for a structured
+  health check.** It diagnoses backend reachability, CLI/backend version
+  alignment, capability presence, and provider status — and tells you
+  what to do if anything is off. If you only need to know whether the
+  backend is up, your first `{{mcp:smriti_state}}{{cli:smriti state}}`
+  call is also enough — it fails with a clear connection error when the
+  backend is unreachable.
 - **If the backend is unreachable, stop and tell the human.** Say:
   "The Smriti backend is not reachable at http://localhost:8000.
   Please start it with `make dev-local` for solo/local mode, or
@@ -258,11 +283,12 @@ are a client of it. You do not own it.
   tool loop creates environment-variable inheritance issues that
   cause silent mock fallback on all LLM-backed endpoints. The
   human starts the backend; you use it.
-- **Check capabilities before using advanced features.** After
-  reading state, before creating claims or using features like
-  structured tasks, probe the backend:
+- **Check capabilities before using advanced features.** `smriti doctor`
+  surfaces the backend's capability manifest (the `capabilities` list
+  from `/health`) and flags missing entries. For a one-off raw check,
   {{mcp:`curl -s http://localhost:8000/health`}}{{cli:`curl -s http://localhost:8000/health`}}
-  The response includes `git_sha` and a `capabilities` list. If
+  returns the same data. The response includes `git_sha` and a
+  `capabilities` list. If
   you need `claims` but the capabilities list does not include it,
   the backend is running stale code. Tell the human: "The backend
   at localhost:8000 does not support [feature]. Its git_sha is

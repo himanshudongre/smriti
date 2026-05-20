@@ -273,6 +273,36 @@ GET /api/v2/repos/{repo_id}
 
 **Response:** Space object
 
+#### Delete a space
+
+```
+DELETE /api/v2/repos/{repo_id}
+```
+
+Deletes a Space and cascades to every Checkpoint, Session, and Turn under it. Irreversible.
+
+**Query parameters:**
+
+- `force` (boolean, default `false`) — required to delete a Space that still holds checkpoints.
+
+**Responses:**
+
+- `204 No Content` — Space deleted (empty Space, or `force=true` on a populated Space).
+- `404 Not Found` — Space does not exist (or belongs to a different user).
+- `409 Conflict` — Space holds checkpoints and `force=true` was not passed. The response body carries a structured detail explaining the refusal:
+
+  ```json
+  {
+    "detail": {
+      "message": "Cannot delete space 'Australia Trip': it still holds 12 checkpoint(s). Deletion cascades to every checkpoint, session, and turn under it and cannot be undone. Re-send with ?force=true to delete the space and all its contents.",
+      "checkpoint_count": 12,
+      "requires_force": true
+    }
+  }
+  ```
+
+The 409 guard is one of three deletion-safety layers — the CLI's `--force` flag and the MCP `smriti_delete_space` tool's `confirm_space` argument are the other two. Every client (direct `curl`, the web UI, a future client) goes through this server-side rule.
+
 #### Get space head state (main-only)
 
 ```
@@ -565,7 +595,12 @@ POST /api/v4/chat/commit
       "label": "Draft itinerary",
       "content": "Day 1: Arrive in Sydney..."
     }
-  ]
+  ],
+  "repo_state": {
+    "head": "abc123def456...",
+    "head_short": "abc123d",
+    "branch": "main"
+  }
 }
 ```
 
@@ -579,6 +614,17 @@ POST /api/v4/chat/commit
   "created_at": "2026-03-21T15:00:00Z"
 }
 ```
+
+**Repo-state drift detection (`repo_state`).** The optional `repo_state` field
+records the git HEAD and branch of the repo the checkpoint was created from.
+It is persisted under the commit's `context_blob` and returned by `GET
+/api/v4/chat/spaces/{repo_id}/state` as `commit.context_blob.repo_state`. The
+CLI uses it on subsequent `smriti state` calls to detect drift — N commits
+ahead of the recorded checkpoint, a different branch, or diverged history —
+and surfaces those signals in the rendered state brief's `## Repo state`
+section. The field is optional: clients that cannot inspect a repo (e.g. the
+MCP server, which runs in the host's arbitrary working directory) may omit
+it, and the backend stores an empty `context_blob`.
 
 ---
 
