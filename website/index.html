@@ -177,8 +177,11 @@ smriti metrics                 # project coordination KPIs</code></pre>
             <h3>1. Install</h3>
 <pre><code>git clone https://github.com/himanshudongre/smriti
 cd smriti
-make setup-local              # backend venv + CLI + frontend, no Docker
-make dev-local                # backend on http://localhost:8000
+make setup-local              # backend venv + CLI + frontend, no Docker</code></pre>
+            <p>Start the backend in one terminal and keep it running:</p>
+<pre><code>make dev-local                # backend on http://localhost:8000</code></pre>
+            <p>In a second terminal, activate the CLI before running <code>smriti</code> commands:</p>
+<pre><code>cd smriti
 source backend/.venv/bin/activate</code></pre>
           </li>
           <li>
