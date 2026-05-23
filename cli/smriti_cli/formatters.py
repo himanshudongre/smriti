@@ -953,7 +953,16 @@ def format_doctor(report: dict) -> str:
     else:
         parts.append("- missing capabilities: none")
     parts.append(f"- CLI path: {checks.get('cli_path') or 'unknown'}")
-    parts.append(f"- background provider: {checks.get('background_provider') or 'unknown'}")
+    bg = checks.get("background_provider") or "unknown"
+    if bg == "ready":
+        parts.append("- background provider: ready (real LLM extraction enabled)")
+    elif bg == "mock_or_disabled":
+        parts.append(
+            "- background provider: ⚠ MOCK or DISABLED — `smriti checkpoint create "
+            "--extract`, draft, and review will fail until a provider is configured"
+        )
+    else:
+        parts.append(f"- background provider: {bg}")
     parts.append("")
 
     parts.append("## Capabilities")

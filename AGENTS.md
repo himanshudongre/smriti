@@ -582,6 +582,40 @@ know about. Concretely:
 - **You are about to explore an alternative direction and want to
   preserve the current line.** Fork first, then checkpoint on the fork.
 
+### 4.1 Before your first `--extract`: verify the provider
+
+The extract path uses Smriti's background LLM to turn freeform markdown
+into structured checkpoint fields. It **requires a real configured
+provider** (OpenAI / Anthropic / OpenRouter / generic OpenAI-compatible
+endpoint). If no provider is configured, the extract endpoint returns
+**HTTP 412 Precondition Failed** rather than silently falling back to
+mock content — mock content committed into a real Space pollutes the
+reasoning state Smriti exists to keep trustworthy.
+
+Run `smriti doctor` once at the start of a session that intends to use
+`--extract`, and read the `background provider:` line.
+
+```
+smriti doctor
+```
+
+Look for:
+
+- **`background provider: ready (real LLM extraction enabled)`** —
+  good, use `--extract` freely.
+- **`background provider: ⚠ MOCK or DISABLED — ... will fail until a
+  provider is configured`** — do **not** use `--extract`. Either ask
+  the human to configure a provider (OpenAI/Anthropic/OpenRouter key,
+  or a local OpenAI-compatible endpoint via the generic provider), or
+  write the checkpoint **manually as JSON** (see 4.1 below). Do not
+  attempt to commit mock content as if it were real reasoning state.
+
+For scripted/CI use, `smriti doctor --strict` exits non-zero
+(EX_CONFIG / 78) when the background provider is mock/disabled —
+useful as a pre-flight gate before any `--extract` step.
+
+### 4.2 The extract path (provider required)
+
 Use the **extract path**, not hand-written JSON. Pass freeform markdown
 describing the inflection point and Smriti's background LLM will pull
 out the structured fields (message, objective, summary, decisions,
@@ -611,7 +645,7 @@ Always tag `author_agent` with a stable identifier for your agent
 agents know who wrote what on the shared timeline. Inconsistent or
 missing `author_agent` makes divergence unattributable.
 
-### 4.1 Checkpoint notes: annotating without checkpointing
+### 4.3 Checkpoint notes: annotating without checkpointing
 
 Sometimes you need to add context to an existing checkpoint without
 creating a new one. Checkpoint notes are additive annotations —

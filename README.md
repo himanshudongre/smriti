@@ -91,7 +91,7 @@ Backend reachable, CLI/backend versions aligned, provider status. If anything's 
 smriti quickstart
 ```
 
-Seeds a `smriti-demo` Space — one finished mini-project (a rate-limiting feature built by two agents, with a branch explored and dropped) — and prints a ~3-minute guided walkthrough. Works without API keys (mock-mode extraction). Clean up with `smriti quickstart --remove`.
+Seeds a `smriti-demo` Space — one finished mini-project (a rate-limiting feature built by two agents, with a branch explored and dropped) — and prints a ~3-minute guided walkthrough. Works without API keys — quickstart seeds pre-built checkpoints, no live extraction. (For live `--extract` you need a real provider; see [Provider configuration](#provider-configuration-llm-backed-features).) Clean up with `smriti quickstart --remove`.
 
 ### 4. Attach your own project — `smriti init`
 
@@ -211,27 +211,56 @@ The primitives that turn "shared state" from a phrase into something that actual
 
 ---
 
-## API keys (optional)
+## Provider configuration (LLM-backed features)
 
-**The core coordination loop runs without API keys.** Setup, `smriti doctor`, `smriti quickstart`, `smriti state` / `current` / `metrics`, claims, attachments, repo-state drift detection, hand-written checkpoints, and the chat UI's read-only dashboards (timeline, checkpoints, claims, drift signals) all work with no key.
+Smriti draws a hard line between **core coordination** (works with no API key) and **LLM-backed features** (require a configured provider).
 
-API keys are only needed for the LLM-assisted features:
+### Works with no key
 
-- `smriti checkpoint create --extract` — extract structured fields from freeform markdown
-- Checkpoint draft and consistency review (`smriti checkpoint review`)
-- The chat UI's send loop — where the agent actually responds to your messages
+- `setup` / `doctor` / `quickstart`
+- `smriti state` / `current` / `metrics`
+- claims (`smriti claim`, claim listing)
+- attach / no-arg project workflow
+- manual structured checkpoints (`smriti checkpoint create <space>` with a JSON payload on stdin)
+- repo-state drift detection
+- the chat UI's read-only dashboards (timeline, checkpoints, claims, drift signals)
 
-Smriti supports OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible provider (Ollama, LM Studio, vLLM) via the generic provider slot. Set keys in `.env` when you want those features for real:
+### Require a real provider
+
+- `smriti checkpoint create --extract` — extracts structured fields from freeform markdown
+- `smriti checkpoint review` — consistency review of a checkpoint
+- checkpoint draft
+- the chat UI's send loop — where the agent actually responds
+
+Without a configured provider, these refuse to run rather than silently return placeholder content. `--extract` returns **HTTP 412 Precondition Failed** with an actionable error listing the configuration paths. **Mock content is never silently committed into a real project** — that would pollute reasoning state, which Smriti exists to keep trustworthy.
+
+### Configure a provider
+
+Set one of these in `.env` (or your shell):
 
 ```
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 OPENROUTER_API_KEY=...
-SMRITI_GENERIC_API_URL=http://localhost:11434/v1   # for Ollama / LM Studio / vLLM
-SMRITI_GENERIC_MODEL=llama3.1:8b
 ```
 
-Without a key set, the LLM-assisted paths return deterministic placeholder content so the mechanics still work — handy for trying the coordination loop end-to-end. Add a key when you want real extraction.
+Or, for a **local OpenAI-compatible model** (Ollama, LM Studio, vLLM, Together, etc.):
+
+```
+SMRITI_GENERIC_API_URL=http://localhost:11434/v1   # your local server
+SMRITI_GENERIC_MODEL=llama3.1:8b
+# SMRITI_GENERIC_API_KEY=not-required               # most local servers don't need one
+```
+
+Then set `background_intelligence.provider: generic` in `backend/config/providers.yaml`.
+
+Extraction is a relatively lightweight structured-output task and is usually handled well by cost-efficient or local OpenAI-compatible models. That said, *quality varies by model* — validate with `smriti checkpoint create --extract --dry-run` on a representative document before relying on a small model for real work.
+
+After configuring, run `smriti doctor` (optionally with `--strict`) to confirm the background provider line reads `ready`. `--strict` exits non-zero (EX_CONFIG / 78) if the provider is `mock_or_disabled`, which makes it safe to use in CI before any `--extract` step.
+
+### Mock mode
+
+A deterministic `MockAdapter` exists for tests, demos, and the `quickstart` mechanics. It returns a fixed JSON blob (containing literal strings like `"Mock decision from provider"`). **It is never the default for `--extract`** — it only runs when the caller explicitly opts in (e.g. tests passing `use_mock=true` to the HTTP endpoint). Do not commit mock-extracted content into a real project Space.
 
 ---
 

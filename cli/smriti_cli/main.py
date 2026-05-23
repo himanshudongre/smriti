@@ -87,6 +87,29 @@ def _fail(message: str, code: int = 1) -> None:
     sys.exit(code)
 
 
+def _fail_provider_not_configured(detail: dict, code: int = 78) -> None:
+    """Render the backend's structured 'provider_not_configured' error as a
+    clear, actionable message and exit non-zero.
+
+    Exit code 78 = EX_CONFIG (configuration error) so scripts can distinguish
+    a missing-provider failure from a generic CLI error.
+    """
+    provider = detail.get("provider") or "background"
+    msg = detail.get("message") or (
+        f"Background LLM provider '{provider}' is not configured."
+    )
+    fix = detail.get("fix") or []
+    lines: list[str] = []
+    lines.append("error: " + msg)
+    lines.append("")
+    lines.append("To fix this, do one of:")
+    for item in fix:
+        lines.append(f"  - {item}")
+    lines.append("")
+    lines.append("Run `smriti doctor` to confirm provider status after configuring.")
+    _fail("\n".join(lines), code=code)
+
+
 def _confirm(preview: str, yes_flag: bool) -> bool:
     """Interactive 'Type yes' if stdin is a TTY, otherwise require --yes.
 
@@ -799,12 +822,41 @@ def _read_checkpoint_json(args: argparse.Namespace) -> dict:
 
 
 def cmd_doctor(client: SmritiClient, args: argparse.Namespace) -> None:
-    """Print narrow backend/runtime diagnostics."""
+    """Print narrow backend/runtime diagnostics.
+
+    With --strict, exits non-zero if any critical check fails. The current
+    strict checks are:
+      - backend reachable
+      - background provider configured for real LLM extraction (--extract,
+        draft, review). When this fails strict, agents and CI should refuse
+        to use --extract; manual JSON checkpointing still works.
+    """
     report = _build_doctor_report(client)
     if args.json:
         _print_json(report)
     else:
         print(format_doctor(report), end="")
+
+    if getattr(args, "strict", False):
+        failures: list[str] = []
+        backend = report.get("backend") or {}
+        if not backend.get("reachable"):
+            failures.append("backend is not reachable")
+        checks = report.get("checks") or {}
+        bg = checks.get("background_provider")
+        if bg == "mock_or_disabled":
+            failures.append(
+                "background provider is mock_or_disabled — `smriti checkpoint create "
+                "--extract`, draft, and review will fail. Configure a provider."
+            )
+        elif bg == "unknown":
+            failures.append("background provider status is unknown (backend reachable?).")
+        if failures:
+            print("", file=sys.stderr)
+            print("strict mode: " + str(len(failures)) + " check(s) failed:", file=sys.stderr)
+            for f in failures:
+                print(f"  - {f}", file=sys.stderr)
+            sys.exit(78)  # EX_CONFIG
 
 
 def cmd_space_list(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -1169,7 +1221,24 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
         # and use the returned fields as the commit payload. No hand-written
         # JSON required.
         content = _read_raw_content()
-        extracted = client.extract_checkpoint_content(content)
+        try:
+            extracted = client.extract_checkpoint_content(content)
+        except SmritiError as e:
+            # Provider not configured: backend returns 412 with a structured
+            # detail. Surface the actionable fix list and exit non-zero — do
+            # NOT fall back to mock or hand-written content silently.
+            if e.status == 412 and isinstance(e.detail, dict) and e.detail.get("error") == "provider_not_configured":
+                _fail_provider_not_configured(e.detail)
+            raise
+        # Defense in depth: if the backend somehow returned mock content on
+        # the default path (use_mock=False), refuse to commit it. Mock
+        # output committed into a real project pollutes reasoning state.
+        if extracted.get("provider") == "mock":
+            _fail(
+                "error: extract returned mock content (provider=mock) on the default path.\n"
+                "Refusing to commit. This is a backend bug — please report it.\n"
+                "If you intentionally want mock content (tests/demos), build the payload manually.",
+            )
         # Extractor returns `title`; checkpoints store `message`. Map it.
         # If the LLM returned an empty title, fall back to a generic label
         # so the required `message` field is always populated.
@@ -1184,12 +1253,17 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
             "entities": extracted.get("entities", []),
             "artifacts": extracted.get("artifacts", []),
         }
+        # Stash provider/model so we can show them on commit confirmation.
+        _extract_provider = extracted.get("provider") or ""
+        _extract_model = extracted.get("model") or ""
     else:
         payload = _read_checkpoint_json(args)
         if not isinstance(payload, dict):
             _fail("Checkpoint JSON must be an object, got: " + type(payload).__name__)
         if not payload.get("message"):
             _fail("Checkpoint JSON must include a 'message' field.")
+        _extract_provider = ""
+        _extract_model = ""
 
     if args.dry_run:
         # Print the full payload (extracted or hand-written) as JSON and
@@ -1260,6 +1334,8 @@ def cmd_checkpoint_create(client: SmritiClient, args: argparse.Namespace) -> Non
     else:
         h = commit.get("commit_hash", "")
         print(f"Created checkpoint: `{h[:7]}` {commit.get('message', '')}")
+        if _extract_provider:
+            print(f"  extracted via {_extract_provider}/{_extract_model}")
 
 
 def cmd_checkpoint_show(client: SmritiClient, args: argparse.Namespace) -> None:
@@ -2124,6 +2200,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Diagnose backend reachability and runtime/code freshness",
     )
     doctor_parser.add_argument("--json", action="store_true", help="Output structured JSON")
+    doctor_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Exit non-zero (EX_CONFIG / 78) when any critical check fails — "
+            "currently: backend unreachable, or background provider mock_or_disabled "
+            "(blocks `checkpoint create --extract`, draft, review)."
+        ),
+    )
     doctor_parser.set_defaults(func=cmd_doctor)
 
     # quickstart — seed a curated demo space so the product clicks fast

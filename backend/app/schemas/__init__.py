@@ -158,3 +158,9 @@ class CheckpointExtractResponse(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
     artifacts: list[dict] = Field(default_factory=list)
+    # Echo the provider/model that actually answered, so callers can confirm
+    # whether the extraction came from a real LLM or the mock adapter. The
+    # CLI surfaces this on every --extract commit and uses it to refuse to
+    # persist mock content into a real project.
+    provider: str = Field("", description="Provider that produced this extraction (e.g. 'openai', 'anthropic', 'mock').")
+    model: str = Field("", description="Model identifier that produced this extraction (or 'mock').")

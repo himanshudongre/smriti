@@ -20,7 +20,7 @@ from app.schemas import (
     ReviewIssue,
 )
 from app.providers.registry import get_adapter, get_mock_adapter
-from app.config_loader import get_config
+from app.config_loader import get_config, ProviderNotConfiguredError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -403,23 +403,57 @@ Rules:
 - Output ONLY valid JSON. No markdown wrappers, no explanation.
 """
 
-    try:
-        if request.use_mock:
-            adapter = get_mock_adapter()
-            bg_model = "mock"
-        else:
-            cfg = get_config()
-            bg_model = cfg.background.model
-            # allow_mock=True so an unconfigured test env falls back to
-            # MockAdapter (which supports JSON-mode responses); production
-            # envs always have a real provider configured and go through
-            # the real adapter path.
-            adapter = get_adapter(cfg.background.provider, allow_mock=True)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Background provider not configured. Error: {e}",
-        )
+    # Resolve the adapter.
+    #
+    # Contract (post launch-blocker fix):
+    #   - use_mock=True (explicit opt-in): always return MockAdapter. Used by
+    #     tests and demos that need deterministic JSON without a real provider.
+    #   - use_mock=False (default): require a real configured provider. If none
+    #     is configured, return 412 Precondition Failed with a structured
+    #     detail explaining how to fix it. Never silently fall back to mock —
+    #     mock content committed into a real project pollutes reasoning state.
+    if request.use_mock:
+        adapter = get_mock_adapter()
+        bg_provider = "mock"
+        bg_model = "mock"
+    else:
+        cfg = get_config()
+        bg_provider = cfg.background.provider
+        bg_model = cfg.background.model
+        try:
+            adapter = get_adapter(bg_provider, allow_mock=False)
+        except ProviderNotConfiguredError as e:
+            logger.warning(
+                "extract refused: background provider '%s' not configured (%s)",
+                bg_provider, e,
+            )
+            raise HTTPException(
+                status_code=412,
+                detail={
+                    "error": "provider_not_configured",
+                    "message": (
+                        f"Background LLM provider '{bg_provider}' is not configured. "
+                        "Real checkpoint extraction requires a real provider — refusing "
+                        "to silently fall back to mock content."
+                    ),
+                    "provider": bg_provider,
+                    "model": bg_model,
+                    "fix": [
+                        "Set OPENAI_API_KEY in .env (or your shell) for OpenAI.",
+                        "Set ANTHROPIC_API_KEY for Anthropic.",
+                        "Set OPENROUTER_API_KEY for OpenRouter.",
+                        "For a local OpenAI-compatible model (Ollama, LM Studio, vLLM): "
+                        "set SMRITI_GENERIC_API_URL + SMRITI_GENERIC_MODEL, then set "
+                        "background_intelligence.provider to 'generic' in "
+                        "backend/config/providers.yaml.",
+                        "Or skip extraction and create a checkpoint manually with "
+                        "`smriti checkpoint create <space>` and a JSON payload on stdin.",
+                        "For tests/demos only: pass use_mock=true to explicitly request "
+                        "the MockAdapter (do NOT commit that output into a real project).",
+                    ],
+                    "details": str(e),
+                },
+            )
 
     try:
         raw_response = adapter.send(
@@ -441,6 +475,8 @@ Rules:
             open_questions=_dedup(data.get("open_questions", [])),
             entities=_dedup(data.get("entities", [])),
             artifacts=[a for a in data.get("artifacts", []) if isinstance(a, dict)],
+            provider=bg_provider,
+            model=bg_model,
         )
     except json.JSONDecodeError:
         logger.error(f"Extract LLM returned invalid JSON: {raw_response}")
