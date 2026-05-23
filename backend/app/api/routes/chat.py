@@ -21,9 +21,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -211,6 +214,14 @@ class SessionResponse(BaseModel):
     branch_name: str
     created_at: datetime
     updated_at: datetime
+    # Set only by the /sessions/{id}/title endpoint. Stable enum-like values:
+    #   "ok"                              — title was generated and saved
+    #   "skipped:provider_not_configured" — no background LLM provider configured
+    #   "skipped:provider_error"          — provider call failed (network/4xx/etc.)
+    #   "skipped:db_error"                — DB write failed after generation
+    # All other endpoints return SessionResponse with this field unset (null),
+    # so clients that don't know about it are unaffected.
+    title_generation_status: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -499,7 +510,16 @@ def get_session_generic(session_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.post("/sessions/{session_id}/title", response_model=SessionResponse)
 def generate_session_title(session_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Generate a meaningful title for a session using the background intelligence model."""
+    """Generate a meaningful title for a session using the background intelligence model.
+
+    Always returns 200 with the session — title generation is best-effort and
+    must never block the chat surface. Failure modes are surfaced via
+    `title_generation_status` (stable enum) and a single WARNING/ERROR log
+    line with diagnostic context (session id, provider, model, exception
+    type/message). Pre this fix, failures were swallowed silently by a bare
+    `except Exception: pass`, so a misconfigured provider was indistinguishable
+    from "title not requested yet."
+    """
     session = db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -520,23 +540,68 @@ def generate_session_title(session_id: uuid.UUID, db: Session = Depends(get_db))
         f"{transcript}\n\nTitle:"
     )
 
+    cfg = get_config()
+    bg_provider = cfg.background.provider
+    bg_model = cfg.background.model
+
+    # Resolve adapter. Provider-not-configured is the most common failure path
+    # — make it visible (WARNING + status), never silent. Returns the session
+    # unchanged so the chat surface is not blocked.
     try:
-        cfg = get_config()
-        bg_provider = cfg.background.provider
-        bg_model = cfg.background.model
         adapter = get_adapter(bg_provider, allow_mock=False)
+    except ProviderNotConfiguredError as e:
+        logger.warning(
+            "session_title: skipped — provider not configured "
+            "(session_id=%s provider=%s model=%s exc=%s: %s)",
+            session_id, bg_provider, bg_model, type(e).__name__, e,
+        )
+        response = SessionResponse.model_validate(session)
+        response.title_generation_status = "skipped:provider_not_configured"
+        return response
+
+    # Provider call. Network errors, 4xx/5xx from the LLM, JSON parse, etc.
+    # Logged at WARNING — the chat surface is not blocked. We log the
+    # exception type and str(e); provider SDK errors do not place the API
+    # key in str(e), so no secret leakage. session_id, provider, model give
+    # enough context to diagnose without dumping the raw request.
+    try:
         raw_title = adapter.send([{"role": "user", "content": prompt}], model=bg_model).strip()
-        title = raw_title.strip("\"'").strip()
-        if len(title) > 60:
-            title = title[:60]
-        session.title = title
-        session.updated_at = _utcnow()
+    except Exception as e:
+        logger.warning(
+            "session_title: skipped — provider call failed "
+            "(session_id=%s provider=%s model=%s exc=%s: %s)",
+            session_id, bg_provider, bg_model, type(e).__name__, e,
+        )
+        response = SessionResponse.model_validate(session)
+        response.title_generation_status = "skipped:provider_error"
+        return response
+
+    title = raw_title.strip("\"'").strip()
+    if len(title) > 60:
+        title = title[:60]
+    session.title = title
+    session.updated_at = _utcnow()
+
+    # DB write. A failure here is a real bug (LLM call already succeeded),
+    # so log at ERROR. Still return 200 with the unchanged in-memory session
+    # so the chat surface is not blocked. The next call will retry.
+    try:
         db.commit()
         db.refresh(session)
-    except Exception:
-        pass  # Return unchanged session if title generation fails
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            "session_title: skipped — db write failed after successful generation "
+            "(session_id=%s provider=%s model=%s exc=%s: %s)",
+            session_id, bg_provider, bg_model, type(e).__name__, e,
+        )
+        response = SessionResponse.model_validate(session)
+        response.title_generation_status = "skipped:db_error"
+        return response
 
-    return session
+    response = SessionResponse.model_validate(session)
+    response.title_generation_status = "ok"
+    return response
 
 
 @router.get("/sessions/{session_id}/turns", response_model=list[TurnResponse])
